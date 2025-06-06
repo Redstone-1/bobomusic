@@ -9,28 +9,23 @@ import "package:bobomusic/origin_sdk/origin_types.dart";
 class AudioPlayerHandler extends BaseAudioHandler {
   final BBPlayer player = BBPlayer();
   late PlaybackEvent _audioEvent;
-  bool _playing = false;
+  // 移除手动维护的 _playing 变量，直接使用播放器状态
+
   double get _speed => player.audio.speed;
   MusicItem? get current => player.current;
 
-  // 添加 setter 方法
   set current(MusicItem? value) {
     player.current = value;
     _updateMediaItem();
-    _broadcastState();
   }
 
   AudioPlayerHandler() {
-    Timer? timer;
     player.audio.playbackEventStream.listen((event) {
       _audioEvent = event;
     });
     player.audio.playerStateStream.listen((state) {
-      timer?.cancel();
-      timer = Timer(const Duration(microseconds: 100), () {
-        _updateMediaItem();
-        _broadcastState();
-      });
+      _updateMediaItem();
+      _broadcastState(); // 直接更新状态，无需延迟
     });
     _updateMediaItem();
     player.audio.positionStream.listen((position) {
@@ -44,20 +39,34 @@ class AudioPlayerHandler extends BaseAudioHandler {
   }
 
   @override
+  Future<void> customAction(String name, [Map<String, dynamic>? extras]) async {
+    print("🎮 收到自定义操作: $name, 参数: $extras");
+
+    switch (name) {
+      case "toggle_lyrics":
+        // 切换歌词显示状态
+        print("🎮 收到自定义操作: toggle_lyrics}");
+        break;
+    }
+
+    return super.customAction(name, extras);
+  }
+
+  @override
   Future<void> play({MusicItem? music}) async {
-    _playing = true;
-    await player.play(music: music);
-    _updateMediaItem();
+    if (music != null) {
+      await player.play(music: music); // 处理传入新音乐的情况
+    } else {
+      if (player.current == null) return; // 无当前音乐时返回
+      await player.audio.play(); // 继续播放当前音乐
+    }
     _updatePosition();
-    _broadcastState();
   }
 
   @override
   Future<void> pause() async {
-    _playing = false;
-    await player.pause();
+    await player.audio.pause(); // 直接调用播放器暂停
     _updatePosition();
-    _broadcastState();
   }
 
   @override
@@ -67,14 +76,12 @@ class AudioPlayerHandler extends BaseAudioHandler {
   Future<void> skipToPrevious() async {
     await player.prev();
     _updateMediaItem();
-    _broadcastState();
   }
 
   @override
   Future<void> skipToNext() async {
     await player.next();
     _updateMediaItem();
-    _broadcastState();
   }
 
   void _updateMediaItem() {
@@ -98,17 +105,30 @@ class AudioPlayerHandler extends BaseAudioHandler {
     eventBus.fire(ScrollLyric());
 
     final controls = [
-      MediaControl.skipToPrevious,
-      if (_playing) MediaControl.pause else MediaControl.play,
-      MediaControl.skipToNext,
+      const MediaControl(
+        action: MediaAction.skipToPrevious,
+        androidIcon: "drawable/skip_previous",
+        label: "上一曲",
+      ),
+      MediaControl(
+        action: MediaAction.playPause,
+        androidIcon: player.audio.playing ? "drawable/pause_circle" : "drawable/play_circle",
+        label: "暂停/播放",
+      ),
+      const MediaControl(
+        action: MediaAction.skipToNext,
+        androidIcon: "drawable/skip_next",
+        label: "下一曲",
+      ),
     ];
-    final processingState = const {
-      // ProcessingState.idle: AudioProcessingState.idle,
+
+    final processingState = {
       ProcessingState.loading: AudioProcessingState.loading,
       ProcessingState.buffering: AudioProcessingState.buffering,
       ProcessingState.ready: AudioProcessingState.ready,
       ProcessingState.completed: AudioProcessingState.completed,
-    }[player.audio.processingState];
+    }[player.audio.processingState] ?? AudioProcessingState.ready;
+
     playbackState.add(playbackState.value.copyWith(
       controls: controls,
       systemActions: const {
@@ -116,10 +136,8 @@ class AudioPlayerHandler extends BaseAudioHandler {
         MediaAction.seekForward,
         MediaAction.seekBackward,
       },
-      androidCompactActionIndices:
-          List.generate(controls.length, (i) => i).toList(),
-      processingState: processingState ?? AudioProcessingState.ready,
-      playing: _playing,
+      processingState: processingState,
+      playing: player.audio.playing, // 直接使用播放器状态
       updatePosition: player.audio.position,
       bufferedPosition: player.audio.bufferedPosition,
       speed: _speed,
@@ -135,6 +153,5 @@ MediaItem music2mediaItem(MusicItem music) {
     album: music.author,
     artist: music.author,
     duration: Duration(seconds: music.duration),
-    artUri: Uri.parse(music.cover),
   );
 }

@@ -13,7 +13,7 @@ import "package:bobomusic/modules/music_order/components/edit_music.dart";
 import "package:bobomusic/modules/music_order/utils.dart";
 import "package:bobomusic/modules/player/model.dart";
 import "package:bobomusic/origin_sdk/origin_types.dart";
-import "package:bobomusic/permission/audio.dart";
+import "package:bobomusic/permission/permission.dart";
 import "package:bot_toast/bot_toast.dart";
 import "package:flutter/material.dart";
 import "package:flutter_easyloading/flutter_easyloading.dart";
@@ -127,7 +127,7 @@ class MusicLocalState extends State<MusicLocal> {
 
   /// 扫描本地音乐
   Future<void> scanLocalMusics() async {
-    final hasPermission = await requestPermissions();
+    final hasPermission = await Permissions.requestAudioOrStoragePermission();
 
     if (!hasPermission) {
       return;

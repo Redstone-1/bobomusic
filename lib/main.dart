@@ -1,9 +1,11 @@
 import "dart:io";
 
 import "package:audio_service/audio_service.dart";
+import "package:bobomusic/constants/notification.dart";
 import "package:bobomusic/db/db.dart";
 import "package:bobomusic/event_bus/event_bus.dart";
 import "package:bobomusic/modules/download/model.dart";
+import "package:bobomusic/permission/permission.dart";
 import "package:bobomusic/utils/get_cache_color.dart";
 import "package:bobomusic/utils/window_manage.dart";
 import "package:bot_toast/bot_toast.dart";
@@ -66,9 +68,9 @@ void main() async {
   );
   final playerService = await AudioService.init(
     builder: () => _playerHandler,
-    config: const AudioServiceConfig(
-      androidNotificationChannelId: "com.bobomusic.channel.audio",
-      androidNotificationChannelName: "Audio playback",
+    config: AudioServiceConfig(
+      androidNotificationChannelId: NotificationAudio.channelId,
+      androidNotificationChannelName: NotificationAudio.channelName,
       androidNotificationOngoing: true,
     ),
   );
@@ -141,6 +143,8 @@ class MyAppState extends State<MyApp> {
         );
       });
     });
+
+    Permissions.requestNotificationPermission();
   }
 
   @override
