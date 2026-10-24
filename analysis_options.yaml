@@ -10,6 +10,17 @@
 analyzer:
   errors:
     avoid_print: ignore
+  # riverpod_lint 通过 custom_lint 生效（D8 工具链）
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
+  plugins:
+    - custom_lint
 include: package:flutter_lints/flutter.yaml
 
 linter:
