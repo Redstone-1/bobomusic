@@ -16,8 +16,8 @@ dependencies:
   cupertino_icons: ^1.0.6
 
   # 状态管理（D8：Riverpod 3 + codegen）
-  flutter_riverpod: ^3.0.0
-  riverpod_annotation: ^3.0.0
+  flutter_riverpod: ^3.4.0
+  riverpod_annotation: ^4.0.7
 
   # 网络与音源
   dio: ^5.8.0+1
@@ -65,11 +65,10 @@ dev_dependencies:
   flutter_lints: ^3.0.0
   flutter_launcher_icons: ^0.13.1
 
-  # Riverpod codegen 工具链（riverpod_lint 经 custom_lint 生效）
+  # Riverpod codegen 工具链（lint 走 Dart 3.10+ 新 analyzer 插件系统，无需 custom_lint）
   build_runner: ^2.4.13
-  riverpod_generator: ^3.0.0
-  riverpod_lint: ^3.0.0
-  custom_lint: ^0.8.1
+  riverpod_generator: ^4.0.9
+  riverpod_lint: ^3.1.9
   # 桌面端/单测用 sqlite（S3 数据层单测）
   sqflite_common_ffi: ^2.3.3
 

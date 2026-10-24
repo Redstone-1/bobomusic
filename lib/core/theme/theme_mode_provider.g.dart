@@ -13,7 +13,7 @@ part of 'theme_mode_provider.dart';
 /// S3.1 接入 SharedPreferences 真实持久化
 
 @ProviderFor(AppThemeMode)
-const appThemeModeProvider = AppThemeModeProvider._();
+final appThemeModeProvider = AppThemeModeProvider._();
 
 /// 明暗模式
 /// S1.1 为 codegen 冒烟骨架（默认暗色，贴合风格 A 的沉浸式基调）；
@@ -23,7 +23,7 @@ final class AppThemeModeProvider
   /// 明暗模式
   /// S1.1 为 codegen 冒烟骨架（默认暗色，贴合风格 A 的沉浸式基调）；
   /// S3.1 接入 SharedPreferences 真实持久化
-  const AppThemeModeProvider._()
+  AppThemeModeProvider._()
       : super(
           from: null,
           argument: null,
@@ -60,11 +60,10 @@ abstract class _$AppThemeMode extends $Notifier<ThemeMode> {
   ThemeMode build();
   @$mustCallSuper
   @override
-  void runBuild() {
-    final created = build();
+  WhenComplete runBuild() {
     final ref = this.ref as $Ref<ThemeMode, ThemeMode>;
     final element = ref.element as $ClassProviderElement<
         AnyNotifier<ThemeMode, ThemeMode>, ThemeMode, Object?, Object?>;
-    element.handleValue(ref, created);
+    return element.handleCreate(ref, build);
   }
 }
