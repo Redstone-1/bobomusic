@@ -5,7 +5,7 @@
 
 ## 项目是什么
 
-- 单仓库 Flutter 音乐 App（`com.bobomusic`），重写版 2.0.0 开发中（`v2` 分支，S1 · UI 重写阶段），Flutter 3.47.7 / Dart 3.13.5 / JDK 17（工具链见重构计划 D13）。
+- 单仓库 Flutter 音乐 App（`com.bobomusic`），`v2` 分支重写中，重写版版本号 2.0.0（D5）；重写工具链 Flutter 3.47.7 / Dart 3.13.5 / JDK 17（D13）。执行进度一律看 `重构计划.md`，本文不重复记录。
 - **无后端**：音源来自 Bilibili 逆向接口（`lib/origin_sdk/bili/`，S2 改造拆 BiliAuth/BiliApi）；歌词链重写中（网易直连 → LRCLIB → 备胎，重构计划 §6）；用户数据全部本地（sqflite + SharedPreferences，S3 落地四表 schema）。
 - 正式发布平台 Android；Windows/Linux 桌面可运行；iOS/macOS/Web 未适配。
 - 上游基于 [bbmusic](https://github.com/bb-music/flutter-app) 二次开发。
@@ -14,7 +14,7 @@
 
 ```bash
 flutter pub get
-flutter analyze          # 改动后必须跑，要求 0 error（基线见下）
+dart analyze             # 改动后必须跑，0 issue（含 riverpod_lint 规则，见「验证门槛」）
 flutter test             # 纯 Dart 单测，不依赖设备/网络
 flutter run -d windows   # 桌面联调
 flutter build apk        # Android 发布（需 android/key.properties 签名）
@@ -54,10 +54,12 @@ lib/
 8. **B 站接口相关改动**（签名/风控/playurl）改前先读 `memories/origin_sdk/`，该层极易因接口漂移而坏，改后必须真机/桌面实测播放。
 9. 新沉淀的模块知识按 `.agents/skills/dev_memory` 约定写入 `memories/` 并登记索引。
 
-## 验证基线
+## 验证门槛
 
-- 当前基线（S1.1 起，2026-10-24）：`flutter analyze` 0 error（余 1 warning：Dart 3.13 对旧 analyzer 插件机制的弃用提示，源自 custom_lint 接入方式，待其迁移新插件机制；1 info：`origin_sdk/bili/utils.dart` 存量，S2 处理）；`flutter test` 全绿（2 用例）。
-- 改动后必须维持 0 error；清理存量 info 属于代码改动，仍按硬规则第 0 条执行。
+> 本节只写稳定规则，**不记录动态状态**——当前多少 error/用例，跑一次命令即是事实源，写进文档必然过时。
+
+- 交付门槛：`dart analyze` 0 issue + `flutter test` 全绿；不满足不得交付（改码后不执行 build，手动验证交所有者，见硬规则 0）。
+- 静态检查以 `dart analyze` 为准：riverpod_lint 走 Dart 3.10+ 新式 analyzer 插件，`flutter analyze` 暂不加载新式插件（Flutter 包装器滞后；追平后删本行）。
 
 ## 知识源地图（按顺序查）
 
@@ -67,4 +69,4 @@ lib/
 | 下钻记忆 | `memories/` | 改某模块前：引用关系图、易踩坑、易腐字段 |
 | 角色技能 | `.agents/skills/` | 架构分析（tech-lead-architect）、写码（senior-frontend-engineer）、测试（senior-qa-engineer）、评审（code-reviewer）、沉淀（dev_memory） |
 | UI 原型 | `prototype/` | 六套风格稿；**已选定 A · 沉浸极光玻璃 + 玻璃拟态（2026-10-24）**，视觉基线 `style-a-aurora/`，落地方式见 `重构计划.md` §7 与 §9-S1 |
-| 重写路线 | `重构计划.md` | **重写计划：决策 D1~D13 全定稿；开发计划 S1~S5（UI 先行）见 §9。当前：S1.1 工程准备 ✅（2026-10-24，工具链升 Flutter 3.47.7 + Riverpod 3 codegen 跑通），下一步 S1.2 设计系统层** |
+| 重写路线 | `重构计划.md` | 重写决策 D1~D13 与开发计划 S1~S5 全定稿；**执行进度以该文件进度区为准**（本文不记动态状态） |
