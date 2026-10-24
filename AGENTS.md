@@ -46,7 +46,8 @@ lib/
    - 不替用户做决定——方案给选项与建议，选择权在用户；
    - 任何需求先出方案设计与开发计划，**经用户允许再动工**（用户给出明确执行方案/执行信号时除外）；
    - 改动代码后**不执行 build**，`flutter run`、真机验证等手动验证一律交由用户；
-   - **不执行 `git add` / `git commit`**（`push` / `revert` 同样禁止），版本操作全部由用户手动完成。
+   - **不执行 `git add` / `git commit`**（`push` / `revert` 同样禁止），版本操作全部由用户手动完成；
+   - **所有技术方案必须经过用户同意；必须经过用户采纳后才能同步文档**（含 `重构计划.md`、`memories/`、各 README——未采纳的方案只能出现在对话里，不得落盘成"已定"内容）。
 1. **跨模块通信**只走 `lib/event_bus/event_bus.dart` 的事件，不新增模块间直接 import。
 2. **歌单数据读取**统一走 `getUpdatedMusicList`（`lib/modules/music_order/utils.dart`），它负责去重 + prev/next 链表重建。
 3. **表名即歌单名**（中文表名，用户输入直拼 SQL，见 项目文档 12.2）：任何新写库入口必须先过 `checkNameValid` 校验，不得引入未校验的表名拼接。
@@ -69,5 +70,5 @@ lib/
 | 全景事实源 | `项目文档.md` | 接手必读：架构（4~6 章）、模块（7 章）、已知问题编号（12 章） |
 | 下钻记忆 | `memories/` | 改某模块前：引用关系图、易踩坑、易腐字段 |
 | 角色技能 | `.agents/skills/` | 架构分析（tech-lead-architect）、写码（senior-frontend-engineer）、测试（senior-qa-engineer）、评审（code-reviewer）、沉淀（dev_memory） |
-| UI 原型 | `prototype/` | UI 重设计三套风格稿（A 极光 / B 编辑 / C 几何），选定前不动 Flutter UI 层 |
-| 重构路线 | `重构计划.md` | **草案（待用户给出重构思路后定稿或重写）**：问题清单、阶段划分与开放决策 |
+| UI 原型 | `prototype/` | 六套风格稿；**已选定 A · 沉浸极光玻璃 + 玻璃拟态（2026-10-24）**，视觉基线 `style-a-aurora/`，落地方式见 `重构计划.md` P4（UI 动工仍需所有者批准） |
+| 重写路线 | `重构计划.md` | **重写计划 v3（2026-10-24 定向：仅保留 origin_sdk/bili，UI/状态/数据层全重写；Riverpod 3 + codegen；含已采纳决策 D1/D6/D7/D8 与阶段 W0~W4）** |
