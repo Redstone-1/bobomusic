@@ -42,3 +42,7 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 /android/app/.cxx
+
+# 本地规划与设计稿，不入库
+/重构计划.md
+/prototype/
