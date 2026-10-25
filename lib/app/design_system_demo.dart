@@ -14,6 +14,7 @@ import "../core/widgets/aurora_progress_bar.dart";
 import "../core/widgets/empty_state.dart";
 import "../core/widgets/glass_card.dart";
 import "../core/widgets/song_list_tile.dart";
+import "../core/widgets/theme_swatch.dart";
 import "../data/models/track.dart";
 
 /// S1.2/S1.3 设计系统验证页（S1.4 移除）：明暗 × 8 主题色实时切换 + 全部组件陈列
@@ -84,7 +85,7 @@ class _DesignSystemDemoState extends ConsumerState<DesignSystemDemo> {
                 runSpacing: 12,
                 children: [
                   for (final c in AppThemeColor.values)
-                    _SeedSwatch(
+                    ThemeSwatch(
                       key: ValueKey("seed_${c.name}"),
                       color: c,
                       selected: c == seed,
@@ -298,44 +299,7 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-/// 主题色选点（原型 .sw：选中描边 + ✓）
-class _SeedSwatch extends StatelessWidget {
-  final AppThemeColor color;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _SeedSwatch({
-    super.key,
-    required this.color,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: color.color,
-          border: Border.all(
-            width: 2,
-            color: selected
-                ? Theme.of(context).colorScheme.onSurface
-                : Colors.transparent,
-          ),
-        ),
-        alignment: Alignment.center,
-        child: selected
-            ? const Icon(Icons.check, size: 15, color: Colors.white)
-            : null,
-      ),
-    );
-  }
-}
+/// 主题色选点已提升为共享组件：core/widgets/theme_swatch.dart
 
 /// 可拖动进度条演示（模拟 seek）
 class _InteractiveProgress extends StatefulWidget {

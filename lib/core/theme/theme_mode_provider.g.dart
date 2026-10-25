@@ -50,7 +50,7 @@ final class AppThemeModeProvider
   }
 }
 
-String _$appThemeModeHash() => r'528a5d5bf627e8114fdf231c424a4c5f430477c2';
+String _$appThemeModeHash() => r'75981f79c278bca1c07f87f879a741034340c1fa';
 
 /// 明暗模式
 /// S1.1 为 codegen 冒烟骨架（默认暗色，贴合风格 A 的沉浸式基调）；

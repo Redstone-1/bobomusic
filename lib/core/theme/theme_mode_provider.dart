@@ -14,4 +14,9 @@ class AppThemeMode extends _$AppThemeMode {
   void toggle() {
     state = state == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
   }
+
+  /// 直接指定模式（设置页分段控件用）
+  void set(ThemeMode mode) {
+    if (state != mode) state = mode;
+  }
 }
