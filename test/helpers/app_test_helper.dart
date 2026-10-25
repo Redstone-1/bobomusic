@@ -5,12 +5,16 @@ import "package:bobomusic/data/models/track.dart" as models;
 import "package:bobomusic/data/origin_service.dart";
 import "package:bobomusic/data/repositories/track_repository.dart";
 import "package:bobomusic/data/singers_provider.dart";
+import "package:bobomusic/features/player/audio_engine.dart";
+import "package:bobomusic/features/player/playback_provider.dart";
 import "package:bobomusic/origin_sdk/bili/types.dart" as bili;
 import "package:bobomusic/origin_sdk/origin_types.dart" as sdk;
 import "package:flutter/widgets.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:shared_preferences/shared_preferences.dart";
 import "package:sqflite_common_ffi/sqflite_ffi.dart";
+
+import "fake_engine.dart";
 
 /// 测试用 Fake B 站 API：搜索固定返回「夜航西飞」单曲，避免真实网络
 class FakeBiliApi implements sdk.OriginService {
@@ -106,7 +110,10 @@ final _mockSingers = [
 ];
 
 /// 测试专用：mock SharedPreferences + ffi 内存库 + Fake BiliApi + mock 歌手
-/// （全部环境单例可替换：FakeAsync 下真实 I/O 不会完成，见各文件说明）
+/// + FakeEngine 播放依赖（全部环境单例可替换：FakeAsync 下真实 I/O 不会完成）
+/// 播放引擎暴露在 [fakePlaybackEngine] 供用例驱动进度/播完事件
+FakeEngine? fakePlaybackEngine;
+
 Future<Widget> buildTestApp({
   Map<String, Object> prefs = const {},
   List<Map<String, Object>> seedTracks = const [],
@@ -118,6 +125,14 @@ Future<Widget> buildTestApp({
   await initAppDatabase(path: inMemoryDatabasePath);
   biliApi = FakeBiliApi();
   hotSingersTestOverride = _mockSingers;
+  fakePlaybackEngine = FakeEngine();
+  playbackDepsTestOverride = PlaybackDeps(
+    engine: fakePlaybackEngine!,
+    resolveSource: (track) async => PlaySource(
+      key: track.id,
+      url: "https://fake.audio/${track.id}",
+    ),
+  );
   for (final row in seedTracks) {
     await TrackRepository().upsert(
       models.Track(

@@ -315,7 +315,10 @@ class MusicDetail {
 class MusicUrl {
   final String url; // 播放地址
   final Map<String, String>? headers; // 请求头
-  const MusicUrl({required this.url, this.headers});
+
+  /// 备用直链（B 站 dash backupUrl 首项；主 CDN 异常时降级，§5.3-4）
+  final String? backupUrl;
+  const MusicUrl({required this.url, this.headers, this.backupUrl});
 }
 
 /// 歌单源服务

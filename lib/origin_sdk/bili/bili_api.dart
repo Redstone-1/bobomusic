@@ -186,7 +186,8 @@ class BiliApi implements OriginService {
   }
 }
 
-/// playurl 响应解析（纯函数，特征测试锁定）：dash 音频按 bandwidth 取最高
+/// playurl 响应解析（纯函数，特征测试锁定）：dash 音频按 bandwidth 取最高，
+/// backupUrl 首项保留为备用直链（主 CDN 异常降级，§5.3-4）
 /// 注意：B 站 dash 音频 contentType 按 video/mp4 声明（实际 m4a），换播放内核时留意
 MusicUrl parsePlayUrl(Map<String, dynamic> data) {
   final List<dynamic> audioList =
@@ -195,7 +196,15 @@ MusicUrl parsePlayUrl(Map<String, dynamic> data) {
     throw const BiliParseError("playurl 无可用音频流（dash.audio 为空）");
   }
   audioList.sort((a, b) => b["bandwidth"].compareTo(a["bandwidth"]));
-  return MusicUrl(url: audioList[0]["baseUrl"], headers: {"Referer": _referer});
+  final best = audioList[0];
+  final backupUrl = (best["backupUrl"] as List?)
+      ?.whereType<String>()
+      .firstOrNull;
+  return MusicUrl(
+    url: best["baseUrl"],
+    headers: {"Referer": _referer},
+    backupUrl: backupUrl,
+  );
 }
 
 /// 带 TTL 与 LRU 淘汰的内存缓存（时间可注入，便于特征测试）

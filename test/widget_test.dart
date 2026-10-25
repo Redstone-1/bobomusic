@@ -6,7 +6,7 @@ import "package:bobomusic/data/models/track.dart";
 import "package:bobomusic/core/widgets/song_list_tile.dart";
 import "package:bobomusic/core/widgets/theme_swatch.dart";
 import "package:bobomusic/features/home/home_tab.dart";
-import "package:bobomusic/features/player/mock_playback.dart";
+import "package:bobomusic/features/player/playback_provider.dart";
 import "package:bobomusic/features/plaza/singer_list_page.dart";
 import "package:bobomusic/features/playlist/playlist_detail_page.dart";
 import "package:flutter/material.dart";
@@ -69,7 +69,7 @@ void main() {
     final container = ProviderScope.containerOf(
       tester.element(find.byType(App)),
     );
-    const firstSingerTrackId = "612255353_BV1e84y1T7jp_1088807591";
+    const firstSingerTrackId = "s1_t1"; // mock 歌手周杰伦首曲
 
     // 广场 → 热门歌手（chinese.json）→ 歌手详情
     await tester.tap(find.text("广场"));
@@ -85,7 +85,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text("正在播放"), findsNothing); // 播放卡未弹
     expect(find.byKey(const Key("mini_player")), findsOneWidget);
-    expect(container.read(mockPlaybackProvider).playing, isTrue);
+    expect(container.read(playbackProvider).playing, isTrue);
 
     // 点迷你条 → 弹播放卡
     await tester.tap(find.byKey(const Key("mini_player")));
@@ -93,14 +93,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text("正在播放"), findsOneWidget);
 
-    // 暂停 → 下一首（mock 引擎跳出歌手曲目属预期）
+    // 暂停 → 下一首（会话队列内切到同歌手下一首）
     await tester.tap(find.byKey(const Key("player_play")));
     await tester.pump();
-    expect(container.read(mockPlaybackProvider).playing, isFalse);
+    expect(container.read(playbackProvider).playing, isFalse);
     await tester.tap(find.byIcon(Icons.skip_next));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400)); // 引擎装载微任务
     expect(
-      container.read(mockPlaybackProvider).track?.id,
+      container.read(playbackProvider).track?.id,
       isNot(firstSingerTrackId),
     );
 
@@ -111,10 +112,11 @@ void main() {
     expect(find.text("正在播放"), findsNothing);
     expect(find.byKey(const Key("mini_player")), findsOneWidget);
 
-    // 迷你条播放键恢复播放
+    // 切歌自动续播；迷你条播放键可再暂停
+    expect(container.read(playbackProvider).playing, isTrue);
     await tester.tap(find.byKey(const Key("mini_play")));
     await tester.pump();
-    expect(container.read(mockPlaybackProvider).playing, isTrue);
+    expect(container.read(playbackProvider).playing, isFalse);
   });
 
   testWidgets("窄视口（390dp）切广场：合集卡片无溢出（回归）", (WidgetTester tester) async {
@@ -360,18 +362,18 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text("仿佛如同一场梦"), findsNothing);
 
-    // 打开播放队列 sheet
+    // 打开播放队列 sheet（会话队列 = 歌手歌单 2 首）
     await tester.tap(find.byKey(const Key("player_queue")));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text("播放队列 · 8 首"), findsOneWidget);
+    expect(find.text("播放队列 · 2 首"), findsOneWidget);
 
     // 点队列中的曲目切歌，sheet 关闭
-    await tester.tap(find.text("起风了"));
+    await tester.tap(find.text("七里香"));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-    expect(container.read(mockPlaybackProvider).track?.name, "起风了");
-    expect(find.text("播放队列 · 8 首"), findsNothing);
+    expect(container.read(playbackProvider).track?.name, "七里香");
+    expect(find.text("播放队列 · 2 首"), findsNothing);
   });
 
   testWidgets("主题色/明暗选择持久化写回 appPrefs", (WidgetTester tester) async {

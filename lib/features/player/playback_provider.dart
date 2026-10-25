@@ -6,7 +6,9 @@ import "../../core/prefs/app_prefs.dart";
 import "../../data/models/track.dart";
 import "../../data/origin_service.dart";
 import "../../data/repositories/track_repository.dart";
+import "../../origin_sdk/bili/bili_api_error.dart";
 import "audio_engine.dart";
+import "just_audio_engine.dart";
 import "play_mode.dart";
 
 part "playback_provider.g.dart";
@@ -66,16 +68,16 @@ class PlaybackState {
       );
 }
 
-/// 可替换全局（测试模式）：注入引擎与直链解析，FakeEngine 下全链路可测；
+/// 可替换全局（测试模式）：注入引擎与源解析，FakeEngine 下全链路可测；
 /// [randomPick] 随机模式的取数函数（测试注入固定序列，生产用真随机）
 class PlaybackDeps {
   final AudioEngine engine;
-  final Future<String> Function(Track track) resolveUrl;
+  final Future<PlaySource> Function(Track track) resolveSource;
   final int Function(int max)? randomPick;
 
   const PlaybackDeps({
     required this.engine,
-    required this.resolveUrl,
+    required this.resolveSource,
     this.randomPick,
   });
 }
@@ -102,10 +104,7 @@ class Playback extends _$Playback {
   /// 惰性创建并订阅事件流（首次使用时；dispose 统一取消）
   AudioEngine _resolveEngine() {
     if (_engine != null) return _engine!;
-    final e = playbackDepsTestOverride?.engine;
-    // A2 接入真实现（just_audio + audio_service）前，生产路径不可构造；
-    // UI 在 B 批换真 provider 前不会引用本 provider
-    if (e == null) throw UnimplementedError("A2 接入 JustAudioEngine");
+    final e = playbackDepsTestOverride?.engine ?? JustAudioEngine();
     _engine = e;
     _subscribe(e);
     return e;
@@ -204,23 +203,36 @@ class Playback extends _$Playback {
     );
     _snapshot();
     try {
-      final url = await _resolveUrl(track);
-      await _resolveEngine().load(
-        url,
-        initialPosition: initialPosition,
-      );
+      final source = await _resolveSource(track);
+      await _resolveEngine().load(source, initialPosition: initialPosition);
       if (autoplay) await _resolveEngine().play();
     } catch (e) {
       // 装载失败：类型化错误上抛到 state（UI 提示），不静默挂死（§5.1-2）
-      state = state.copyWith(buffering: false, playing: false, error: "$e");
+      print("播放装载失败 [${track.id}] $e");
+      // B 站 -404（"啥都木有"）= 视频/分 P 已被删除或下架，翻译成用户能懂的提示
+      final friendly = e is BiliApiRejectError && e.code == -404
+          ? "原视频可能已丢失（被删除或下架），换首试试吧"
+          : "$e";
+      state = state.copyWith(buffering: false, playing: false, error: friendly);
+      _snapshot();
     }
   }
 
-  Future<String> _resolveUrl(Track track) async {
+  /// 源解析：本地曲直读文件；B 站走 playurl（直链 + 备链 + Referer）
+  Future<PlaySource> _resolveSource(Track track) async {
     final override = playbackDepsTestOverride;
-    if (override != null) return override.resolveUrl(track);
+    if (override != null) return override.resolveSource(track);
+    final localPath = track.localPath;
+    if (track.origin == OriginType.local && localPath != null) {
+      return PlaySource(key: track.id, url: localPath, isLocal: true);
+    }
     final musicUrl = await biliApi.getMusicUrl(track.id);
-    return musicUrl.url;
+    return PlaySource(
+      key: track.id,
+      url: musicUrl.url,
+      backupUrl: musicUrl.backupUrl,
+      headers: musicUrl.headers,
+    );
   }
 
   void _subscribe(AudioEngine e) {
@@ -242,11 +254,13 @@ class Playback extends _$Playback {
     );
     _onCompletion = e.completionStream.listen((_) => _onCompleted());
     _onError = e.errorStream.listen((err) {
+      print("播放引擎错误：$err");
       state = state.copyWith(
         buffering: false,
         playing: false,
         error: "$err",
       );
+      _snapshot();
     });
   }
 

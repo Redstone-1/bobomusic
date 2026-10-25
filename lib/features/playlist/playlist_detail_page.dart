@@ -166,8 +166,13 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
                                 SongListTile(
                                   track: track,
                                   coverOverride: widget.trackCover,
-                                  onTap: () =>
-                                      PlayerCardPage.start(context, ref, track),
+                                  // 播放上下文 = 当前列表（§3.4-4）
+                                  onTap: () => PlayerCardPage.start(
+                                    context,
+                                    ref,
+                                    track,
+                                    queue: tracks,
+                                  ),
                                   onMorePressed: () => AppSheet.show(
                                     context,
                                     title: track.name,

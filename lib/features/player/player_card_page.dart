@@ -15,24 +15,34 @@ import "../../data/models/track.dart";
 import "../../data/repositories/queue_repository.dart";
 import "../../data/repositories/track_repository.dart";
 import "../playlist/playlists_provider.dart" show likedCountProvider, queueTracksProvider;
-import "mock_playback.dart";
+import "play_mode.dart";
+import "playback_provider.dart";
 import "spinning_cover.dart";
 
 /// 全屏播放卡片（对齐原型 .player：封面模糊背景 + 黑胶 + seek + 控制区 + 动作行）
-/// S1.4 mock 驱动；黑胶视图。歌词视图与播放队列 sheet 在批次 4
+/// S4-A2 接真引擎；歌词视图（mock 时间轴）与真歌词链在 4.4
 class PlayerCardPage extends ConsumerStatefulWidget {
   const PlayerCardPage({super.key});
 
   /// 仅开播（列表行点击用）：不弹卡，播放状态由迷你条承接
   /// 播放即入库：喜欢/队列/历史的落点（upsert 保留已有喜欢/下载态）
-  static void start(BuildContext context, WidgetRef ref, Track track) {
+  /// [queue] 播放上下文（§3.4-4：点播时所在列表），缺省为单曲
+  static void start(
+    BuildContext context,
+    WidgetRef ref,
+    Track track, {
+    List<Track>? queue,
+  }) {
     TrackRepository().upsert(track);
-    ref.read(mockPlaybackProvider.notifier).play(track);
+    ref.read(playbackProvider.notifier).play(track, queue: queue);
   }
 
   /// 开播并以上滑转场打开播放卡（迷你条点击用；原型 .overlay 上滑 .5s）
+  /// 已是当前曲目时只开卡不重播——保留会话队列与播放进度
   static void open(BuildContext context, WidgetRef ref, Track track) {
-    start(context, ref, track);
+    if (ref.read(playbackProvider).track?.id != track.id) {
+      start(context, ref, track);
+    }
     final t = AuroraTokens.of(context);
     Navigator.of(context).push(
       PageRouteBuilder(
@@ -61,7 +71,7 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
 
   @override
   Widget build(BuildContext context) {
-    final pb = ref.watch(mockPlaybackProvider);
+    final pb = ref.watch(playbackProvider);
     final track = pb.track;
     // 理论不可达（打开前必 play）；防御：无曲直接回退
     if (track == null) {
@@ -70,6 +80,14 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
       });
       return const SizedBox.shrink();
     }
+    // 引擎真时长优先，未就绪回退曲目元数据（避免除零）
+    final durationSec = pb.duration.inSeconds > 0
+        ? pb.duration.inSeconds
+        : track.duration ?? 240;
+    final progress = pb.duration.inMilliseconds > 0
+        ? (pb.position.inMilliseconds / pb.duration.inMilliseconds)
+              .clamp(0.0, 1.0)
+        : 0.0;
 
     return Scaffold(
       body: Stack(
@@ -86,7 +104,7 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
                     child: _showLyrics
                         ? _LyricView(
                             key: const Key("player_lyrics"),
-                            progress: pb.progress,
+                            progress: progress,
                           )
                         : Center(
                             key: const Key("player_disc"),
@@ -109,7 +127,7 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
                   },
                 ),
                 const SizedBox(height: 18),
-                _SeekRow(duration: track.duration ?? 240),
+                _SeekRow(durationSec: durationSec),
                 _ControlsRow(),
                 _ActionsRow(
                   showLyrics: _showLyrics,
@@ -349,11 +367,11 @@ class _MetaRow extends StatelessWidget {
   }
 }
 
-/// 时间 + seek 条（高频进度只重建本行）
+/// 时间 + seek 条（高频进度只重建本行；seek 按真时长换算秒）
 class _SeekRow extends ConsumerWidget {
-  final int duration;
+  final int durationSec;
 
-  const _SeekRow({required this.duration});
+  const _SeekRow({required this.durationSec});
 
   static String _fmt(int sec) =>
       "${sec ~/ 60}:${(sec % 60).toString().padLeft(2, "0")}";
@@ -361,26 +379,34 @@ class _SeekRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = AuroraTokens.of(context);
-    final progress = ref.watch(mockPlaybackProvider.select((s) => s.progress));
+    final (positionMs, durationMs) = ref.watch(
+      playbackProvider.select(
+        (s) => (s.position.inMilliseconds, s.duration.inMilliseconds),
+      ),
+    );
+    final progress =
+        durationMs > 0 ? (positionMs / durationMs).clamp(0.0, 1.0) : 0.0;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 26),
       child: Row(
         children: [
           Text(
-            _fmt((duration * progress).round()),
+            _fmt((durationSec * progress).round()),
             style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: t.fgDim),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: AuroraProgressBar(
               value: progress,
-              onChanged: ref.read(mockPlaybackProvider.notifier).seek,
+              onChanged: (fraction) => ref
+                  .read(playbackProvider.notifier)
+                  .seek(Duration(seconds: (durationSec * fraction).round())),
             ),
           ),
           const SizedBox(width: 10),
           Text(
-            _fmt(duration),
+            _fmt(durationSec),
             style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: t.fgDim),
           ),
         ],
@@ -391,20 +417,20 @@ class _SeekRow extends ConsumerWidget {
 
 /// 主控制区（模式 / 上一首 / 播放 / 下一首 / 队列）
 class _ControlsRow extends ConsumerWidget {
-  static const _modes = [
-    (Icons.repeat_one, "单曲循环"),
-    (Icons.queue_music, "列表循环"),
-    (Icons.shuffle, "随机播放"),
-    (Icons.repeat, "顺序播放"),
-  ];
+  static const _modeIcons = {
+    PlayMode.singleLoop: Icons.repeat_one,
+    PlayMode.listLoop: Icons.queue_music,
+    PlayMode.shuffle: Icons.shuffle,
+    PlayMode.sequential: Icons.repeat,
+  };
 
   const _ControlsRow();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = AuroraTokens.of(context);
-    final pb = ref.watch(mockPlaybackProvider);
-    final notifier = ref.read(mockPlaybackProvider.notifier);
+    final pb = ref.watch(playbackProvider);
+    final notifier = ref.read(playbackProvider.notifier);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(26, 20, 26, 8),
@@ -414,13 +440,11 @@ class _ControlsRow extends ConsumerWidget {
           IconButton(
             onPressed: () {
               notifier.cycleMode();
-              AppToast.show(
-                context,
-                _modes[(pb.modeIndex + 1) % _modes.length].$2,
-              );
+              AppToast.show(context, pb.mode.next.label);
             },
-            icon: Icon(_modes[pb.modeIndex].$1),
-            color: pb.modeIndex == 0 ? t.primary : t.fgMute,
+            icon: Icon(_modeIcons[pb.mode]),
+            // 单曲循环为"激活"样式（高亮），其余弱化
+            color: pb.mode == PlayMode.singleLoop ? t.primary : t.fgMute,
             iconSize: 24,
           ),
           IconButton(
@@ -452,30 +476,32 @@ class _ControlsRow extends ConsumerWidget {
     );
   }
 
-  // 播放队列 sheet（§3.4-5 语义：原「待播放列表」更名「播放队列」）
-  // S1.4 仅展示 mock 队列与当前曲高亮；插队/追加/调序的数据操作在 S4 接队列引擎
+  // 播放队列 sheet（§3.4-5：插队/追加语义在队列引擎批次接数据操作）
   void _openQueue(BuildContext context, WidgetRef ref) {
     AppSheet.show(
       context,
-      title: "播放队列 · ${mockTracks.length} 首",
+      title: "播放队列 · ${ref.read(playbackProvider).queue.length} 首",
       child: SizedBox(
         height: 380,
         child: Consumer(
           builder: (context, sheetRef, _) {
-            final current = sheetRef.watch(mockPlaybackProvider).track;
+            final pbState = sheetRef.watch(playbackProvider);
+            final current = pbState.track;
             return ListView(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               children: [
-                for (final track in mockTracks)
+                for (final track in pbState.queue)
                   SongListTile(
                     track: track,
                     playing: track.id == current?.id,
                     onTap: () {
-                      sheetRef.read(mockPlaybackProvider.notifier).play(track);
+                      sheetRef
+                          .read(playbackProvider.notifier)
+                          .play(track, queue: pbState.queue);
                       Navigator.of(context).pop();
                     },
                     onMorePressed: () =>
-                        AppToast.show(context, "插队/移除在 S4 接队列引擎"),
+                        AppToast.show(context, "插队/移除在队列引擎批次接入"),
                   ),
               ],
             );
@@ -511,7 +537,7 @@ class _ActionsRow extends ConsumerWidget {
         "稍后",
         false,
         () {
-          final track = ref.read(mockPlaybackProvider).track;
+          final track = ref.read(playbackProvider).track;
           if (track == null) return;
           TrackRepository().upsert(track);
           QueueRepository().append(track.id);

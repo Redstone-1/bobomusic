@@ -141,10 +141,12 @@ class CollectionDetailPage extends ConsumerWidget {
                                 for (final track in tracks)
                                   SongListTile(
                                     track: track,
+                                    // 播放上下文 = 当前列表（§3.4-4）
                                     onTap: () => PlayerCardPage.start(
                                       context,
                                       ref,
                                       track,
+                                      queue: tracks,
                                     ),
                                     onMorePressed: () => AppSheet.show(
                                       context,

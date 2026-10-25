@@ -10,8 +10,8 @@ class FakeEngine implements AudioEngine {
   final _completionCtrl = StreamController<void>.broadcast();
   final _errorCtrl = StreamController<Object>.broadcast();
 
-  /// load 调用记录（url + 断点位置），断言装载行为用
-  final loads = <({String url, Duration? initialPosition})>[];
+  /// load 调用记录（源 + 断点位置），断言装载行为用
+  final loads = <({PlaySource source, Duration? initialPosition})>[];
   int playCalls = 0;
   int pauseCalls = 0;
   int stopCalls = 0;
@@ -37,12 +37,8 @@ class FakeEngine implements AudioEngine {
   Stream<Object> get errorStream => _errorCtrl.stream;
 
   @override
-  Future<void> load(
-    String url, {
-    Map<String, String>? headers,
-    Duration? initialPosition,
-  }) async {
-    loads.add((url: url, initialPosition: initialPosition));
+  Future<void> load(PlaySource source, {Duration? initialPosition}) async {
+    loads.add((source: source, initialPosition: initialPosition));
     position = initialPosition ?? Duration.zero;
     emitPosition(position);
     _durationCtrl.add(duration);

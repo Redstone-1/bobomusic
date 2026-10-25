@@ -7,7 +7,7 @@ import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/aurora_progress_bar.dart";
 import "../../core/widgets/cover_placeholder.dart";
 import "../../core/widgets/scale_tap.dart";
-import "mock_playback.dart";
+import "playback_provider.dart";
 import "player_card_page.dart";
 
 /// 推入页（详情/搜索）通用外壳：内容铺满 + 底部迷你条（无播放自隐藏）
@@ -39,9 +39,13 @@ class MiniPlayerBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = AuroraTokens.of(context);
-    final pb = ref.watch(mockPlaybackProvider);
+    final pb = ref.watch(playbackProvider);
     final track = pb.track;
     if (track == null) return const SizedBox.shrink();
+    final progress = pb.duration.inMilliseconds > 0
+        ? (pb.position.inMilliseconds / pb.duration.inMilliseconds)
+              .clamp(0.0, 1.0)
+        : 0.0;
 
     return ScaleTap(
       key: const Key("mini_player"),
@@ -107,7 +111,7 @@ class MiniPlayerBar extends ConsumerWidget {
                         const SizedBox(height: 4),
                         // 进度线属于文字块：天然与歌名左对齐，无坐标换算
                         AuroraProgressBar(
-                          value: pb.progress,
+                          value: progress,
                           height: 2,
                           showThumb: false,
                         ),
@@ -117,7 +121,7 @@ class MiniPlayerBar extends ConsumerWidget {
                   GestureDetector(
                     key: const Key("mini_play"),
                     onTap: () =>
-                        ref.read(mockPlaybackProvider.notifier).toggle(),
+                        ref.read(playbackProvider.notifier).toggle(),
                     child: Padding(
                       padding: const EdgeInsets.all(6),
                       child: Icon(

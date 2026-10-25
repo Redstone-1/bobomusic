@@ -2,8 +2,10 @@ import "package:bobomusic/core/prefs/app_prefs.dart";
 import "package:bobomusic/data/db/app_database.dart";
 import "package:bobomusic/data/models/track.dart";
 import "package:bobomusic/data/repositories/track_repository.dart";
+import "package:bobomusic/features/player/audio_engine.dart";
 import "package:bobomusic/features/player/play_mode.dart";
 import "package:bobomusic/features/player/playback_provider.dart";
+import "package:bobomusic/origin_sdk/bili/bili_api_error.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:fake_async/fake_async.dart";
@@ -29,7 +31,7 @@ void main() {
     engine = FakeEngine();
     playbackDepsTestOverride = PlaybackDeps(
       engine: engine,
-      resolveUrl: (t) async => "https://fake.audio/${t.id}",
+      resolveSource: (t) async => PlaySource(key: t.id, url: "https://fake.audio/${t.id}"),
     );
     container = ProviderContainer();
   });
@@ -60,7 +62,7 @@ void main() {
     expect(st().track?.id, "a");
     expect(st().playing, isTrue);
     expect(st().queueIndex, 0);
-    expect(engine.loads.single.url, "https://fake.audio/a");
+    expect(engine.loads.single.source.url, "https://fake.audio/a");
     expect(engine.playCalls, 1);
   });
 
@@ -120,7 +122,7 @@ void main() {
   test("随机模式：注入固定取数并避开当前曲", () async {
     playbackDepsTestOverride = PlaybackDeps(
       engine: engine,
-      resolveUrl: (t) async => "https://fake.audio/${t.id}",
+      resolveSource: (t) async => PlaySource(key: t.id, url: "https://fake.audio/${t.id}"),
       randomPick: (_) => 0,
     );
     await pb().play(t("a", "曲A"), queue: queue());
@@ -144,7 +146,7 @@ void main() {
   test("装载失败：error 上抛 state、不挂死不自动重试", () async {
     playbackDepsTestOverride = PlaybackDeps(
       engine: engine,
-      resolveUrl: (t) async => throw Exception("解析失败"),
+      resolveSource: (t) async => throw Exception("解析失败"),
     );
     await pb().play(t("a", "曲A"), queue: queue());
     await flush();
@@ -152,6 +154,17 @@ void main() {
     expect(st().playing, isFalse);
     expect(st().buffering, isFalse);
     expect(engine.loads, isEmpty);
+  });
+
+  test("B 站 -404（视频失效）翻译成用户友好提示", () async {
+    playbackDepsTestOverride = PlaybackDeps(
+      engine: engine,
+      resolveSource: (t) async =>
+          throw const BiliApiRejectError("请求被拒绝：啥都木有", code: -404),
+    );
+    await pb().play(t("a", "曲A"), queue: queue());
+    await flush();
+    expect(st().error, "原视频可能已丢失（被删除或下架），换首试试吧");
   });
 
   test("引擎错误流：进入 error 态并暂停", () async {

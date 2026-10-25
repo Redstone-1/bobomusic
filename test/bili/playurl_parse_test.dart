@@ -10,7 +10,11 @@ void main() {
         "dash": {
           "audio": [
             {"baseUrl": "https://low.example/a.m4s", "bandwidth": 64000},
-            {"baseUrl": "https://high.example/a.m4s", "bandwidth": 320000},
+            {
+              "baseUrl": "https://high.example/a.m4s",
+              "bandwidth": 320000,
+              "backupUrl": ["https://bak1.example/a.m4s", "https://bak2.example/a.m4s"],
+            },
             {"baseUrl": "https://mid.example/a.m4s", "bandwidth": 128000},
           ],
         },
@@ -18,6 +22,19 @@ void main() {
       expect(musicUrl.url, "https://high.example/a.m4s");
       // 取流直链必须带 Referer（缺省 403）
       expect(musicUrl.headers?["Referer"], "https://www.bilibili.com/");
+      // 备用直链保留首项（降级用，§5.3-4）
+      expect(musicUrl.backupUrl, "https://bak1.example/a.m4s");
+    });
+
+    test("backupUrl 缺失时为 null（不抛错）", () {
+      final musicUrl = parsePlayUrl({
+        "dash": {
+          "audio": [
+            {"baseUrl": "https://only.example/a.m4s", "bandwidth": 320000},
+          ],
+        },
+      });
+      expect(musicUrl.backupUrl, isNull);
     });
 
     test("dash.audio 为空 → BiliParseError（接口漂移先红）", () {

@@ -87,10 +87,15 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     }
   }
 
-  // 点歌：入库（后续喜欢/队列的落点）→ 只开播不弹卡
+  // 点歌：入库（后续喜欢/队列的落点）→ 只开播不弹卡；
+  // 上下文 = 搜索结果中的单曲集合（§3.4-4）
   void _playTrack(Track track) {
     TrackRepository().upsert(track);
-    PlayerCardPage.start(context, ref, track);
+    final singles = [
+      for (final item in _results)
+        if ((item.musicList?.length ?? 0) <= 1) item.toTrack(),
+    ];
+    PlayerCardPage.start(context, ref, track, queue: singles);
   }
 
   // 多P歌单 → 收藏为合集（type=collection，曲目逐个入库）

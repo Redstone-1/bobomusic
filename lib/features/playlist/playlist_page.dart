@@ -142,9 +142,15 @@ class PlaylistPage extends ConsumerWidget {
                     for (final track in queue)
                       SongListTile(
                         track: track,
-                        onTap: () => PlayerCardPage.start(context, ref, track),
+                        // 队列区点播：会话队列 = 播放队列（queue 表）
+                        onTap: () => PlayerCardPage.start(
+                          context,
+                          ref,
+                          track,
+                          queue: queue,
+                        ),
                         onMorePressed: () =>
-                            AppToast.show(context, "队列操作在 S4 接入"),
+                            AppToast.show(context, "队列操作在队列引擎批次接入"),
                       ),
                   ],
                 ),

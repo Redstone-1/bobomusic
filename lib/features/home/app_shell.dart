@@ -3,9 +3,11 @@ import "dart:ui" as ui;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../core/overlays/app_toast.dart";
 import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/aurora_background.dart";
 import "../player/mini_player_bar.dart";
+import "../player/playback_provider.dart";
 import "../playlist/playlist_page.dart";
 import "../plaza/plaza_page.dart";
 import "../settings/settings_page.dart";
@@ -18,6 +20,15 @@ class AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tab = ref.watch(homeTabControllerProvider);
+    // 播放错误全局提示（状态机把引擎/解析错误收进 state，这里统一弹 toast）
+    ref.listen(
+      playbackProvider.select((s) => s.error),
+      (previous, next) {
+        if (next != null) {
+          AppToast.show(context, "播放失败：$next");
+        }
+      },
+    );
 
     return Scaffold(
       // extendBody：内容延伸到 Dock 之下，Dock 自带渐隐+模糊
