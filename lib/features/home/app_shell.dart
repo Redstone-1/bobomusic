@@ -5,12 +5,13 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/aurora_background.dart";
+import "../player/mini_player_bar.dart";
 import "../playlist/playlist_page.dart";
 import "../plaza/plaza_page.dart";
 import "../settings/settings_page.dart";
 import "home_tab.dart";
 
-/// 应用壳：极光背景 + IndexedStack 三 Tab 保活 + 底部玻璃 Dock（对齐原型 .tabbar）
+/// 应用壳：极光背景 + IndexedStack 三 Tab 保活 + 迷你播放条 + 底部玻璃 Dock
 class AppShell extends ConsumerWidget {
   const AppShell({super.key});
 
@@ -26,12 +27,23 @@ class AppShell extends ConsumerWidget {
         child: SafeArea(
           top: true,
           bottom: false,
-          child: IndexedStack(
-            index: tab.index,
-            children: const [
-              PlaylistPage(),
-              PlazaPage(),
-              SettingsPage(),
+          child: Stack(
+            children: [
+              IndexedStack(
+                index: tab.index,
+                children: const [
+                  PlaylistPage(),
+                  PlazaPage(),
+                  SettingsPage(),
+                ],
+              ),
+              // 迷你播放条悬浮于 Dock 上方（无播放时自隐藏）
+              Positioned(
+                left: 14,
+                right: 14,
+                bottom: 74,
+                child: const MiniPlayerBar(),
+              ),
             ],
           ),
         ),

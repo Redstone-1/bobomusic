@@ -1,5 +1,7 @@
 import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../core/overlays/app_sheet.dart";
 import "../../core/overlays/app_toast.dart";
 import "../../core/theme/app_palette.dart";
 import "../../core/theme/aurora_tokens.dart";
@@ -9,15 +11,16 @@ import "../../core/widgets/back_link.dart";
 import "../../core/widgets/song_list_tile.dart";
 import "../../data/mock/mock_data.dart";
 import "../../data/models/playlist.dart";
+import "../player/player_card_page.dart";
 
 /// 合集详情（对齐原型 renderSub/collection）
-class CollectionDetailPage extends StatelessWidget {
+class CollectionDetailPage extends ConsumerWidget {
   final Playlist collection;
 
   const CollectionDetailPage({super.key, required this.collection});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final t = AuroraTokens.of(context);
 
     return Scaffold(
@@ -89,9 +92,23 @@ class CollectionDetailPage extends StatelessWidget {
               for (final track in mockTracks)
                 SongListTile(
                   track: track,
-                  onTap: () => AppToast.show(context, "播放内核在 S4 接入"),
-                  onMorePressed: () =>
-                      AppToast.show(context, "播放队列在批次 3/4 提供"),
+                  onTap: () => PlayerCardPage.start(context, ref, track),
+                  onMorePressed: () => AppSheet.show(
+                    context,
+                    title: track.name,
+                    actions: [
+                      AppSheetAction(
+                        icon: Icons.queue_music_outlined,
+                        label: "下一首播放",
+                        onTap: () {},
+                      ),
+                      AppSheetAction(
+                        icon: Icons.playlist_add,
+                        label: "加入待播放",
+                        onTap: () {},
+                      ),
+                    ],
+                  ),
                 ),
             ],
           ),

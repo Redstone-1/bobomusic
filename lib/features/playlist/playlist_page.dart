@@ -11,6 +11,7 @@ import "../../core/widgets/scale_tap.dart";
 import "../../core/widgets/song_list_tile.dart";
 import "../../data/mock/mock_data.dart";
 import "../../data/models/playlist.dart";
+import "../player/player_card_page.dart";
 import "playlist_detail_page.dart";
 
 /// 歌单页（对齐原型 renderOrder）
@@ -79,7 +80,7 @@ class PlaylistPage extends ConsumerWidget {
         for (final track in mockTracks.take(3))
           SongListTile(
             track: track,
-            onTap: () => AppToast.show(context, "播放内核在 S4 接入"),
+            onTap: () => PlayerCardPage.start(context, ref, track),
             onMorePressed: () => _showTrackActions(context, track.name),
           ),
         // 底部留白缓冲，避免贴住 Dock

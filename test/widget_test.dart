@@ -1,5 +1,6 @@
 import "package:bobomusic/app/app.dart";
 import "package:bobomusic/features/home/home_tab.dart";
+import "package:bobomusic/features/player/mock_playback.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -48,6 +49,53 @@ void main() {
     expect(find.text("我喜欢的音乐"), findsOneWidget);
     expect(find.text("夜色轻电子"), findsOneWidget);
     expect(find.text("夜航西飞"), findsOneWidget);
+  });
+
+  testWidgets("点歌曲只开播（迷你条在场），点迷你条才弹播放卡", (WidgetTester tester) async {
+    await tester.pumpWidget(const ProviderScope(child: App()));
+    await tester.pump();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(App)),
+    );
+
+    // 点最近播放第一行（先拖进视口）→ 只开播，不弹卡
+    await tester.drag(find.text("自定义歌单"), const Offset(0, -400));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text("夜航西飞"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text("正在播放"), findsNothing); // 播放卡未弹
+    expect(find.byKey(const Key("mini_player")), findsOneWidget); // 迷你条在场
+    expect(container.read(mockPlaybackProvider).playing, isTrue);
+    // mock 快进已起步（120ms/步）
+    expect(container.read(mockPlaybackProvider).progress, greaterThan(0));
+
+    // 点迷你条 → 弹播放卡
+    await tester.tap(find.byKey(const Key("mini_player")));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text("正在播放"), findsOneWidget);
+
+    // 暂停 → 下一首
+    await tester.tap(find.byKey(const Key("player_play")));
+    await tester.pump();
+    expect(container.read(mockPlaybackProvider).playing, isFalse);
+    await tester.tap(find.byIcon(Icons.skip_next));
+    await tester.pump();
+    expect(container.read(mockPlaybackProvider).track?.name, "漠河舞厅");
+
+    // 收起 → 回到壳，迷你条在场
+    await tester.tap(find.byKey(const Key("player_close")));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text("正在播放"), findsNothing);
+    expect(find.byKey(const Key("mini_player")), findsOneWidget);
+
+    // 迷你条播放键恢复播放
+    await tester.tap(find.byKey(const Key("mini_play")));
+    await tester.pump();
+    expect(container.read(mockPlaybackProvider).playing, isTrue);
   });
 
   testWidgets("窄视口（390dp）切广场：合集卡片无溢出（回归）", (WidgetTester tester) async {

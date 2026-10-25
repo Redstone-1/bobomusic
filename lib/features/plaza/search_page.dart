@@ -1,4 +1,5 @@
 import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/aurora_background.dart";
@@ -8,16 +9,17 @@ import "../../core/widgets/page_header.dart";
 import "../../core/widgets/song_list_tile.dart";
 import "../../data/mock/mock_data.dart";
 import "../../data/models/track.dart";
+import "../player/player_card_page.dart";
 
 /// 搜索页（对齐原型 renderSub/search；S1 为 mock 过滤，S3 接 origin_sdk 真搜索）
-class SearchPage extends StatefulWidget {
+class SearchPage extends ConsumerStatefulWidget {
   const SearchPage({super.key});
 
   @override
-  State<SearchPage> createState() => _SearchPageState();
+  ConsumerState<SearchPage> createState() => _SearchPageState();
 }
 
-class _SearchPageState extends State<SearchPage> {
+class _SearchPageState extends ConsumerState<SearchPage> {
   final _controller = TextEditingController();
   String _query = "";
 
@@ -97,7 +99,7 @@ class _SearchPageState extends State<SearchPage> {
                 for (final track in results)
                   SongListTile(
                     track: track,
-                    onTap: () {},
+                    onTap: () => PlayerCardPage.start(context, ref, track),
                     onMorePressed: () {},
                   ),
               ],

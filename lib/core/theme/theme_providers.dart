@@ -6,11 +6,11 @@ import "app_theme.dart";
 
 part "theme_providers.g.dart";
 
-/// 当前主题色（默认晚霞红，与原型启动色一致；S3.1 接持久化）
+/// 当前主题色（默认自然绿——所有者指定第四色；S3.1 接持久化）
 @riverpod
 class AppThemeSeed extends _$AppThemeSeed {
   @override
-  AppThemeColor build() => AppThemeColor.sunsetRed;
+  AppThemeColor build() => AppThemeColor.natureGreen;
 
   void select(AppThemeColor color) => state = color;
 }

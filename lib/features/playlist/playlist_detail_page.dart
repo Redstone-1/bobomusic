@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../core/overlays/app_toast.dart";
+import "../../core/overlays/app_sheet.dart";
 import "../../core/widgets/app_buttons.dart";
 import "../../core/widgets/aurora_background.dart";
 import "../../core/widgets/back_link.dart";
@@ -9,10 +10,11 @@ import "../../core/widgets/song_list_tile.dart";
 import "../../data/mock/mock_data.dart";
 import "../../data/models/playlist.dart";
 import "../../data/models/track.dart";
+import "../player/player_card_page.dart";
 
 /// 歌单详情（对齐原型 renderSub/playlist）
 /// mock 阶段曲目列表由调用方注入；S3 改为按 playlist.id 从 Repository 取数，UI 不动
-class PlaylistDetailPage extends StatelessWidget {
+class PlaylistDetailPage extends ConsumerWidget {
   final Playlist playlist;
   final List<Track> tracks;
 
@@ -23,7 +25,7 @@ class PlaylistDetailPage extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       body: AuroraBackground(
         child: SafeArea(
@@ -36,16 +38,30 @@ class PlaylistDetailPage extends StatelessWidget {
                 subtitle: "${tracks.length} 首 · 播放全部",
                 trailing: GlassIconButton(
                   icon: const Icon(Icons.shuffle_outlined),
-                  onTap: () => AppToast.show(context, "播放内核在 S4 接入"),
+                  onTap: () {},
                 ),
               ),
               const SizedBox(height: 14),
               for (final track in tracks)
                 SongListTile(
                   track: track,
-                  onTap: () => AppToast.show(context, "播放内核在 S4 接入"),
-                  onMorePressed: () =>
-                      AppToast.show(context, "播放队列在批次 3/4 提供"),
+                  onTap: () => PlayerCardPage.start(context, ref, track),
+                  onMorePressed: () => AppSheet.show(
+                    context,
+                    title: track.name,
+                    actions: [
+                      AppSheetAction(
+                        icon: Icons.queue_music_outlined,
+                        label: "下一首播放",
+                        onTap: () {},
+                      ),
+                      AppSheetAction(
+                        icon: Icons.playlist_add,
+                        label: "加入待播放",
+                        onTap: () {},
+                      ),
+                    ],
+                  ),
                 ),
             ],
           ),
