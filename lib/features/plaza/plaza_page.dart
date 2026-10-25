@@ -76,7 +76,6 @@ class PlazaPage extends ConsumerWidget {
           data: (collections) => collections.isEmpty
               ? EmptyState(
                   compact: true,
-                  spacious: true,
                   emoji: "🌐",
                   title: "还没有收藏合集",
                   subtitle: "在搜索中收藏喜欢的合集",

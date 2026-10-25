@@ -237,48 +237,61 @@ class _DesignSystemDemoState extends ConsumerState<DesignSystemDemo> {
               const _InteractiveProgress(),
               const SizedBox(height: 22),
               const _SectionTitle("空状态 · 整页规格"),
+              // 演示卡包有界高度：空状态在有界容器内撑满居中（列表场景自动取半屏）
               const GlassCard(
                 padding: EdgeInsets.all(16),
-                child: EmptyState(
-                  emoji: "🎵",
-                  title: "还没有本地音乐",
-                  subtitle: "点击右上角 + 扫描手机里的音频文件",
+                child: SizedBox(
+                  height: 200,
+                  child: EmptyState(
+                    emoji: "🎵",
+                    title: "还没有本地音乐",
+                    subtitle: "点击右上角 + 扫描手机里的音频文件",
+                  ),
                 ),
               ),
               const SizedBox(height: 22),
               const _SectionTitle("分区空态 · 紧凑版（歌单页/广场页内嵌）"),
               GlassCard(
                 padding: const EdgeInsets.all(8),
-                child: const EmptyState(
-                  compact: true,
-                  emoji: "📂",
-                  title: "还没有歌单",
-                  subtitle: "点右上角 + 创建第一个歌单",
+                child: const SizedBox(
+                  height: 190,
+                  child: EmptyState(
+                    compact: true,
+                    emoji: "📂",
+                    title: "还没有歌单",
+                    subtitle: "点右上角 + 创建第一个歌单",
+                  ),
                 ),
               ),
               const Divider(height: 1),
               GlassCard(
                 padding: const EdgeInsets.all(8),
-                child: EmptyState(
-                  compact: true,
-                  emoji: "🌐",
-                  title: "还没有收藏合集",
-                  subtitle: "在搜索中收藏喜欢的合集",
-                  action: GlassChip(
-                    label: "去搜索",
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const SearchPage()),
+                child: SizedBox(
+                  height: 190,
+                  child: EmptyState(
+                    compact: true,
+                    emoji: "🌐",
+                    title: "还没有收藏合集",
+                    subtitle: "在搜索中收藏喜欢的合集",
+                    action: GlassChip(
+                      label: "去搜索",
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const SearchPage()),
+                      ),
                     ),
                   ),
                 ),
               ),
               GlassCard(
                 padding: const EdgeInsets.all(8),
-                child: const EmptyState(
-                  compact: true,
-                  emoji: "💿",
-                  title: "还没有播放记录",
-                  subtitle: "播放的歌曲会出现在这里",
+                child: const SizedBox(
+                  height: 190,
+                  child: EmptyState(
+                    compact: true,
+                    emoji: "💿",
+                    title: "还没有播放记录",
+                    subtitle: "播放的歌曲会出现在这里",
+                  ),
                 ),
               ),
               const SizedBox(height: 22),

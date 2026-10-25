@@ -118,95 +118,104 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       body: AuroraBackground(
         child: MiniBarPage(
           child: SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 110),
+            // 空态走覆盖层（Stack + Positioned.fill）：居中于可视区且不占列表流
+            child: Stack(
               children: [
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: BackLink(),
-                ),
-                const SizedBox(height: 4),
-                TextField(
-                  controller: _controller,
-                  autofocus: true,
-                  onChanged: (_) => _onChanged(),
-                  style: TextStyle(fontSize: 14.5, color: t.fg),
-                  decoration: InputDecoration(
-                    hintText: "搜索歌曲 / 歌手 / 合集",
-                    hintStyle: TextStyle(fontSize: 14, color: t.fgMute),
-                    prefixIcon: Icon(Icons.search, size: 20, color: t.fgDim),
-                    filled: true,
-                    fillColor: t.surface,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide(color: t.hairline),
+                ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 110),
+                  children: [
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: BackLink(),
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide(color: t.hairline),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: _controller,
+                      autofocus: true,
+                      onChanged: (_) => _onChanged(),
+                      style: TextStyle(fontSize: 14.5, color: t.fg),
+                      decoration: InputDecoration(
+                        hintText: "搜索歌曲 / 歌手 / 合集",
+                        hintStyle: TextStyle(fontSize: 14, color: t.fgMute),
+                        prefixIcon: Icon(Icons.search, size: 20, color: t.fgDim),
+                        filled: true,
+                        fillColor: t.surface,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(color: t.hairline),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(color: t.hairline),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(color: t.primary),
+                        ),
+                      ),
                     ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide(color: t.primary),
-                    ),
-                  ),
-                ),
-                if (_controller.text.trim().isEmpty)
-                  const EmptyState(
-                    emoji: "🔍",
-                    title: "输入关键词开始搜索",
-                    subtitle: "支持 B 站 / 酷我音源",
-                  )
-                else if (_loading)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 16),
-                    child: SkeletonListView(rows: 5),
-                  )
-                else if (_error != null)
-                  EmptyState(
-                    compact: true,
-                    emoji: "⚠️",
-                    title: "搜索失败",
-                    subtitle: "检查网络后重试",
-                    action: GlassChip(
-                      label: "重试",
-                      onTap: () => _search(_query),
-                    ),
-                  )
-                else if (_results.isEmpty)
-                  EmptyState(
-                    emoji: "🎵",
-                    title: "没有找到与“$_query”相关的内容",
-                    subtitle: "换个关键词试试",
-                  )
-                else
-                  for (final item in _results)
-                    // 多P（musicList>1）→ 歌单行；单曲 → 歌曲行（musicList 首条带播放 id）
-                    if ((item.musicList?.length ?? 0) > 1)
-                      _OrderResultTile(
-                        item: item,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => PlaylistDetailPage(
-                              playlist: Playlist(
-                                id: "bili:${item.id}",
-                                name: item.name,
-                                type: PlaylistType.collection,
+                    // 加载骨架留在列表流（贴搜索框下方）；空/失败/无结果走覆盖层
+                    if (_controller.text.trim().isNotEmpty && _loading)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 16),
+                        child: SkeletonListView(rows: 5),
+                      ),
+                    for (final item in _results)
+                      // 多P（musicList>1）→ 歌单行；单曲 → 歌曲行（musicList 首条带播放 id）
+                      if ((item.musicList?.length ?? 0) > 1)
+                        _OrderResultTile(
+                          item: item,
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => PlaylistDetailPage(
+                                playlist: Playlist(
+                                  id: "bili:${item.id}",
+                                  name: item.name,
+                                  type: PlaylistType.collection,
+                                ),
+                                tracks: musicItemsToTracks(item.musicList ?? const []),
                               ),
-                              tracks: musicItemsToTracks(item.musicList ?? const []),
                             ),
                           ),
+                          onCollect: () => _collectOrder(item),
+                        )
+                      else
+                        SongListTile(
+                          track: item.toTrack(),
+                          onTap: () => _playTrack(item.toTrack()),
+                          onMorePressed: () =>
+                              AppToast.show(context, "加入歌单在 S4 接入"),
                         ),
-                        onCollect: () => _collectOrder(item),
-                      )
-                    else
-                      SongListTile(
-                        track: item.toTrack(),
-                        onTap: () => _playTrack(item.toTrack()),
-                        onMorePressed: () =>
-                            AppToast.show(context, "加入歌单在 S4 接入"),
-                      ),
+                  ],
+                ),
+                // 空态覆盖：初始引导 / 搜索失败 / 无结果（按状态取一；加载与结果态不挂覆盖层）
+                if (_controller.text.trim().isEmpty)
+                  const Positioned.fill(
+                    child: EmptyState(
+                      emoji: "🔍",
+                      title: "输入关键词开始搜索",
+                      subtitle: "支持 B 站 / 酷我音源",
+                    ),
+                  )
+                else if (!_loading && _results.isEmpty)
+                  Positioned.fill(
+                    child: _error != null
+                        ? EmptyState(
+                            emoji: "⚠️",
+                            title: "搜索失败",
+                            subtitle: "检查网络后重试",
+                            action: GlassChip(
+                              label: "重试",
+                              onTap: () => _search(_query),
+                            ),
+                          )
+                        : EmptyState(
+                            emoji: "🎵",
+                            title: "没有找到与“$_query”相关的内容",
+                            subtitle: "换个关键词试试",
+                          ),
+                  ),
               ],
             ),
           ),
