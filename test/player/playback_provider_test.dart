@@ -1,3 +1,5 @@
+import "dart:io";
+
 import "package:bobomusic/core/prefs/app_prefs.dart";
 import "package:bobomusic/data/db/app_database.dart";
 import "package:bobomusic/data/models/track.dart";
@@ -303,6 +305,33 @@ void main() {
     await flush();
     expect(st().track?.id, "c");
     expect(st().queue.length, 1);
+  });
+
+  test("已下载曲目：localPath 存在时优先本地文件播放（离线）", () async {
+    final file = File(
+      "${Directory.systemTemp.path}/bobo_local_${DateTime.now().microsecondsSinceEpoch}.m4a",
+    )..writeAsStringSync("audio");
+    addTearDown(() {
+      if (file.existsSync()) file.deleteSync();
+    });
+    // 只注入引擎，保留生产源解析（验证本地文件优先分支）
+    playbackDepsTestOverride = PlaybackDeps(engine: engine);
+
+    await pb().play(
+      Track(
+        id: "bili:downloaded",
+        name: "已下载",
+        author: "歌手",
+        duration: 200,
+        origin: OriginType.bili,
+        localPath: file.path,
+      ),
+    );
+    await flush();
+
+    expect(engine.loads, hasLength(1));
+    expect(engine.loads.single.source.isLocal, isTrue);
+    expect(engine.loads.single.source.url, file.path);
   });
 
   test("定时关闭：到点暂停并清空定时状态", () {

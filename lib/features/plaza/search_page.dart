@@ -21,6 +21,7 @@ import "../../data/repositories/queue_repository.dart";
 import "../../data/repositories/track_repository.dart";
 import "../../origin_sdk/origin_types.dart";
 import "../../data/models/playlist.dart";
+import "../download/download_actions.dart";
 import "../player/mini_player_bar.dart";
 import "../player/playback_provider.dart";
 import "../player/player_card_page.dart";
@@ -145,6 +146,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             if (mounted) AppToast.show(context, "已加入播放队列");
           },
         ),
+        // 本地曲无需下载（OriginType 在 UI/SDK 各有一套，按 name 比较避免歧义）
+        if (track.origin.name != "local")
+          AppSheetAction(
+            icon: Icons.download_outlined,
+            label: "下载",
+            onTap: () => downloadTrack(context, track),
+          ),
       ],
     );
   }

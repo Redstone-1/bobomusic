@@ -85,6 +85,45 @@ class RangeProxySource extends StreamAudioSource {
   /// 缓存根目录（main 初始化为应用缓存目录下 bobomusic_audio；测试可指临时目录）
   static late Directory cacheDir;
 
+  /// 缓存文件（key=origin-id 的 md5 文件名；下载模块命中即复制）
+  static File cacheFileFor(String key) =>
+      File("${cacheDir.path}/${md5.convert(utf8.encode(key))}.m4a");
+
+  /// 音频缓存占用（.m4a + 下载中的 .part，字节）
+  static Future<int> cacheSize() async {
+    try {
+      if (!await cacheDir.exists()) return 0;
+      var total = 0;
+      await for (final e in cacheDir.list()) {
+        if (e is File &&
+            (e.path.endsWith(".m4a") || e.path.endsWith(".part"))) {
+          total += await e.length();
+        }
+      }
+      return total;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// 清空音频缓存（保留目录），返回释放字节数
+  static Future<int> clearAudioCache() async {
+    var freed = 0;
+    try {
+      if (!await cacheDir.exists()) return 0;
+      await for (final e in cacheDir.list()) {
+        if (e is File &&
+            (e.path.endsWith(".m4a") || e.path.endsWith(".part"))) {
+          try {
+            freed += await e.length();
+            await e.delete();
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    return freed;
+  }
+
   static final Dio _dio = Dio();
 
   late final File _cacheFile;
@@ -98,7 +137,7 @@ class RangeProxySource extends StreamAudioSource {
   }) : super(tag: key) {
     // origin-id 可能含路径非法字符（冒号等），md5 短哈希作缓存文件名
     final name = md5.convert(utf8.encode(key)).toString();
-    _cacheFile = File("${cacheDir.path}/$name.m4a");
+    _cacheFile = cacheFileFor(key);
     _partFile = File("${cacheDir.path}/$name.part");
   }
 

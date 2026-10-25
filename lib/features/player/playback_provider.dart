@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:io";
 
 import "package:riverpod_annotation/riverpod_annotation.dart";
 
@@ -88,12 +89,14 @@ class PlaybackState {
 /// [randomPick] 随机模式的取数函数（测试注入固定序列，生产用真随机）
 class PlaybackDeps {
   final AudioEngine engine;
-  final Future<PlaySource> Function(Track track) resolveSource;
+
+  /// 测试可只注入引擎、保留生产源解析（如验证本地文件优先）
+  final Future<PlaySource> Function(Track track)? resolveSource;
   final int Function(int max)? randomPick;
 
   const PlaybackDeps({
     required this.engine,
-    required this.resolveSource,
+    this.resolveSource,
     this.randomPick,
   });
 }
@@ -384,13 +387,23 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     }
   }
 
-  /// 源解析：本地曲直读文件；B 站走 playurl（直链 + 备链 + Referer）
+  /// 源解析：本地文件（本地曲/已下载）优先直读；在线曲按音源取 playurl
   Future<PlaySource> _resolveSource(Track track) async {
-    final override = playbackDepsTestOverride;
-    if (override != null) return override.resolveSource(track);
+    final override = playbackDepsTestOverride?.resolveSource;
+    if (override != null) return override(track);
     final localPath = track.localPath;
-    if (track.origin == OriginType.local && localPath != null) {
-      return PlaySource(key: track.id, url: localPath, isLocal: true);
+    if (localPath != null && localPath.isNotEmpty) {
+      try {
+        if (File(localPath).existsSync()) {
+          // §3.4-8：同身份离线——下载后的在线曲也走本地文件
+          return PlaySource(key: track.id, url: localPath, isLocal: true);
+        }
+      } catch (_) {
+        // 路径不可读时回退在线取流
+      }
+    }
+    if (track.origin == OriginType.local) {
+      throw StateError("本地文件不存在（可能已被移动或删除）");
     }
     final musicUrl = await biliApi.getMusicUrl(track.id);
     return PlaySource(

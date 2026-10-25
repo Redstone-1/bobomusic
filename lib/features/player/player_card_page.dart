@@ -19,6 +19,7 @@ import "../../data/repositories/queue_repository.dart";
 import "../../data/repositories/track_repository.dart";
 import "../../origin_sdk/lyric/lrc.dart";
 import "../../origin_sdk/lyric/lyric_types.dart";
+import "../download/download_actions.dart";
 import "../playlist/playlists_provider.dart" show likedCountProvider, queueTracksProvider;
 import "lyric_provider.dart";
 import "play_mode.dart";
@@ -512,8 +513,15 @@ class _ActionsRow extends ConsumerWidget {
         () => AppToast.show(context, "在播放信息行点 ♡ 全局喜欢"),
       ),
       (Icons.lyrics, "歌词", showLyrics, onToggleLyrics),
-      (Icons.download_outlined, "下载", false,
-          () => AppToast.show(context, "下载在 S5 接入")),
+      (
+        Icons.download_outlined,
+        "下载",
+        false,
+        () {
+          final track = ref.read(playbackProvider).track;
+          if (track != null) downloadTrack(context, track);
+        },
+      ),
       (
         Icons.add,
         "稍后",

@@ -12,8 +12,10 @@ import "../../core/widgets/empty_state.dart";
 import "../../core/widgets/skeleton.dart";
 import "../../core/widgets/song_list_tile.dart";
 import "../../data/models/playlist.dart";
+import "../../data/models/track.dart";
 import "../../data/repositories/queue_repository.dart";
 import "../../data/repositories/track_repository.dart";
+import "../download/download_actions.dart";
 import "../player/mini_player_bar.dart";
 import "../player/playback_provider.dart";
 import "../player/player_card_page.dart";
@@ -181,6 +183,15 @@ class CollectionDetailPage extends ConsumerWidget {
                                             ref.invalidate(queueTracksProvider);
                                           },
                                         ),
+                                        if (track.origin != OriginType.local)
+                                          AppSheetAction(
+                                            icon: Icons.download_outlined,
+                                            label: "下载",
+                                            onTap: () => downloadTrack(
+                                              context,
+                                              track,
+                                            ),
+                                          ),
                                       ],
                                     ),
                                   ),
