@@ -2,9 +2,9 @@ name: bobomusic
 description: '啵啵音乐，听歌自由'
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-# 重写版版本号（D5）：2.0.0 起；
+# 重写版版本号（D5 修订 2026-10-25）：App 已发布至 2.7.0，本次重写为第三代 → 3.0.0 起；
 # 发布时 build number（+N）必须高于旧版最后一个正式包的 versionCode，由所有者发布前手动确认
-version: 2.0.0
+version: 3.0.0
 
 environment:
   sdk: '>=3.3.1 <4.0.0'

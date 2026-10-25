@@ -5,7 +5,7 @@
 
 ## 项目是什么
 
-- 单仓库 Flutter 音乐 App（`com.bobomusic`），`v2` 分支重写中，重写版版本号 2.0.0（D5）；重写工具链 Flutter 3.47.7 / Dart 3.13.5 / JDK 17（D13）。执行进度一律看 `重构计划.md`，本文不重复记录。
+- 单仓库 Flutter 音乐 App（`com.bobomusic`），`v3` 分支重写中，重写版版本号 3.0.0（D5 修订：App 已发布至 2.7.0，本次重写为第三代）；重写工具链 Flutter 3.47.7 / Dart 3.13.5 / JDK 17（D13）。执行进度一律看 `重构计划.md`，本文不重复记录。
 - **无后端**：音源来自 Bilibili 逆向接口（`lib/origin_sdk/bili/`，S2 改造拆 BiliAuth/BiliApi）；歌词链重写中（网易直连 → LRCLIB → 备胎，重构计划 §6）；用户数据全部本地（sqflite + SharedPreferences，S3 落地四表 schema）。
 - 正式发布平台 Android；Windows/Linux 桌面可运行；iOS/macOS/Web 未适配。
 - 上游基于 [bbmusic](https://github.com/bb-music/flutter-app) 二次开发。
