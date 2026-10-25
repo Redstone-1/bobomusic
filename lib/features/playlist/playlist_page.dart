@@ -10,6 +10,8 @@ import "../../core/widgets/page_header.dart";
 import "../../core/widgets/scale_tap.dart";
 import "../../core/widgets/song_list_tile.dart";
 import "../../data/mock/mock_data.dart";
+import "../../data/models/playlist.dart";
+import "playlist_detail_page.dart";
 
 /// 歌单页（对齐原型 renderOrder）
 class PlaylistPage extends ConsumerWidget {
@@ -33,11 +35,35 @@ class PlaylistPage extends ConsumerWidget {
         ),
         const SizedBox(height: 16),
         // 快捷入口两卡（原型 .qa：本地音乐 / 我喜欢）
-        const Row(
+        Row(
           children: [
-            Expanded(child: _QuickCard(emoji: "🎧", label: "本地音乐", count: "37 首 · 已扫描")),
-            SizedBox(width: 12),
-            Expanded(child: _QuickCard(emoji: "💗", label: "我喜欢的音乐", count: "64 首")),
+            Expanded(
+              child: _QuickCard(
+                emoji: "🎧",
+                label: "本地音乐",
+                count: "37 首 · 已扫描",
+                playlist: const Playlist(
+                  id: "builtin:local",
+                  name: "本地音乐",
+                  type: PlaylistType.builtIn,
+                  count: 37,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _QuickCard(
+                emoji: "💗",
+                label: "我喜欢的音乐",
+                count: "64 首",
+                playlist: const Playlist(
+                  id: "builtin:liked",
+                  name: "我喜欢的音乐",
+                  type: PlaylistType.builtIn,
+                  count: 64,
+                ),
+              ),
+            ),
           ],
         ),
         SectionHeader(title: "自定义歌单", trailing: "${mockCustomPlaylists.length} 个"),
@@ -46,7 +72,7 @@ class PlaylistPage extends ConsumerWidget {
             name: pl.name,
             count: pl.count,
             hue: pl.coverHue,
-            onTap: () => AppToast.show(context, "歌单详情在批次 2 提供"),
+            onTap: () => _openPlaylist(context, pl),
             onMorePressed: () => _showRowActions(context, pl.name),
           ),
         SectionHeader(title: "最近播放", trailing: "全部"),
@@ -59,6 +85,13 @@ class PlaylistPage extends ConsumerWidget {
         // 底部留白缓冲，避免贴住 Dock
         SizedBox(height: t.radiusLg),
       ],
+    );
+  }
+
+  // 打开歌单详情（mock 阶段直接传 Playlist 对象；S3 改按 id 取数）
+  void _openPlaylist(BuildContext context, Playlist playlist) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => PlaylistDetailPage(playlist: playlist)),
     );
   }
 
@@ -108,18 +141,24 @@ class _QuickCard extends StatelessWidget {
   final String emoji;
   final String label;
   final String count;
+  final Playlist playlist;
 
   const _QuickCard({
     required this.emoji,
     required this.label,
     required this.count,
+    required this.playlist,
   });
 
   @override
   Widget build(BuildContext context) {
     final t = AuroraTokens.of(context);
     return ScaleTap(
-      onTap: () => AppToast.show(context, "详情页在批次 2 提供"),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => PlaylistDetailPage(playlist: playlist),
+        ),
+      ),
       pressedScale: 0.97,
       child: Container(
         height: 92,

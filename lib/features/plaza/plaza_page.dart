@@ -1,13 +1,14 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../core/overlays/app_toast.dart";
 import "../../core/theme/app_palette.dart";
 import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/page_header.dart";
 import "../../core/widgets/scale_tap.dart";
 import "../../data/mock/mock_data.dart";
 import "../../data/models/playlist.dart";
+import "collection_detail_page.dart";
+import "search_page.dart";
 
 /// 广场页（对齐原型 renderPlaza）：搜索入口 + 热门歌手 + 收藏合集
 class PlazaPage extends ConsumerWidget {
@@ -20,7 +21,11 @@ class PlazaPage extends ConsumerWidget {
       children: [
         const PageHeader(title: "音乐广场", subtitle: "来自 B 站 / 酷我的海量音源"),
         const SizedBox(height: 16),
-        _SearchBar(onTap: () => AppToast.show(context, "搜索页在批次 2 提供")),
+        _SearchBar(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const SearchPage()),
+          ),
+        ),
         SectionHeader(title: "热门歌手", trailing: "更多"),
         SizedBox(
           height: 100,
@@ -48,7 +53,11 @@ class PlazaPage extends ConsumerWidget {
             for (final col in mockCollections)
               _CollectionCard(
                 collection: col,
-                onTap: () => AppToast.show(context, "合集详情在批次 2 提供"),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => CollectionDetailPage(collection: col),
+                  ),
+                ),
               ),
           ],
         ),
