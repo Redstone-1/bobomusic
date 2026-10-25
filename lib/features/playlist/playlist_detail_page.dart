@@ -12,6 +12,7 @@ import "../../core/widgets/empty_state.dart";
 import "../../core/widgets/page_header.dart";
 import "../../core/widgets/skeleton.dart";
 import "../../core/widgets/song_list_tile.dart";
+import "../../data/local_audio_importer.dart";
 import "../../data/local_audio_scanner.dart";
 import "../../data/models/playlist.dart";
 import "../../data/models/track.dart";
@@ -19,6 +20,7 @@ import "../../data/repositories/playlist_repository.dart";
 import "../../data/repositories/queue_repository.dart";
 import "../../data/repositories/track_repository.dart";
 import "../download/download_actions.dart";
+import "../playlist/add_to_playlist_sheet.dart";
 import "../player/mini_player_bar.dart";
 import "../player/playback_provider.dart";
 import "../player/player_card_page.dart";
@@ -115,6 +117,28 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
     }
   }
 
+  /// 从文件导入（iOS/桌面）：file_picker 选择 → 复制到文档目录 → 逐条 upsert
+  /// 不做全量 sync，避免把 Android 全盘扫描的其它本地曲目误删
+  Future<void> _importFiles() async {
+    setState(() => _scanning = true);
+    try {
+      final imported = await pickAndImportAudioFiles();
+      if (imported.isEmpty) return;
+      for (final track in imported) {
+        await TrackRepository().upsert(track);
+      }
+      ref.invalidate(playlistDetailTracksProvider);
+      ref.invalidate(localCountProvider);
+      if (!mounted) return;
+      AppToast.show(context, "已导入 ${imported.length} 首");
+    } catch (e) {
+      print("导入本地文件失败：$e");
+      if (mounted) AppToast.show(context, "导入失败，请重试");
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = AuroraTokens.of(context);
@@ -156,9 +180,20 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
                           // 头部按钮：本地 = 重新扫描；我喜欢 = 刷新（重读库）；
                           // 其余保持随机占位
                           trailing: _isLocal
-                              ? GlassIconButton(
-                                  icon: const Icon(Icons.refresh),
-                                  onTap: _scanning ? null : _scan,
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    GlassIconButton(
+                                      key: const Key("local_import"),
+                                      icon: const Icon(Icons.file_open_outlined),
+                                      onTap: _scanning ? null : _importFiles,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    GlassIconButton(
+                                      icon: const Icon(Icons.refresh),
+                                      onTap: _scanning ? null : _scan,
+                                    ),
+                                  ],
                                 )
                               : _isLiked
                                   ? GlassIconButton(
@@ -221,6 +256,15 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
                                     title: track.name,
                                     actions: [
                                       AppSheetAction(
+                                        icon: Icons.library_add_outlined,
+                                        label: "加入歌单",
+                                        onTap: () => showAddToPlaylistSheet(
+                                          context,
+                                          ref,
+                                          track,
+                                        ),
+                                      ),
+                                      AppSheetAction(
                                         icon: Icons.queue_music_outlined,
                                         label: "下一首播放",
                                         onTap: () async {
@@ -269,10 +313,20 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
                             ? EmptyState(
                                 emoji: "🎧",
                                 title: "本地音乐是空的",
-                                subtitle: "扫描设备存储中的音频文件",
-                                action: GlassChip(
-                                  label: "扫描本地音乐",
-                                  onTap: _scan,
+                                subtitle: "扫描设备存储或从文件导入音频",
+                                action: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    GlassChip(
+                                      label: "扫描本地音乐",
+                                      onTap: _scan,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    GlassChip(
+                                      label: "从文件导入",
+                                      onTap: _importFiles,
+                                    ),
+                                  ],
                                 ),
                               )
                             : const EmptyState(

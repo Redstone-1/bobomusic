@@ -194,12 +194,16 @@ class PlaylistPage extends ConsumerWidget {
   }
 
   Future<void> _createPlaylist(BuildContext context, WidgetRef ref) async {
+    final existing = ref.read(playlistsProvider).value?.length ?? 0;
+    if (existing >= 20) {
+      AppToast.show(context, "最多创建 20 个歌单");
+      return;
+    }
     final name = await AppDialog.input(
       context,
       title: "新建歌单",
       hint: "歌单名（1~20 字）",
-      validator: (v) =>
-          (v == null || v.trim().isEmpty) ? "歌单名不能为空" : null,
+      validator: _validateName,
     );
     if (name == null || !context.mounted) return;
     try {
@@ -208,6 +212,15 @@ class PlaylistPage extends ConsumerWidget {
     } catch (_) {
       if (context.mounted) AppToast.show(context, "歌单名已存在");
     }
+  }
+
+  /// 歌单名校验（§2.1 沿用旧版：非空、≤20 字、不能数字开头）
+  String? _validateName(String? value) {
+    final name = value?.trim() ?? "";
+    if (name.isEmpty) return "歌单名不能为空";
+    if (name.length > 20) return "歌单名最长 20 个字符";
+    if (RegExp(r"^\d").hasMatch(name)) return "歌单名不能以数字开头";
+    return null;
   }
 
   void _openPlaylist(BuildContext context, Playlist playlist) {
@@ -245,12 +258,15 @@ class PlaylistPage extends ConsumerWidget {
       context,
       title: "重命名歌单",
       initial: pl.name,
-      validator: (v) =>
-          (v == null || v.trim().isEmpty) ? "歌单名不能为空" : null,
+      validator: _validateName,
     );
     if (name == null || !context.mounted) return;
-    await ref.read(playlistsProvider.notifier).rename(pl.id, name.trim());
-    if (context.mounted) AppToast.show(context, "已重命名");
+    try {
+      await ref.read(playlistsProvider.notifier).rename(pl.id, name.trim());
+      if (context.mounted) AppToast.show(context, "已重命名");
+    } catch (_) {
+      if (context.mounted) AppToast.show(context, "歌单名已存在");
+    }
   }
 
   Future<void> _deletePlaylist(

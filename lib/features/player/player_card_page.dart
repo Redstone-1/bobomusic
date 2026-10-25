@@ -22,6 +22,7 @@ import "../../origin_sdk/lyric/lyric_types.dart";
 import "../download/download_actions.dart";
 import "../playlist/playlists_provider.dart" show likedCountProvider, queueTracksProvider;
 import "lyric_provider.dart";
+import "open_bilibili.dart";
 import "play_mode.dart";
 import "playback_provider.dart";
 import "sleep_timer_sheet.dart";
@@ -203,10 +204,37 @@ class _TopBar extends ConsumerWidget {
           GlassIconButton(
             key: const Key("player_more"),
             icon: const Icon(Icons.more_horiz),
-            onTap: () => showSleepTimerSheet(context, ref),
+            onTap: () => _openMore(context, ref),
           ),
         ],
       ),
+    );
+  }
+
+  void _openMore(BuildContext context, WidgetRef ref) {
+    final state = ref.read(playbackProvider);
+    final track = state.track;
+    AppSheet.show(
+      context,
+      title: "更多",
+      actions: [
+        AppSheetAction(
+          icon: Icons.timer_outlined,
+          label: "定时关闭（${sleepTimerLabel(state)}）",
+          onTap: () => showSleepTimerSheet(context, ref),
+        ),
+        if (track != null && track.origin == OriginType.bili)
+          AppSheetAction(
+            icon: Icons.open_in_new,
+            label: "去 B 站看视频",
+            onTap: () async {
+              final opened = await openBilibiliVideo(track);
+              if (!opened && context.mounted) {
+                AppToast.show(context, "无法打开 B 站");
+              }
+            },
+          ),
+      ],
     );
   }
 }

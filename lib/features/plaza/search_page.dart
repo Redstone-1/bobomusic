@@ -23,6 +23,7 @@ import "../../data/repositories/track_repository.dart";
 import "../../origin_sdk/origin_types.dart";
 import "../../data/models/playlist.dart";
 import "../download/download_actions.dart";
+import "../playlist/add_to_playlist_sheet.dart";
 import "../player/mini_player_bar.dart";
 import "../player/playback_provider.dart";
 import "../player/player_card_page.dart";
@@ -130,6 +131,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       context,
       title: track.name,
       actions: [
+        AppSheetAction(
+          icon: Icons.library_add_outlined,
+          label: "加入歌单",
+          onTap: () => showAddToPlaylistSheet(context, ref, track),
+        ),
         AppSheetAction(
           icon: Icons.queue_music_outlined,
           label: "下一首播放",

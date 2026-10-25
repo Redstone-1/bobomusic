@@ -1,7 +1,10 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:url_launcher/url_launcher.dart";
 
 import "../../app/design_system_demo.dart";
+import "../../core/overlays/app_dialog.dart";
+import "../../core/overlays/app_loading.dart";
 import "../../core/overlays/app_toast.dart";
 import "../../core/theme/app_palette.dart";
 import "../../core/theme/aurora_tokens.dart";
@@ -12,7 +15,11 @@ import "../../core/widgets/page_header.dart";
 import "../../core/widgets/theme_swatch.dart";
 import "../../data/music_source.dart";
 import "../player/playback_provider.dart";
+import "../player/range_proxy_source.dart";
 import "../player/sleep_timer_sheet.dart";
+import "doc_page.dart";
+import "settings_info.dart";
+import "update_checker.dart";
 
 /// 设置页（对齐原型 renderSetting）：主题真实驱动 + 关于组 + Gallery 隐藏入口
 class SettingsPage extends ConsumerWidget {
@@ -26,6 +33,8 @@ class SettingsPage extends ConsumerWidget {
     // 只订阅定时关闭文案（不订阅 position，避免设置页每秒重建）
     final sleepLabel = ref.watch(playbackProvider.select(sleepTimerLabel));
     final musicSource = ref.watch(musicSourceProvider);
+    final version = ref.watch(appVersionProvider).value ?? "3.0.0";
+    final cacheSize = ref.watch(audioCacheSizeProvider);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 150),
@@ -111,9 +120,9 @@ class SettingsPage extends ConsumerWidget {
               _SettingRow(
                 icon: Icons.update_outlined,
                 title: "检查更新",
-                subtitle: "当前版本 3.0.0",
+                subtitle: "当前版本 $version",
                 trailing: Icon(Icons.chevron_right, size: 20, color: t.fgMute),
-                onTap: () {},
+                onTap: () => _checkUpdate(context, ref),
                 // Gallery 隐藏入口（S1.5）：长按版本行进入组件演示页
                 onLongPress: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const DesignSystemDemo()),
@@ -125,6 +134,17 @@ class SettingsPage extends ConsumerWidget {
                 subtitle: sleepLabel,
                 trailing: Icon(Icons.chevron_right, size: 20, color: t.fgMute),
                 onTap: () => showSleepTimerSheet(context, ref),
+              ),
+              _SettingRow(
+                icon: Icons.cleaning_services_outlined,
+                title: "清理音频缓存",
+                subtitle: cacheSize.when(
+                  data: formatBytes,
+                  loading: () => "计算中…",
+                  error: (_, __) => "未知",
+                ),
+                trailing: Icon(Icons.chevron_right, size: 20, color: t.fgMute),
+                onTap: () => _clearCache(context, ref),
               ),
             ],
           ),
@@ -139,25 +159,97 @@ class SettingsPage extends ConsumerWidget {
                 icon: Icons.help_outline,
                 title: "帮助",
                 trailing: Icon(Icons.chevron_right, size: 20, color: t.fgMute),
-                onTap: () {},
+                onTap: () =>
+                    _openDoc(context, "使用帮助", "assets/markdown/help_doc.md"),
               ),
               _SettingRow(
                 icon: Icons.description_outlined,
                 title: "声明",
                 trailing: Icon(Icons.chevron_right, size: 20, color: t.fgMute),
-                onTap: () {},
+                onTap: () =>
+                    _openDoc(context, "声明与限制", "assets/markdown/limit.md"),
               ),
               _SettingRow(
                 icon: Icons.volunteer_activism_outlined,
                 title: "鸣谢",
                 trailing: Icon(Icons.chevron_right, size: 20, color: t.fgMute),
-                onTap: () {},
+                onTap: () =>
+                    _openDoc(context, "鸣谢", "assets/markdown/thanks.md"),
               ),
             ],
           ),
         ),
         SizedBox(height: t.radiusLg),
       ],
+    );
+  }
+
+  /// 检查 GitHub Releases（D5：按版本号比较，避免旧 tag 误判为更新）
+  Future<void> _checkUpdate(BuildContext context, WidgetRef ref) async {
+    AppLoading.show(msg: "检查更新…");
+    try {
+      final version = await ref.read(appVersionProvider.future);
+      final result = await updateChecker.check(version.split("+").first);
+      if (!context.mounted) return;
+      if (!result.hasUpdate || result.latest == null) {
+        AppToast.show(context, "已是最新版本 $version");
+        return;
+      }
+      final latest = result.latest!;
+      final go = await AppDialog.show<bool>(
+        context,
+        title: "发现新版本 ${latest.version}",
+        content: SizedBox(
+          height: 200,
+          child: SingleChildScrollView(
+            child: Text(
+              latest.notes.trim().isEmpty ? "前往 GitHub 查看更新内容" : latest.notes,
+              style: const TextStyle(fontSize: 13, height: 1.5),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text("稍后"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text("去下载"),
+          ),
+        ],
+      );
+      if (go == true && latest.url.isNotEmpty) {
+        final ok = await launchUrl(
+          Uri.parse(latest.url),
+          mode: LaunchMode.externalApplication,
+        );
+        if (!ok && context.mounted) AppToast.show(context, "无法打开下载页面");
+      }
+    } catch (e) {
+      print("检查更新失败：$e");
+      if (context.mounted) AppToast.show(context, "检查更新失败，请检查网络");
+    } finally {
+      AppLoading.dismiss();
+    }
+  }
+
+  Future<void> _clearCache(BuildContext context, WidgetRef ref) async {
+    final ok = await AppDialog.confirm(
+      context,
+      title: "清理音频缓存",
+      message: "将删除边听边缓存的音频文件；已下载歌曲与歌单不受影响。",
+      confirmText: "清理",
+    );
+    if (ok != true || !context.mounted) return;
+    final freed = await RangeProxySource.clearAudioCache();
+    ref.invalidate(audioCacheSizeProvider);
+    if (context.mounted) AppToast.show(context, "已释放 ${formatBytes(freed)}");
+  }
+
+  void _openDoc(BuildContext context, String title, String asset) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => DocPage(title: title, asset: asset)),
     );
   }
 }

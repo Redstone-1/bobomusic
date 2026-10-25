@@ -78,6 +78,29 @@ class LocalAudioScanner {
     return Isolate.run(() => _scanSync(roots, DefaultAudioMetadataSource()));
   }
 
+  /// 只扫描指定文件（iOS/桌面导入用；避免把历史导入条目重复计入本次数量）
+  Future<LocalScanResult> scanFiles(
+    List<File> files, {
+    AudioMetadataSource? source,
+  }) async {
+    if (source != null) return _scanFilesSync(files, source);
+    return Isolate.run(
+      () => _scanFilesSync(files, DefaultAudioMetadataSource()),
+    );
+  }
+
+  static LocalScanResult _scanFilesSync(
+    List<File> files,
+    AudioMetadataSource source,
+  ) {
+    final tracks = <Track>[];
+    final failed = <String>[];
+    for (final file in files) {
+      if (_isAudio(file.path)) _read(file, source, tracks, failed);
+    }
+    return LocalScanResult(tracks: tracks, failed: failed);
+  }
+
   static LocalScanResult _scanSync(
     List<Directory> roots,
     AudioMetadataSource source,
