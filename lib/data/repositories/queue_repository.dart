@@ -12,6 +12,19 @@ class QueueRepository {
 
   QueueRepository();
 
+  Track _fromRow(Map<String, Object?> r) => Track(
+        id: r["id"] as String,
+        name: r["name"] as String,
+        author: (r["author"] ?? "") as String,
+        cover: r["cover"] as String?,
+        duration: r["duration"] as int?,
+        origin: OriginType.values.byName(r["origin"] as String),
+        liked: r["liked_at"] != null,
+        localPath: r["local_path"] as String?,
+        lyric: r["lyric"] as String?,
+        lyricOffsetMs: (r["lyric_offset"] as int?) ?? 0,
+      );
+
   /// 队列全部曲目（按 position）
   Future<List<Track>> all() async {
     final rows = await db.rawQuery("""
@@ -20,20 +33,28 @@ class QueueRepository {
       JOIN tracks t ON t.id = q.track_id
       ORDER BY q.position
     """);
-    return [
-      for (final r in rows)
-        Track(
-          id: r["id"] as String,
-          name: r["name"] as String,
-          author: (r["author"] ?? "") as String,
-          cover: r["cover"] as String?,
-          duration: r["duration"] as int?,
-          origin: OriginType.values.byName(r["origin"] as String),
-          liked: r["liked_at"] != null,
-          localPath: r["local_path"] as String?,
-          lyric: r["lyric"] as String?,
-        ),
-    ];
+    return [for (final r in rows) _fromRow(r)];
+  }
+
+  /// 取出并移除队首（播放内核「插队优先」消费，事务内完成避免并发重复取）
+  Future<Track?> takeFirst() async {
+    return db.transaction((txn) async {
+      final rows = await txn.rawQuery("""
+        SELECT t.*, q.position AS queue_position
+        FROM queue q
+        JOIN tracks t ON t.id = q.track_id
+        ORDER BY q.position
+        LIMIT 1
+      """);
+      if (rows.isEmpty) return null;
+      final position = rows.first["queue_position"] as int;
+      await txn.delete("queue", where: "position = ?", whereArgs: [position]);
+      await txn.execute(
+        "UPDATE queue SET position = position - 1 WHERE position > ?",
+        [position],
+      );
+      return _fromRow(rows.first);
+    });
   }
 
   /// 整表替换（S4 播放会话装载队列用）

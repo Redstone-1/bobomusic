@@ -18,6 +18,9 @@ class Track {
   /// 歌词 LRC 原文（属于曲目，§3.4-7 全局共享）
   final String? lyric;
 
+  /// 歌词时间校准偏移（毫秒；正数 = 歌词延后显示）
+  final int lyricOffsetMs;
+
   /// 仅 mock 用：占位封面色相（真实数据用 cover 图链）
   final int? coverHue;
 
@@ -31,6 +34,7 @@ class Track {
     this.liked = false,
     this.localPath,
     this.lyric,
+    this.lyricOffsetMs = 0,
     this.coverHue,
   });
 }

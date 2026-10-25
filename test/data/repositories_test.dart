@@ -68,6 +68,21 @@ void main() {
       expect(got?.localPath, "/sdcard/a.m4a");
       expect(got?.lyric, "[00:01.00]测试");
     });
+
+    test("歌词校准偏移：写读一致、upsert 保留、换歌词归零", () async {
+      await tracks.upsert(t("lyric:1"));
+      await tracks.updateLyric("lyric:1", "[00:01.00]词");
+      await tracks.updateLyricOffset("lyric:1", 500);
+      expect((await tracks.getById("lyric:1"))?.lyricOffsetMs, 500);
+
+      // 元数据刷新（upsert）不能覆盖用户校准
+      await tracks.upsert(t("lyric:1", name: "改名"));
+      expect((await tracks.getById("lyric:1"))?.lyricOffsetMs, 500);
+
+      // 应用新歌词 = 校准归零
+      await tracks.updateLyric("lyric:1", "[00:02.00]新词");
+      expect((await tracks.getById("lyric:1"))?.lyricOffsetMs, 0);
+    });
   });
 
   group("syncLocalTracks（C3 本地扫描同步）", () {
@@ -118,6 +133,37 @@ void main() {
       await tracks.syncLocalTracks([local("local:1:100:a:b", "曲一")]);
       await tracks.syncLocalTracks(const []);
       expect(await tracks.localCount(), 0);
+    });
+
+    test("超过 900 首重扫：只删未再现条目，现存条目不被误删", () async {
+      // 回归：旧实现按 NOT IN 分批删除，首批会把后续批次的曲目全部删掉
+      final all = [
+        for (var i = 0; i < 950; i++) local("local:$i:100:t$i:a", "曲$i"),
+      ];
+      await tracks.syncLocalTracks(all);
+      expect(await tracks.localCount(), 950);
+
+      // 只保留前 901 首（跨过 900 分批边界）
+      await tracks.syncLocalTracks(all.sublist(0, 901));
+      expect(await tracks.localCount(), 901);
+      expect(await tracks.getById("local:0:100:t0:a"), isNotNull);
+      expect(await tracks.getById("local:900:100:t900:a"), isNotNull);
+      expect(await tracks.getById("local:901:100:t901:a"), isNull);
+      expect(await tracks.getById("local:949:100:t949:a"), isNull);
+    });
+
+    test("超过 900 首全量重扫：全部保留且喜欢/歌词不丢", () async {
+      final all = [
+        for (var i = 0; i < 950; i++) local("local:$i:100:t$i:a", "曲$i"),
+      ];
+      await tracks.syncLocalTracks(all);
+      await tracks.setLiked("local:0:100:t0:a", true);
+      await tracks.updateLyric("local:0:100:t0:a", "[00:01.00]词");
+      await tracks.syncLocalTracks(all);
+      expect(await tracks.localCount(), 950);
+      final kept = await tracks.getById("local:0:100:t0:a");
+      expect(kept?.liked, isTrue);
+      expect(kept?.lyric, "[00:01.00]词");
     });
   });
 

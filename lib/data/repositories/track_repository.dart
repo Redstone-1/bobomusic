@@ -22,6 +22,7 @@ class TrackRepository {
         liked: row["liked_at"] != null,
         localPath: row["local_path"] as String?,
         lyric: row["lyric"] as String?,
+        lyricOffsetMs: (row["lyric_offset"] as int?) ?? 0,
       );
 
   /// 插入或更新：新曲全字段写入；已存在只更新内容字段
@@ -44,6 +45,7 @@ class TrackRepository {
         ...content,
         "local_path": track.localPath,
         "lyric": track.lyric,
+        "lyric_offset": track.lyricOffsetMs,
         "created_at": now,
       },
       conflictAlgorithm: ConflictAlgorithm.ignore,
@@ -117,25 +119,29 @@ class TrackRepository {
           );
         }
       }
-      if (scanned.isEmpty) {
-        await txn.delete(
-          "tracks",
-          where: "origin = ?",
-          whereArgs: [OriginType.local.name],
-        );
-        return;
-      }
-      // 删除未再现条目；NOT IN 分批（占位符动态生成、值全参数化，硬规则 3）
-      final ids = [for (final t in scanned) t.id];
+      // 删除未再现条目：先求「库内 - 本次扫描」差集，再按 id 分批 IN 删除。
+      // 不能按 NOT IN 分批——每批都会把其它批的曲目当成“未再现”删掉
+      // （>900 首时首批就会误删后续所有条目，喜欢/歌词/歌单引用一并丢失）。
+      final existingRows = await txn.query(
+        "tracks",
+        columns: ["id"],
+        where: "origin = ?",
+        whereArgs: [OriginType.local.name],
+      );
+      final scannedIds = {for (final t in scanned) t.id};
+      final staleIds = [
+        for (final row in existingRows)
+          if (!scannedIds.contains(row["id"] as String)) row["id"] as String,
+      ];
       const chunkSize = 900; // SQLite 变量上限 999
-      for (var i = 0; i < ids.length; i += chunkSize) {
-        final end = i + chunkSize > ids.length ? ids.length : i + chunkSize;
-        final chunk = ids.sublist(i, end);
+      for (var i = 0; i < staleIds.length; i += chunkSize) {
+        final end =
+            i + chunkSize > staleIds.length ? staleIds.length : i + chunkSize;
+        final chunk = staleIds.sublist(i, end);
         await txn.delete(
           "tracks",
-          where:
-              "origin = ? AND id NOT IN (${List.filled(chunk.length, "?").join(",")})",
-          whereArgs: [OriginType.local.name, ...chunk],
+          where: "id IN (${List.filled(chunk.length, "?").join(",")})",
+          whereArgs: chunk,
         );
       }
     });
@@ -167,10 +173,28 @@ class TrackRepository {
     );
   }
 
-  Future<void> updateLyric(String id, String lyric) async {
+  /// 写入歌词（应用新歌词时校准偏移归零）
+  Future<void> updateLyric(String id, String lyric, {int offsetMs = 0}) async {
     await db.update(
       "tracks",
-      {"lyric": lyric, "updated_at": DateTime.now().millisecondsSinceEpoch},
+      {
+        "lyric": lyric,
+        "lyric_offset": offsetMs,
+        "updated_at": DateTime.now().millisecondsSinceEpoch,
+      },
+      where: "id = ?",
+      whereArgs: [id],
+    );
+  }
+
+  /// 歌词时间校准（毫秒；正数 = 歌词延后显示）
+  Future<void> updateLyricOffset(String id, int offsetMs) async {
+    await db.update(
+      "tracks",
+      {
+        "lyric_offset": offsetMs,
+        "updated_at": DateTime.now().millisecondsSinceEpoch,
+      },
       where: "id = ?",
       whereArgs: [id],
     );
