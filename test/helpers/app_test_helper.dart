@@ -8,6 +8,8 @@ import "package:bobomusic/data/singers_provider.dart";
 import "package:bobomusic/features/player/audio_engine.dart";
 import "package:bobomusic/features/player/playback_provider.dart";
 import "package:bobomusic/origin_sdk/bili/types.dart" as bili;
+import "package:bobomusic/origin_sdk/lyric/lyric_service.dart";
+import "package:bobomusic/origin_sdk/lyric/lyric_types.dart";
 import "package:bobomusic/origin_sdk/origin_types.dart" as sdk;
 import "package:flutter/widgets.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -109,6 +111,32 @@ final _mockSingers = [
   ]),
 ];
 
+/// 测试用歌词服务：返回固定 LRC，避免真实网络；保留播放卡歌词视图断言用行
+class FakeLyricService implements LyricService {
+  int searchCalls = 0;
+  int fetchCalls = 0;
+
+  @override
+  Future<List<LyricCandidate>> search(String keyword) async {
+    searchCalls++;
+    return const [
+      LyricCandidate(
+        source: LyricSource.netease,
+        id: "lyric_1",
+        title: "夜曲-周杰伦",
+        artist: "无损音乐合集",
+        durationSec: 227,
+      ),
+    ];
+  }
+
+  @override
+  Future<String?> fetch(LyricCandidate candidate) async {
+    fetchCalls++;
+    return "[00:01.00]仿佛如同一场梦\n[00:05.00]我们如此短暂地相逢";
+  }
+}
+
 /// 测试专用：mock SharedPreferences + ffi 内存库 + Fake BiliApi + mock 歌手
 /// + FakeEngine 播放依赖（全部环境单例可替换：FakeAsync 下真实 I/O 不会完成）
 /// 播放引擎暴露在 [fakePlaybackEngine] 供用例驱动进度/播完事件
@@ -124,6 +152,7 @@ Future<Widget> buildTestApp({
   await initAppPrefs();
   await initAppDatabase(path: inMemoryDatabasePath);
   biliApi = FakeBiliApi();
+  lyricService = FakeLyricService();
   hotSingersTestOverride = _mockSingers;
   fakePlaybackEngine = FakeEngine();
   playbackDepsTestOverride = PlaybackDeps(
