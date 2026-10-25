@@ -45,7 +45,7 @@ class PlazaPage extends ConsumerWidget {
             ),
           ),
           SizedBox(
-            height: 100,
+            height: 80,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: singers.length,
@@ -76,7 +76,7 @@ class PlazaPage extends ConsumerWidget {
           data: (collections) => collections.isEmpty
               ? EmptyState(
                   compact: true,
-                  emoji: "🌐",
+                  emoji: "📻",
                   title: "还没有收藏合集",
                   subtitle: "在搜索中收藏喜欢的合集",
                   action: GlassChip(
@@ -162,15 +162,16 @@ class _SingerAvatar extends StatelessWidget {
       child: Column(
         children: [
           // 头像用歌手条目级写真（对齐 2.7.0），缺失回退首曲封面
+          // 直径 56（所有者 2026-10-27 指定：原 74 缩减约 1/4）
           CoverPlaceholder(
             cover: singer.cover ?? singer.tracks.firstOrNull?.cover,
             text: singer.name,
-            size: 74,
-            radius: 37,
+            size: 56,
+            radius: 28,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           SizedBox(
-            width: 74,
+            width: 56,
             child: Text(
               singer.name,
               maxLines: 1,

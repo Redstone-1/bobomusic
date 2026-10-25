@@ -20,7 +20,7 @@ import "../../data/repositories/track_repository.dart";
 import "../player/mini_player_bar.dart";
 import "../player/player_card_page.dart";
 import "playlists_provider.dart"
-    show localCountProvider, playlistDetailTracksProvider;
+    show likedCountProvider, localCountProvider, playlistDetailTracksProvider;
 
 /// 歌单详情（对齐原型 renderSub/playlist）
 /// 两种数据模式：
@@ -48,7 +48,13 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
   int _reloadSeq = 0;
   bool _scanning = false;
 
+  /// 我喜欢列表的心形本地覆盖（trackId → 当前显示态）：
+  /// 取消收藏写库但不刷新列表，心形即时变化，下次进入页面重读库
+  final _likedOverrides = <String, bool>{};
+
   bool get _isLocal => widget.playlist.id == "builtin:local";
+
+  bool get _isLiked => widget.playlist.id == "builtin:liked";
 
   @override
   void initState() {
@@ -137,16 +143,27 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
                         PageHeader(
                           title: widget.playlist.name,
                           subtitle: "播放全部",
-                          // 本地音乐：头部放扫描入口（重新扫描）；其余保持随机占位
+                          // 头部按钮：本地 = 重新扫描；我喜欢 = 刷新（重读库）；
+                          // 其余保持随机占位
                           trailing: _isLocal
                               ? GlassIconButton(
                                   icon: const Icon(Icons.refresh),
                                   onTap: _scanning ? null : _scan,
                                 )
-                              : GlassIconButton(
-                                  icon: const Icon(Icons.shuffle_outlined),
-                                  onTap: () {},
-                                ),
+                              : _isLiked
+                                  ? GlassIconButton(
+                                      icon: const Icon(Icons.refresh),
+                                      onTap: () {
+                                        ref.invalidate(
+                                          playlistDetailTracksProvider,
+                                        );
+                                        ref.invalidate(likedCountProvider);
+                                      },
+                                    )
+                                  : GlassIconButton(
+                                      icon: const Icon(Icons.shuffle_outlined),
+                                      onTap: () {},
+                                    ),
                         ),
                         const SizedBox(height: 14),
                         if (loading)
@@ -166,6 +183,21 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
                                 SongListTile(
                                   track: track,
                                   coverOverride: widget.trackCover,
+                                  // 我喜欢：行首心形快速取消收藏，
+                                  // 写库但不刷新列表（心形局部更新，下次进入重读）
+                                  likedHeart: _isLiked
+                                      ? (_likedOverrides[track.id] ??
+                                          track.liked)
+                                      : null,
+                                  onHeartTap: !_isLiked
+                                      ? null
+                                      : (liked) {
+                                          TrackRepository()
+                                              .setLiked(track.id, liked);
+                                          setState(() =>
+                                              _likedOverrides[track.id] =
+                                                  liked);
+                                        },
                                   // 播放上下文 = 当前列表（§3.4-4）
                                   onTap: () => PlayerCardPage.start(
                                     context,

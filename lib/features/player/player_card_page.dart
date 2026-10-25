@@ -3,9 +3,10 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/overlays/app_sheet.dart";
 import "../../core/overlays/app_toast.dart";
-import "../../core/theme/app_palette.dart";
+import "../../core/widgets/cover_placeholder.dart";
 import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/app_buttons.dart";
+import "../../core/widgets/aurora_background.dart";
 import "../../core/widgets/aurora_progress_bar.dart";
 import "../../core/widgets/origin_tag.dart";
 import "../../core/widgets/scale_tap.dart";
@@ -90,100 +91,54 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
         : 0.0;
 
     return Scaffold(
-      body: Stack(
-        children: [
-          _Backdrop(hue: track.coverHue ?? 212),
-          SafeArea(
-            child: Column(
-              children: [
-                _TopBar(onClose: () => Navigator.of(context).pop()),
-                // 黑胶区 / 歌词区（弹性占据，切换渐变过渡）
-                Expanded(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    child: _showLyrics
-                        ? _LyricView(
-                            key: const Key("player_lyrics"),
-                            progress: progress,
-                          )
-                        : Center(
-                            key: const Key("player_disc"),
-                            child: _VinylDisc(
-                              hue: track.coverHue ?? 212,
-                              letter: track.name.characters.first,
-                              spinning: pb.playing,
-                            ),
+      // 背景与主壳一致（极光光球，所有者 2026-10-27 指定：不再单独设封面色背景）
+      body: AuroraBackground(
+        child: SafeArea(
+          child: Column(
+            children: [
+              _TopBar(onClose: () => Navigator.of(context).pop()),
+              // 黑胶区 / 歌词区（弹性占据，切换渐变过渡）
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: _showLyrics
+                      ? _LyricView(
+                          key: const Key("player_lyrics"),
+                          progress: progress,
+                        )
+                      : Center(
+                          key: const Key("player_disc"),
+                          child: _VinylDisc(
+                            hue: track.coverHue ?? 212,
+                            letter: track.name.characters.first,
+                            spinning: pb.playing,
+                            cover: track.cover,
                           ),
-                  ),
-                ),
-                _MetaRow(
-                  track: track,
-                  liked: _likedOverride ?? track.liked,
-                  onToggleLike: () {
-                    final newLiked = !(_likedOverride ?? track.liked);
-                    TrackRepository().setLiked(track.id, newLiked);
-                    ref.invalidate(likedCountProvider);
-                    setState(() => _likedOverride = newLiked);
-                  },
-                ),
-                const SizedBox(height: 18),
-                _SeekRow(durationSec: durationSec),
-                _ControlsRow(),
-                _ActionsRow(
-                  showLyrics: _showLyrics,
-                  onToggleLyrics: () =>
-                      setState(() => _showLyrics = !_showLyrics),
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 背景：封面色渐变（mock 无图；S3 换真封面 + ImageFilter.blur 60）+ 上下遮罩压回底色
-class _Backdrop extends StatelessWidget {
-  final int hue;
-
-  const _Backdrop({required this.hue});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AuroraTokens.of(context);
-    return Positioned.fill(
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.55,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: const Alignment(-0.64, -0.77),
-                    end: const Alignment(0.64, 0.77),
-                    colors: coverGradientColors(hue),
-                  ),
+                        ),
                 ),
               ),
-            ),
-          ),
-          // 遮罩：顶部压暗 → 62% 处完全回到 bg（原型 .bgmask）
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: const [0, 0.62],
-                  colors: [t.maskBg.withValues(alpha: 0.4), t.bg],
-                ),
+              _MetaRow(
+                track: track,
+                liked: _likedOverride ?? track.liked,
+                onToggleLike: () {
+                  final newLiked = !(_likedOverride ?? track.liked);
+                  TrackRepository().setLiked(track.id, newLiked);
+                  ref.invalidate(likedCountProvider);
+                  setState(() => _likedOverride = newLiked);
+                },
               ),
-            ),
+              const SizedBox(height: 18),
+              _SeekRow(durationSec: durationSec),
+              _ControlsRow(),
+              _ActionsRow(
+                showLyrics: _showLyrics,
+                onToggleLyrics: () =>
+                    setState(() => _showLyrics = !_showLyrics),
+              ),
+              const SizedBox(height: 8),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -238,10 +193,14 @@ class _VinylDisc extends StatelessWidget {
   final String letter;
   final bool spinning;
 
+  /// 歌曲封面（无则回退主题色纯色占位）
+  final String? cover;
+
   const _VinylDisc({
     required this.hue,
     required this.letter,
     required this.spinning,
+    this.cover,
   });
 
   @override
@@ -279,27 +238,26 @@ class _VinylDisc extends StatelessWidget {
                 border: Border.all(color: t.hairline, width: 1),
               ),
             ),
-          // 内嵌封面（inset 22%）
-          Container(
+          // 内嵌封面（inset 22%）：歌曲封面（无则纯色占位）+ 描边圆环
+          SizedBox(
             width: 157,
             height: 157,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                begin: const Alignment(-0.64, -0.77),
-                end: const Alignment(0.64, 0.77),
-                colors: coverGradientColors(hue),
-              ),
-              border: Border.all(color: t.hairlineStrong, width: 1),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              letter,
-              style: TextStyle(
-                fontSize: 56,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-              ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                CoverPlaceholder(
+                  cover: cover,
+                  text: letter,
+                  size: 157,
+                  radius: 78.5,
+                ),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: t.hairlineStrong, width: 1),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -450,7 +408,7 @@ class _ControlsRow extends ConsumerWidget {
           IconButton(
             onPressed: notifier.previous,
             icon: const Icon(Icons.skip_previous),
-            color: t.fg,
+            color: t.primary,
             iconSize: 30,
           ),
           PrimaryIconButton(
@@ -461,14 +419,14 @@ class _ControlsRow extends ConsumerWidget {
           IconButton(
             onPressed: notifier.next,
             icon: const Icon(Icons.skip_next),
-            color: t.fg,
+            color: t.primary,
             iconSize: 30,
           ),
           IconButton(
             key: const Key("player_queue"),
             onPressed: () => _openQueue(context, ref),
             icon: const Icon(Icons.queue_music_outlined),
-            color: t.fg,
+            color: t.primary,
             iconSize: 24,
           ),
         ],

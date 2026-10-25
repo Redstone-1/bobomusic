@@ -270,7 +270,7 @@ class _DesignSystemDemoState extends ConsumerState<DesignSystemDemo> {
                   height: 190,
                   child: EmptyState(
                     compact: true,
-                    emoji: "🌐",
+                    emoji: "📻",
                     title: "还没有收藏合集",
                     subtitle: "在搜索中收藏喜欢的合集",
                     action: GlassChip(

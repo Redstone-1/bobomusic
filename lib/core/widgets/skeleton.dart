@@ -35,6 +35,7 @@ class SkeletonBox extends StatelessWidget {
 }
 
 /// 列表行骨架：封面方块 + 两行文字条（对齐 SongListTile 形状）
+/// 文字条撑满可用宽度（标题满宽、副题约 62% 留视觉层次）
 class SkeletonListTile extends StatelessWidget {
   final double coverSize;
 
@@ -50,13 +51,18 @@ class SkeletonListTile extends StatelessWidget {
           SkeletonBox(width: coverSize, height: coverSize, radius: t.radiusSm),
           const SizedBox(width: 13),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SkeletonBox(width: 160, height: 14),
-                const SizedBox(height: 8),
-                SkeletonBox(width: 100, height: 11),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final w = constraints.maxWidth;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SkeletonBox(width: w, height: 14),
+                    const SizedBox(height: 8),
+                    SkeletonBox(width: w * 0.62, height: 11),
+                  ],
+                );
+              },
             ),
           ),
         ],

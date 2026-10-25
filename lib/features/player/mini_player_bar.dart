@@ -24,8 +24,9 @@ class MiniBarPage extends StatelessWidget {
         Positioned(
           left: 14,
           right: 14,
-          bottom: 0,
-          child: SafeArea(top: false, child: const MiniPlayerBar()),
+          // 推入页无底部 Dock，留出下边距避免贴住屏幕底缘
+          bottom: 12,
+          child: const MiniPlayerBar(),
         ),
       ],
     );
@@ -80,7 +81,7 @@ class MiniPlayerBar extends ConsumerWidget {
                 // 封面与「文字+进度线」块左右布局、等高居中（Row 默认交叉轴居中）
                 children: [
                   CoverPlaceholder(
-                    hue: track.coverHue,
+                    cover: track.cover,
                     text: track.name,
                     size: 42,
                     radius: 12,

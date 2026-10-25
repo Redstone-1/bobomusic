@@ -10,6 +10,8 @@ import "origin_tag.dart";
 /// [playing] = 当前曲目高亮（§3.4-3：按曲目身份全局判定，由调用方传入）
 /// [showOriginTag] 控制音源标签显隐（D11）
 /// [coverOverride] 统一封面（歌手歌单等场景整列表共用一张封面），空则用曲目自身封面
+/// [likedHeart] 非空时行首显示喜欢心形（我喜欢列表快速取消收藏），
+/// 点击回调新状态，视觉由调用方状态驱动（不强制刷新列表）
 class SongListTile extends StatelessWidget {
   final Track track;
   final bool playing;
@@ -17,6 +19,8 @@ class SongListTile extends StatelessWidget {
   final VoidCallback? onMorePressed;
   final bool showOriginTag;
   final String? coverOverride;
+  final bool? likedHeart;
+  final ValueChanged<bool>? onHeartTap;
 
   const SongListTile({
     super.key,
@@ -26,6 +30,8 @@ class SongListTile extends StatelessWidget {
     this.onMorePressed,
     this.showOriginTag = true,
     this.coverOverride,
+    this.likedHeart,
+    this.onHeartTap,
   });
 
   @override
@@ -41,6 +47,23 @@ class SongListTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 9),
         child: Row(
           children: [
+            if (likedHeart != null) ...[
+              GestureDetector(
+                onTap: onHeartTap == null
+                    ? null
+                    : () => onHeartTap!(!likedHeart!),
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: Icon(
+                    likedHeart!
+                        ? Icons.favorite
+                        : Icons.favorite_border,
+                    size: 18,
+                    color: likedHeart! ? t.primary : t.fgMute,
+                  ),
+                ),
+              ),
+            ],
             CoverPlaceholder(
               cover: coverOverride ?? track.cover,
               hue: track.coverHue,

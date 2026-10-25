@@ -1,18 +1,18 @@
 import "package:cached_network_image/cached_network_image.dart";
 import "package:flutter/material.dart";
 
-import "../theme/app_palette.dart";
+import "../theme/aurora_tokens.dart";
 
-/// 封面：真实数据用网络图（CachedNetworkImage，失败回退渐变+首字占位）
-/// mock 数据无 cover 链 → 色相渐变 + 首字 + 高光（原型 grad() / .cv）
+/// 封面：有 [cover] URL 用网络图（CachedNetworkImage，失败回退占位）；
+/// 无封面用主题色纯色占位（带透明度，2026-10-27 所有者定稿，弃渐变方案）
 class CoverPlaceholder extends StatelessWidget {
-  /// 封面 URL（真实数据；空/失败回退占位渐变）
+  /// 封面 URL（真实数据；空/失败回退纯色占位）
   final String? cover;
 
   /// 占位首字（真实封面加载中/失败时也不留白）
   final String? text;
 
-  /// 封面色相（mock 用；无值时取标题首字哈希，保证同曲稳定）
+  /// 兼容保留（旧渐变方案的曲目色相入参，纯色方案不使用）
   final int? hue;
   final double size;
   final double radius;
@@ -26,52 +26,35 @@ class CoverPlaceholder extends StatelessWidget {
     this.radius = 12,
   });
 
-  int get _hue => hue ?? (text?.hashCode ?? 0).abs() % 360;
-
   @override
   Widget build(BuildContext context) {
+    final t = AuroraTokens.of(context);
+    final dark = t.bg.computeLuminance() < 0.5;
+
+    // 纯色占位：主题色 + 透明度（亮色淡雅融合底色，暗色稍实保证可见）
+    // 首字用主题色（亮）/高亮白（暗），与底同源不抢内容
     final fallback = Container(
       width: size,
       height: size,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
-        gradient: LinearGradient(
-          // 140° 对角（CSS 角度换算）
-          begin: const Alignment(-0.64, -0.77),
-          end: const Alignment(0.64, 0.77),
-          colors: coverGradientColors(_hue),
-        ),
+        color: t.primary.withValues(alpha: dark ? 0.38 : 0.12),
       ),
-      child: Stack(
-        children: [
-          // 高光层（原型 .cv::after：白 35% → 透明 55%）
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: const Alignment(-0.6, -0.8),
-                end: const Alignment(0.6, 0.8),
-                colors: [
-                  Colors.white.withValues(alpha: 0.32),
-                  Colors.white.withValues(alpha: 0),
-                ],
-                stops: const [0, 0.55],
-              ),
-            ),
-          ),
-          if (text != null)
-            Center(
+      child: text == null
+          ? null
+          : Center(
               child: Text(
                 text!.characters.first,
                 style: TextStyle(
-                  color: Colors.white,
+                  color: dark
+                      ? Colors.white.withValues(alpha: 0.92)
+                      : t.primary,
                   fontWeight: FontWeight.w800,
                   fontSize: size * 0.42,
                 ),
               ),
             ),
-        ],
-      ),
     );
 
     if (cover == null || cover!.isEmpty) return fallback;
