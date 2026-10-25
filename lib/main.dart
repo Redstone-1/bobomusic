@@ -2,9 +2,15 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "app/app.dart";
+import "core/prefs/app_prefs.dart";
+import "data/db/app_database.dart";
+import "data/db/desktop_database.dart";
 
-// v2 重写版入口：S1 阶段为 UI 骨架（mock 数据）；
-// 播放内核 / 数据库 / AudioService / 通知栏在 S3、S4 逐步接入
-void main() {
+/// v3 入口：预取 SharedPreferences（主题同步初值）+ 桌面端 sqflite ffi
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  initDesktopDatabaseFactory();
+  await initAppPrefs();
+  await initAppDatabase();
   runApp(const ProviderScope(child: App()));
 }

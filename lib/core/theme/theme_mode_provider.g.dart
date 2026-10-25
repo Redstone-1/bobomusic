@@ -8,21 +8,15 @@ part of 'theme_mode_provider.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// 明暗模式
-/// S1.1 为 codegen 冒烟骨架（默认暗色，贴合风格 A 的沉浸式基调）；
-/// S3.1 接入 SharedPreferences 真实持久化
+/// 明暗模式：S3.1 起真实持久化（默认暗色，贴合风格 A 沉浸基调）
 
 @ProviderFor(AppThemeMode)
 final appThemeModeProvider = AppThemeModeProvider._();
 
-/// 明暗模式
-/// S1.1 为 codegen 冒烟骨架（默认暗色，贴合风格 A 的沉浸式基调）；
-/// S3.1 接入 SharedPreferences 真实持久化
+/// 明暗模式：S3.1 起真实持久化（默认暗色，贴合风格 A 沉浸基调）
 final class AppThemeModeProvider
     extends $NotifierProvider<AppThemeMode, ThemeMode> {
-  /// 明暗模式
-  /// S1.1 为 codegen 冒烟骨架（默认暗色，贴合风格 A 的沉浸式基调）；
-  /// S3.1 接入 SharedPreferences 真实持久化
+  /// 明暗模式：S3.1 起真实持久化（默认暗色，贴合风格 A 沉浸基调）
   AppThemeModeProvider._()
       : super(
           from: null,
@@ -50,11 +44,9 @@ final class AppThemeModeProvider
   }
 }
 
-String _$appThemeModeHash() => r'75981f79c278bca1c07f87f879a741034340c1fa';
+String _$appThemeModeHash() => r'd433892de3a23e6f8197af691c612d0e301d8538';
 
-/// 明暗模式
-/// S1.1 为 codegen 冒烟骨架（默认暗色，贴合风格 A 的沉浸式基调）；
-/// S3.1 接入 SharedPreferences 真实持久化
+/// 明暗模式：S3.1 起真实持久化（默认暗色，贴合风格 A 沉浸基调）
 
 abstract class _$AppThemeMode extends $Notifier<ThemeMode> {
   ThemeMode build();
