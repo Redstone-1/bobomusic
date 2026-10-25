@@ -105,3 +105,15 @@ const mockCollections = [
   Playlist(id: "col-3", name: "City Pop 巡游", type: PlaylistType.collection, count: 54, coverHue: 24),
   Playlist(id: "col-4", name: "北欧氛围钢琴", type: PlaylistType.collection, count: 72, coverHue: 230),
 ];
+
+/// 歌词 mock（S1.4 播放卡歌词视图展示用；真歌词链在 S4.4 接入）
+const mockLyrics = [
+  "仿佛如同一场梦",
+  "我们如此短暂地相逢",
+  "你像一阵细雨洒落我心底",
+  "那感觉如此神秘",
+  "我不禁抬起头看着你",
+  "而你并不露痕迹",
+  "虽然不言不语",
+  "叫人难忘记",
+];

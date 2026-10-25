@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../core/overlays/app_sheet.dart";
 import "../../core/overlays/app_toast.dart";
 import "../../core/theme/app_palette.dart";
 import "../../core/theme/aurora_tokens.dart";
@@ -8,6 +9,8 @@ import "../../core/widgets/app_buttons.dart";
 import "../../core/widgets/aurora_progress_bar.dart";
 import "../../core/widgets/origin_tag.dart";
 import "../../core/widgets/scale_tap.dart";
+import "../../core/widgets/song_list_tile.dart";
+import "../../data/mock/mock_data.dart";
 import "../../data/models/track.dart";
 import "mock_playback.dart";
 import "spinning_cover.dart";
@@ -49,6 +52,7 @@ class PlayerCardPage extends ConsumerStatefulWidget {
 
 class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
   bool _liked = false; // mock：喜欢态卡片内本地维护，S3 接全局喜欢
+  bool _showLyrics = false; // 歌词视图 / 黑胶视图切换（原型 toggleLyrics）
 
   @override
   Widget build(BuildContext context) {
@@ -70,14 +74,23 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
             child: Column(
               children: [
                 _TopBar(onClose: () => Navigator.of(context).pop()),
-                // 黑胶区（弹性占据）
+                // 黑胶区 / 歌词区（弹性占据，切换渐变过渡）
                 Expanded(
-                  child: Center(
-                    child: _VinylDisc(
-                      hue: track.coverHue ?? 212,
-                      letter: track.name.characters.first,
-                      spinning: pb.playing,
-                    ),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    child: _showLyrics
+                        ? _LyricView(
+                            key: const Key("player_lyrics"),
+                            progress: pb.progress,
+                          )
+                        : Center(
+                            key: const Key("player_disc"),
+                            child: _VinylDisc(
+                              hue: track.coverHue ?? 212,
+                              letter: track.name.characters.first,
+                              spinning: pb.playing,
+                            ),
+                          ),
                   ),
                 ),
                 _MetaRow(
@@ -88,7 +101,11 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
                 const SizedBox(height: 18),
                 _SeekRow(duration: track.duration ?? 240),
                 _ControlsRow(),
-                _ActionsRow(),
+                _ActionsRow(
+                  showLyrics: _showLyrics,
+                  onToggleLyrics: () =>
+                      setState(() => _showLyrics = !_showLyrics),
+                ),
                 const SizedBox(height: 8),
               ],
             ),
@@ -414,7 +431,8 @@ class _ControlsRow extends ConsumerWidget {
             iconSize: 30,
           ),
           IconButton(
-            onPressed: () => AppToast.show(context, "播放队列在批次 4 提供"),
+            key: const Key("player_queue"),
+            onPressed: () => _openQueue(context, ref),
             icon: const Icon(Icons.queue_music_outlined),
             color: t.fg,
             iconSize: 24,
@@ -423,20 +441,59 @@ class _ControlsRow extends ConsumerWidget {
       ),
     );
   }
+
+  // 播放队列 sheet（§3.4-5 语义：原「待播放列表」更名「播放队列」）
+  // S1.4 仅展示 mock 队列与当前曲高亮；插队/追加/调序的数据操作在 S4 接队列引擎
+  void _openQueue(BuildContext context, WidgetRef ref) {
+    AppSheet.show(
+      context,
+      title: "播放队列 · ${mockTracks.length} 首",
+      child: SizedBox(
+        height: 380,
+        child: Consumer(
+          builder: (context, sheetRef, _) {
+            final current = sheetRef.watch(mockPlaybackProvider).track;
+            return ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              children: [
+                for (final track in mockTracks)
+                  SongListTile(
+                    track: track,
+                    playing: track.id == current?.id,
+                    onTap: () {
+                      sheetRef.read(mockPlaybackProvider.notifier).play(track);
+                      Navigator.of(context).pop();
+                    },
+                    onMorePressed: () =>
+                        AppToast.show(context, "插队/移除在 S4 接队列引擎"),
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
 }
 
-/// 底部动作行（原型 .pactions：收藏 / 歌词 / 下载 / 稍后）
+/// 底部动作行（原型 .pactions：收藏 / 歌词 / 下载 / 稍后；歌词项为切换开关）
 class _ActionsRow extends StatelessWidget {
-  const _ActionsRow();
+  final bool showLyrics;
+  final VoidCallback onToggleLyrics;
+
+  const _ActionsRow({required this.showLyrics, required this.onToggleLyrics});
 
   @override
   Widget build(BuildContext context) {
     final t = AuroraTokens.of(context);
     final actions = [
-      (Icons.favorite_border, "收藏", () => AppToast.show(context, "收藏（S3 接全局喜欢）")),
-      (Icons.lyrics, "歌词", () => AppToast.show(context, "歌词视图在批次 4 提供")),
-      (Icons.download_outlined, "下载", () => AppToast.show(context, "下载在 S5 接入")),
-      (Icons.add, "稍后", () => AppToast.show(context, "播放队列在批次 4 提供")),
+      (Icons.favorite_border, "收藏", false,
+          () => AppToast.show(context, "收藏（S3 接全局喜欢）")),
+      (Icons.lyrics, "歌词", showLyrics, onToggleLyrics),
+      (Icons.download_outlined, "下载", false,
+          () => AppToast.show(context, "下载在 S5 接入")),
+      (Icons.add, "稍后", false,
+          () => AppToast.show(context, "S4 接播放队列数据")),
     ];
 
     return Container(
@@ -448,22 +505,93 @@ class _ActionsRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          for (final (icon, label, onTap) in actions)
+          for (final (icon, label, active, onTap) in actions)
             ScaleTap(
               onTap: onTap,
               child: Column(
                 children: [
-                  Icon(icon, size: 20, color: t.fgDim),
+                  Icon(icon, size: 20, color: active ? t.primary : t.fgDim),
                   const SizedBox(height: 6),
                   Text(
                     label,
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: t.fgDim),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: active ? t.primary : t.fgDim,
+                    ),
                   ),
                 ],
               ),
             ),
         ],
       ),
+    );
+  }
+}
+
+/// 歌词视图（原型 .lyricbox：上下渐隐遮罩 + 居中行；当前行随播放进度推进）
+/// mock 歌词按进度取整行走行；S4.4 换真歌词时间轴与滚动定位
+class _LyricView extends StatelessWidget {
+  final double progress;
+
+  const _LyricView({super.key, required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AuroraTokens.of(context);
+    final active = (progress * mockLyrics.length).floor().clamp(
+          0,
+          mockLyrics.length - 1,
+        );
+
+    // 行数超出可视高度时转为滚动（矮视口防溢出），否则整列居中
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return ShaderMask(
+          blendMode: BlendMode.dstIn,
+          shaderCallback: (bounds) => const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            stops: [0, 0.22, 0.78, 1],
+            colors: [
+              Colors.transparent,
+              Colors.white,
+              Colors.white,
+              Colors.transparent,
+            ],
+          ).createShader(bounds),
+          child: SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 26),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final (i, line) in mockLyrics.indexed)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 11),
+                          child: Text(
+                            line,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: active == i ? 21 : 17,
+                              fontWeight:
+                                  active == i ? FontWeight.w800 : FontWeight.w600,
+                              height: 1.4,
+                              color: active == i ? t.fg : t.fgMute,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

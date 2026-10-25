@@ -8,6 +8,7 @@ import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/app_buttons.dart";
 import "../../core/widgets/aurora_background.dart";
 import "../../core/widgets/back_link.dart";
+import "../../core/widgets/empty_state.dart";
 import "../../core/widgets/song_list_tile.dart";
 import "../../data/mock/mock_data.dart";
 import "../../data/models/playlist.dart";
@@ -89,7 +90,14 @@ class CollectionDetailPage extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              for (final track in mockTracks)
+              if (mockTracks.isEmpty)
+                const EmptyState(
+                  emoji: "🎵",
+                  title: "合集还没有内容",
+                  subtitle: "下拉刷新试试",
+                )
+              else
+                for (final track in mockTracks)
                 SongListTile(
                   track: track,
                   onTap: () => PlayerCardPage.start(context, ref, track),

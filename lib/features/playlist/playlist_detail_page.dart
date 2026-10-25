@@ -5,6 +5,7 @@ import "../../core/overlays/app_sheet.dart";
 import "../../core/widgets/app_buttons.dart";
 import "../../core/widgets/aurora_background.dart";
 import "../../core/widgets/back_link.dart";
+import "../../core/widgets/empty_state.dart";
 import "../../core/widgets/page_header.dart";
 import "../../core/widgets/song_list_tile.dart";
 import "../../data/mock/mock_data.dart";
@@ -42,7 +43,14 @@ class PlaylistDetailPage extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 14),
-              for (final track in tracks)
+              if (tracks.isEmpty)
+                const EmptyState(
+                  emoji: "🎵",
+                  title: "歌单还是空的",
+                  subtitle: "从广场搜索或本地扫描添加歌曲",
+                )
+              else
+                for (final track in tracks)
                 SongListTile(
                   track: track,
                   onTap: () => PlayerCardPage.start(context, ref, track),

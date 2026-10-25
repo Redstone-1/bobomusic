@@ -164,4 +164,48 @@ void main() {
     expect(find.text("1 首"), findsOneWidget);
     expect(find.text("没有找到相关的内容"), findsNothing);
   });
+
+  testWidgets("播放卡：歌词视图切换与播放队列", (WidgetTester tester) async {
+    await tester.pumpWidget(const ProviderScope(child: App()));
+    await tester.pump();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(App)),
+    );
+
+    // 开播并进入播放卡
+    await tester.drag(find.text("自定义歌单"), const Offset(0, -400));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text("夜航西飞"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.tap(find.byKey(const Key("mini_player")));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    // 切歌词视图：mock 歌词行在场
+    await tester.tap(find.text("歌词"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text("仿佛如同一场梦"), findsOneWidget);
+
+    // 切回黑胶
+    await tester.tap(find.text("歌词"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text("仿佛如同一场梦"), findsNothing);
+
+    // 打开播放队列 sheet
+    await tester.tap(find.byKey(const Key("player_queue")));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text("播放队列 · 8 首"), findsOneWidget);
+
+    // 点队列中的曲目切歌，sheet 关闭
+    await tester.tap(find.text("起风了"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(container.read(mockPlaybackProvider).track?.name, "起风了");
+    expect(find.text("播放队列 · 8 首"), findsNothing);
+  });
 }
