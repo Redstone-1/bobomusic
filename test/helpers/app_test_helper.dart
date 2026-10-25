@@ -82,6 +82,42 @@ class FakeBiliApi implements sdk.OriginService {
       throw UnimplementedError();
 }
 
+/// 测试用酷我源：搜索固定返回「酷我夜曲」，避免真实网络
+class FakeKuwoApi implements sdk.OriginService {
+  @override
+  Future<sdk.SearchResponse> search(sdk.SearchParams params) async {
+    return bili.BiliSearchResponse(
+      current: 1,
+      total: 1,
+      pageSize: 20,
+      data: [
+        bili.BiliSearchItem(
+          id: "kuwo:999",
+          cover: "",
+          name: "酷我夜曲",
+          duration: 200,
+          author: "酷我歌手",
+          origin: sdk.OriginType.kuwo,
+          isSeasonDisplay: false,
+          ugcSeason: null,
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<List<sdk.SearchSuggestItem>> searchSuggest(String keyword) async =>
+      const [];
+
+  @override
+  Future<sdk.SearchItem> searchDetail(String id) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<sdk.MusicUrl> getMusicUrl(String id) async =>
+      sdk.MusicUrl(url: "https://kuwo.example/999.mp3");
+}
+
 /// 测试用热门歌手（与真实 chinese.json 同构）
 final _mockSingers = [
   SingerEntry(id: "s1", name: "周杰伦", desc: "", tracks: const [
@@ -152,6 +188,7 @@ Future<Widget> buildTestApp({
   await initAppPrefs();
   await initAppDatabase(path: inMemoryDatabasePath);
   biliApi = FakeBiliApi();
+  kuwoApi = FakeKuwoApi();
   lyricService = FakeLyricService();
   hotSingersTestOverride = _mockSingers;
   fakePlaybackEngine = FakeEngine();

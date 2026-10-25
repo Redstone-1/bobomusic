@@ -284,6 +284,26 @@ void main() {
     expect(find.text("没有找到相关的内容"), findsNothing);
   });
 
+  testWidgets("默认音源酷我：搜索走酷我结果", (WidgetTester tester) async {
+    await tester.pumpWidget(
+      await buildTestApp(prefs: {"music_source": "kuwo"}),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text("广场"));
+    await tester.pump();
+    await tester.tap(find.text("搜索歌曲 / 歌手 / 合集"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    await tester.enterText(find.byType(TextField), "夜");
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+
+    expect(find.text("酷我夜曲"), findsOneWidget);
+    expect(find.text("夜航西飞"), findsNothing); // 默认音源为酷我时不走 B 站
+  });
+
   testWidgets("收藏合集闭环：搜索 → 收藏 → 广场展示 → 详情", (WidgetTester tester) async {
     // 竖屏真机视口：宽松空态下移后，800×600 横向视口的「去搜索」会被底部 Dock 遮挡
     tester.view.physicalSize = const Size(390, 844);

@@ -18,6 +18,7 @@ enum SearchType {
 /// 音乐源
 enum OriginType {
   bili(value: "bili", name: "哔哩哔哩"),
+  kuwo(value: "kuwo", name: "酷我"),
   youTube(value: "youTube", name: "YouTube"),
   local(value: "local", name: "本地");
 

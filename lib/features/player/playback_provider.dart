@@ -405,6 +405,15 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     if (track.origin == OriginType.local) {
       throw StateError("本地文件不存在（可能已被移动或删除）");
     }
+    if (track.origin == OriginType.kuwo) {
+      final musicUrl = await kuwoApi.getMusicUrl(track.id);
+      return PlaySource(
+        key: track.id,
+        url: musicUrl.url,
+        backupUrl: musicUrl.backupUrl,
+        headers: musicUrl.headers,
+      );
+    }
     final musicUrl = await biliApi.getMusicUrl(track.id);
     return PlaySource(
       key: track.id,

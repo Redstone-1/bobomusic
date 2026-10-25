@@ -15,6 +15,7 @@ import "../../core/widgets/skeleton.dart";
 import "../../core/widgets/song_list_tile.dart";
 import "../../data/models/track.dart";
 import "../../data/mappers.dart";
+import "../../data/music_source.dart";
 import "../../data/origin_service.dart";
 import "../../data/repositories/playlist_repository.dart";
 import "../../data/repositories/queue_repository.dart";
@@ -77,7 +78,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       _error = null;
     });
     try {
-      final resp = await biliApi.search(SearchParams(keyword: q, page: 1));
+      // 默认音源由设置决定（D11）；B 站/酷我共用 OriginService 契约
+      final api =
+          ref.read(musicSourceProvider) == MusicSource.kuwo ? kuwoApi : biliApi;
+      final resp = await api.search(SearchParams(keyword: q, page: 1));
       if (!mounted) return;
       setState(() {
         _results = resp.data;

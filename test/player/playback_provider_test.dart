@@ -3,12 +3,14 @@ import "dart:io";
 import "package:bobomusic/core/prefs/app_prefs.dart";
 import "package:bobomusic/data/db/app_database.dart";
 import "package:bobomusic/data/models/track.dart";
+import "package:bobomusic/data/origin_service.dart" as data;
 import "package:bobomusic/data/repositories/queue_repository.dart";
 import "package:bobomusic/data/repositories/track_repository.dart";
 import "package:bobomusic/features/player/audio_engine.dart";
 import "package:bobomusic/features/player/play_mode.dart";
 import "package:bobomusic/features/player/playback_provider.dart";
 import "package:bobomusic/origin_sdk/bili/bili_api_error.dart";
+import "package:bobomusic/origin_sdk/origin_types.dart" as sdk;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:fake_async/fake_async.dart";
@@ -334,6 +336,30 @@ void main() {
     expect(engine.loads.single.source.url, file.path);
   });
 
+  test("酷我曲目：取流走 kuwoApi（不碰 B 站）", () async {
+    final old = data.kuwoApi;
+    addTearDown(() => data.kuwoApi = old);
+    data.kuwoApi = _FakeKuwoApi();
+    playbackDepsTestOverride = PlaybackDeps(engine: engine);
+
+    await pb().play(
+      Track(
+        id: "kuwo:123",
+        name: "酷我曲",
+        author: "歌手",
+        duration: 200,
+        origin: OriginType.kuwo,
+      ),
+    );
+    await flush();
+
+    expect(engine.loads.single.source.url, "https://kuwo.example/123.mp3");
+    expect(
+      engine.loads.single.source.headers?["Referer"],
+      "https://www.kuwo.cn/",
+    );
+  });
+
   test("定时关闭：到点暂停并清空定时状态", () {
     fakeAsync((async) {
       pb().play(t("a", "曲A"), queue: queue());
@@ -363,4 +389,25 @@ void main() {
     expect(engine.loads.length, 1);
     expect(st().stopAfterTrack, isFalse);
   });
+}
+
+/// 测试用酷我源：只实现取流（搜索页路由由 widget 测试的 Fake 覆盖）
+class _FakeKuwoApi implements sdk.OriginService {
+  @override
+  Future<sdk.SearchResponse> search(sdk.SearchParams params) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<List<sdk.SearchSuggestItem>> searchSuggest(String keyword) async =>
+      const [];
+
+  @override
+  Future<sdk.SearchItem> searchDetail(String id) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<sdk.MusicUrl> getMusicUrl(String id) async => sdk.MusicUrl(
+        url: "https://kuwo.example/${id.split(":").last}.mp3",
+        headers: const {"Referer": "https://www.kuwo.cn/"},
+      );
 }

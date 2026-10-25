@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/design_system_demo.dart";
+import "../../core/overlays/app_toast.dart";
 import "../../core/theme/app_palette.dart";
 import "../../core/theme/aurora_tokens.dart";
 import "../../core/theme/theme_mode_provider.dart";
@@ -9,6 +10,7 @@ import "../../core/theme/theme_providers.dart";
 import "../../core/widgets/glass_card.dart";
 import "../../core/widgets/page_header.dart";
 import "../../core/widgets/theme_swatch.dart";
+import "../../data/music_source.dart";
 import "../player/playback_provider.dart";
 import "../player/sleep_timer_sheet.dart";
 
@@ -23,6 +25,7 @@ class SettingsPage extends ConsumerWidget {
     final seed = ref.watch(appThemeSeedProvider);
     // 只订阅定时关闭文案（不订阅 position，避免设置页每秒重建）
     final sleepLabel = ref.watch(playbackProvider.select(sleepTimerLabel));
+    final musicSource = ref.watch(musicSourceProvider);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 150),
@@ -70,6 +73,30 @@ class SettingsPage extends ConsumerWidget {
                       ],
                     ),
                   ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        // —— 音源组（D11：默认搜索音源，B 站 / 酷我）——
+        GlassCard(
+          padding: const EdgeInsets.all(6),
+          child: Column(
+            children: [
+              _SettingRow(
+                icon: Icons.library_music_outlined,
+                title: "默认音源",
+                subtitle: "搜索默认使用 ${musicSource.label}",
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: _SourceSeg(
+                  current: musicSource,
+                  onSelect: (source) {
+                    ref.read(musicSourceProvider.notifier).select(source);
+                    AppToast.show(context, "默认音源：${source.label}");
+                  },
                 ),
               ),
             ],
@@ -197,6 +224,54 @@ class _SettingRow extends StatelessWidget {
             if (trailing != null) trailing!,
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 默认音源分段（D11：B 站 / 酷我，同 .seg 视觉）
+class _SourceSeg extends StatelessWidget {
+  final MusicSource current;
+  final ValueChanged<MusicSource> onSelect;
+
+  const _SourceSeg({required this.current, required this.onSelect});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AuroraTokens.of(context);
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(13),
+        color: t.surface2,
+      ),
+      child: Row(
+        children: [
+          for (final source in MusicSource.values)
+            Expanded(
+              child: GestureDetector(
+                onTap: () => onSelect(source),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOut,
+                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    color: current == source ? t.primary : Colors.transparent,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    source.label,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: current == source ? t.primaryInk : t.fgDim,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

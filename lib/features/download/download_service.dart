@@ -142,7 +142,9 @@ class DownloadService {
       await File(src).copy(target.path);
       return;
     }
-    final musicUrl = await biliApi.getMusicUrl(track.id);
+    final musicUrl = track.origin == OriginType.kuwo
+        ? await kuwoApi.getMusicUrl(track.id)
+        : await biliApi.getMusicUrl(track.id);
     await _dio.download(
       musicUrl.url,
       target.path,
