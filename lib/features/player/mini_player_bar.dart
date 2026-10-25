@@ -10,7 +10,28 @@ import "../../core/widgets/scale_tap.dart";
 import "mock_playback.dart";
 import "player_card_page.dart";
 
-/// 迷你播放条（原型 .mini：悬浮玻璃条 60 高，盖在 Dock 上方；无播放时隐藏）
+/// 推入页（详情/搜索）通用外壳：内容铺满 + 底部迷你条（无播放自隐藏）
+class MiniBarPage extends StatelessWidget {
+  final Widget child;
+
+  const MiniBarPage({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        child,
+        Positioned(
+          left: 14,
+          right: 14,
+          bottom: 0,
+          child: SafeArea(top: false, child: const MiniPlayerBar()),
+        ),
+      ],
+    );
+  }
+}
+
 /// 封面静止（所有者 2026-10-25 定稿：迷你条封面不旋转）；进度线从封面右侧起
 class MiniPlayerBar extends ConsumerWidget {
   const MiniPlayerBar({super.key});

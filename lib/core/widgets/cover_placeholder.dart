@@ -1,20 +1,27 @@
+import "package:cached_network_image/cached_network_image.dart";
 import "package:flutter/material.dart";
 
 import "../theme/app_palette.dart";
 
-/// 占位封面：无图时按色相生成 140° 对角渐变 + 首字 + 高光（原型 grad() / .cv）
-/// S1 mock 阶段的封面实现；S1.4 页面接真数据时再扩展网络图片态
+/// 封面：真实数据用网络图（CachedNetworkImage，失败回退渐变+首字占位）
+/// mock 数据无 cover 链 → 色相渐变 + 首字 + 高光（原型 grad() / .cv）
 class CoverPlaceholder extends StatelessWidget {
+  /// 封面 URL（真实数据；空/失败回退占位渐变）
+  final String? cover;
+
+  /// 占位首字（真实封面加载中/失败时也不留白）
+  final String? text;
+
   /// 封面色相（mock 用；无值时取标题首字哈希，保证同曲稳定）
   final int? hue;
-  final String? text;
   final double size;
   final double radius;
 
   const CoverPlaceholder({
     super.key,
-    this.hue,
+    this.cover,
     this.text,
+    this.hue,
     this.size = 48,
     this.radius = 12,
   });
@@ -23,9 +30,7 @@ class CoverPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = coverGradientColors(_hue);
-
-    return Container(
+    final fallback = Container(
       width: size,
       height: size,
       clipBehavior: Clip.antiAlias,
@@ -35,7 +40,7 @@ class CoverPlaceholder extends StatelessWidget {
           // 140° 对角（CSS 角度换算）
           begin: const Alignment(-0.64, -0.77),
           end: const Alignment(0.64, 0.77),
-          colors: colors,
+          colors: coverGradientColors(_hue),
         ),
       ),
       child: Stack(
@@ -66,6 +71,21 @@ class CoverPlaceholder extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+
+    if (cover == null || cover!.isEmpty) return fallback;
+
+    return Container(
+      width: size,
+      height: size,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(radius)),
+      child: CachedNetworkImage(
+        imageUrl: cover!,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => fallback,
+        errorWidget: (context, url, error) => fallback,
       ),
     );
   }
