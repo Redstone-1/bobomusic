@@ -11,19 +11,19 @@ void main() {
       expect(s, greaterThan(80));
     });
 
-    test("深空黑是低饱和色", () {
-      // RGB(20,20,32) 的 HSL 饱和度 = 12/52 ≈ 23%，8 色中最低
-      final (_, s) = hexToHsl(0xFF141420);
-      expect(s, inInclusiveRange(20, 26));
+    test("深空黑是纯中性色", () {
+      // 2026-10-27 修正：0xFF141420 蓝偏（R20 B32）→ 0xFF141414 三通道相等，饱和度 0
+      final (_, s) = hexToHsl(AppThemeColor.deepSpaceBlack.hex);
+      expect(s, 0);
     });
   });
 
   group("buildAuroraTokens", () {
-    test("深空黑派生保留源色低饱和度", () {
+    test("深空黑派生保持纯中性（无色相偏移）", () {
       final t = buildAuroraTokens(AppThemeColor.deepSpaceBlack, Brightness.dark);
       expect(
         HSLColor.fromColor(t.primary).saturation * 100,
-        closeTo(23, 0.1),
+        0,
       );
     });
 

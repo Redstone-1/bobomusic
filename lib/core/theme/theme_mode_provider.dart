@@ -7,7 +7,7 @@ part "theme_mode_provider.g.dart";
 
 const _themeModeKey = "theme_mode";
 
-/// 明暗模式：S3.1 起真实持久化（默认暗色，贴合风格 A 沉浸基调）
+/// 明暗模式：真实持久化（默认亮色，所有者 2026-10-27 指定）
 @riverpod
 class AppThemeMode extends _$AppThemeMode {
   @override
@@ -25,7 +25,7 @@ class AppThemeMode extends _$AppThemeMode {
       set(state == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark);
 
   static ThemeMode _from(String? v) =>
-      v == "light" ? ThemeMode.light : ThemeMode.dark;
+      v == "dark" ? ThemeMode.dark : ThemeMode.light;
 
   static String _to(ThemeMode m) => m == ThemeMode.light ? "light" : "dark";
 }

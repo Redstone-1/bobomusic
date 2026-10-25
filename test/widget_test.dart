@@ -382,15 +382,15 @@ void main() {
 
     await tester.tap(find.text("设置"));
     await tester.pump();
-    // 第二个色点（晚霞红）→ theme_color 写回
+    // 第二个色点（自然绿——深空黑已置首）→ theme_color 写回
     await tester.tap(find.byType(ThemeSwatch).at(1));
     await tester.pump();
-    expect(appPrefs.getString("theme_color"), "sunsetRed");
+    expect(appPrefs.getString("theme_color"), "natureGreen");
 
-    // 浅色分段 → theme_mode 写回
-    await tester.tap(find.text("浅色"));
+    // 深色分段 → theme_mode 写回（默认已是亮色，选同值不写盘）
+    await tester.tap(find.text("深色"));
     await tester.pump();
-    expect(appPrefs.getString("theme_mode"), "light");
+    expect(appPrefs.getString("theme_mode"), "dark");
   });
 
   testWidgets("重启读回：带初值启动时主题随之生效", (WidgetTester tester) async {

@@ -5,16 +5,16 @@ import "package:flutter/painting.dart";
 import "aurora_tokens.dart";
 
 /// 8 种主题色（视觉定稿见 prototype/style-a-aurora，COLORS/COLOR_NAMES）
-/// 自然绿置首（默认主题色，所有者 2026-10-25 指定）
+/// 深空黑置首（默认主题色，所有者 2026-10-27 指定；纯中性近黑，无蓝偏）
 enum AppThemeColor {
+  deepSpaceBlack(0xFF141414, "深空黑"),
   natureGreen(0xFF2EC4B6, "自然绿"),
   sunsetRed(0xFFFF3B6B, "晚霞红"),
   autumnOrange(0xFFFF8A3D, "秋日橙"),
   lemonYellow(0xFFFFD23F, "柠檬黄"),
   oceanBlue(0xFF3D7BFF, "海洋蓝"),
   charmPurple(0xFF7B5CFF, "韵味紫"),
-  sakuraPink(0xFFFF5DB1, "樱花粉"),
-  deepSpaceBlack(0xFF141420, "深空黑");
+  sakuraPink(0xFFFF5DB1, "樱花粉");
 
   final int hex;
   final String label;
@@ -57,8 +57,9 @@ Color _hsl(double h, int s, double l) =>
 AuroraTokens buildAuroraTokens(AppThemeColor seed, Brightness brightness) {
   final (h, sRaw) = hexToHsl(seed.hex);
   final h2 = h.toDouble();
-  // 原型约束：饱和度下限 8，保证深空黑等低饱和色仍有可辨识的色相
-  final s = sRaw > 8 ? sRaw : 8;
+  // 饱和度原样使用：纯中性色（s=0，如深空黑）保持中性——
+  // 曾用"下限 8% 托底"，纯黑 h=0（红色相）被托成 8% 红 = 棕褐（2026-10-27 修正）
+  final s = sRaw;
   final dark = brightness == Brightness.dark;
 
   return AuroraTokens(
@@ -96,10 +97,11 @@ AuroraTokens buildAuroraTokens(AppThemeColor seed, Brightness brightness) {
   );
 }
 
-/// 占位封面渐变（原型 grad()：140deg，hsl(h 72% 58%) → hsl(h+48 64% 42%)）
+/// 占位封面渐变（所有者 2026-10-27 定稿：低饱和低亮度双色微差，柔和耐看不抢内容；
+/// 原型 72%/64% 饱和度版本过艳已废弃）
 List<Color> coverGradientColors(int hue) => [
-      _hsl(hue.toDouble(), 72, 0.58),
-      _hsl((hue + 48).toDouble(), 64, 0.42),
+      _hsl(hue.toDouble(), 38, 0.52),
+      _hsl((hue + 40).toDouble(), 30, 0.36),
     ];
 
 /// 进度条填充渐变（原型 .bar .fill：90deg，primary → hsl(h+50 s 66%)，输入取当前主题色）
