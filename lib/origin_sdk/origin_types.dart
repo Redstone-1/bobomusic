@@ -144,14 +144,14 @@ class MusicItem {
   String isLast = ""; // 是否列表最后一首
 
   MusicItem({
-    orderName,
-    localPath,
-    playId,
-    lyric,
-    prev,
-    next,
-    isFirst,
-    isLast,
+    String? orderName,
+    String? localPath,
+    String? playId,
+    String? lyric,
+    String? prev,
+    String? next,
+    String? isFirst,
+    String? isLast,
     required this.id,
     required this.cover,
     required this.name,

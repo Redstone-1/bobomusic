@@ -114,7 +114,7 @@ class BiliClient implements OriginService {
     );
   }
 
-  init() async {
+  Future<void> init() async {
     final localStorage = await SharedPreferences.getInstance();
     final createAt = localStorage.getInt(_cacheCreatedAtKey);
     final cacheVersion = localStorage.getString(_cacheVersionKey);
@@ -351,10 +351,12 @@ class BiliClient implements OriginService {
   }
 
   // 对参数进行签名
-  _signParams(Map<String, String> params) {
+  Map<String, String> _signParams(Map<String, String> params) {
     if (signData == null) {
       throw Exception("请先获取签名秘钥");
     }
-    return encWbi(params, signData!.imgKey, signData!.subKey);
+    return Map<String, String>.from(
+      encWbi(params, signData!.imgKey, signData!.subKey),
+    );
   }
 }
