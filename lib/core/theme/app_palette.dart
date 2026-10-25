@@ -87,6 +87,11 @@ AuroraTokens buildAuroraTokens(AppThemeColor seed, Brightness brightness) {
     auroraOpacity: dark ? 0.55 : 0.40,
     coverBadgeBg: const Color(0xFF000000).withValues(alpha: 0.40),
     coverBadgeFg: const Color(0xFFFFFFFF),
+    // Toast / 遮罩明暗同值（原型无 data-theme 覆写）
+    toastBg: const Color(0xFF141418).withValues(alpha: 0.92),
+    toastBorder: const Color(0xFFFFFFFF).withValues(alpha: 0.12),
+    toastFg: const Color(0xFFFFFFFF),
+    maskBg: const Color(0xFF000000).withValues(alpha: 0.50),
   );
 }
 
@@ -95,3 +100,12 @@ List<Color> coverGradientColors(int hue) => [
       _hsl(hue.toDouble(), 72, 0.58),
       _hsl((hue + 48).toDouble(), 64, 0.42),
     ];
+
+/// 进度条填充渐变（原型 .bar .fill：90deg，primary → hsl(h+50 s 66%)，输入取当前主题色）
+List<Color> progressGradientColors(Color primary) {
+  final hsl = HSLColor.fromColor(primary);
+  return [
+    primary,
+    hsl.withHue((hsl.hue + 50) % 360).withLightness(0.66).toColor(),
+  ];
+}

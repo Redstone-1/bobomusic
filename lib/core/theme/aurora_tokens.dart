@@ -53,6 +53,18 @@ class AuroraTokens extends ThemeExtension<AuroraTokens> {
   /// 封面角标文字
   final Color coverBadgeFg;
 
+  /// Toast 底色（原型 .toast：rgba(20,20,24,.92)，明暗同值——深色胶囊在两主题下都可读）
+  final Color toastBg;
+
+  /// Toast 描边（原型 rgba(255,255,255,.12)，明暗同值）
+  final Color toastBorder;
+
+  /// Toast 文字（明暗同值）
+  final Color toastFg;
+
+  /// 弹层遮罩（原型 .sheet .mask：rgba(0,0,0,.5)，明暗同值）
+  final Color maskBg;
+
   // ---- 圆角分级（原型 12/14/18~20/26 收敛） ----
   /// 小件：列表封面、小图（12）
   final double radiusSm;
@@ -106,6 +118,10 @@ class AuroraTokens extends ThemeExtension<AuroraTokens> {
     required this.auroraOpacity,
     required this.coverBadgeBg,
     required this.coverBadgeFg,
+    required this.toastBg,
+    required this.toastBorder,
+    required this.toastFg,
+    required this.maskBg,
     this.radiusSm = 12,
     this.radiusMd = 14,
     this.radiusLg = 18,
@@ -141,6 +157,10 @@ class AuroraTokens extends ThemeExtension<AuroraTokens> {
     double? auroraOpacity,
     Color? coverBadgeBg,
     Color? coverBadgeFg,
+    Color? toastBg,
+    Color? toastBorder,
+    Color? toastFg,
+    Color? maskBg,
     double? radiusSm,
     double? radiusMd,
     double? radiusLg,
@@ -170,6 +190,10 @@ class AuroraTokens extends ThemeExtension<AuroraTokens> {
       auroraOpacity: auroraOpacity ?? this.auroraOpacity,
       coverBadgeBg: coverBadgeBg ?? this.coverBadgeBg,
       coverBadgeFg: coverBadgeFg ?? this.coverBadgeFg,
+      toastBg: toastBg ?? this.toastBg,
+      toastBorder: toastBorder ?? this.toastBorder,
+      toastFg: toastFg ?? this.toastFg,
+      maskBg: maskBg ?? this.maskBg,
       radiusSm: radiusSm ?? this.radiusSm,
       radiusMd: radiusMd ?? this.radiusMd,
       radiusLg: radiusLg ?? this.radiusLg,
@@ -206,6 +230,10 @@ class AuroraTokens extends ThemeExtension<AuroraTokens> {
       auroraOpacity: _lerpDouble(auroraOpacity, other.auroraOpacity, t),
       coverBadgeBg: Color.lerp(coverBadgeBg, other.coverBadgeBg, t)!,
       coverBadgeFg: Color.lerp(coverBadgeFg, other.coverBadgeFg, t)!,
+      toastBg: Color.lerp(toastBg, other.toastBg, t)!,
+      toastBorder: Color.lerp(toastBorder, other.toastBorder, t)!,
+      toastFg: Color.lerp(toastFg, other.toastFg, t)!,
+      maskBg: Color.lerp(maskBg, other.maskBg, t)!,
       radiusSm: _lerpDouble(radiusSm, other.radiusSm, t),
       radiusMd: _lerpDouble(radiusMd, other.radiusMd, t),
       radiusLg: _lerpDouble(radiusLg, other.radiusLg, t),

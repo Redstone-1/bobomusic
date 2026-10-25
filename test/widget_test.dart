@@ -10,7 +10,7 @@ void main() {
   testWidgets("设计系统验证页：组件陈列可构建", (WidgetTester tester) async {
     await tester.pumpWidget(const ProviderScope(child: App()));
 
-    expect(find.text("S1.2 · 设计系统"), findsOneWidget);
+    expect(find.text("S1.3 · 全局组件"), findsOneWidget);
     expect(find.byKey(const ValueKey("seed_oceanBlue")), findsOneWidget);
   });
 

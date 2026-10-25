@@ -24,8 +24,10 @@ class OriginTag extends StatelessWidget {
       ),
       child: Text(
         _label(origin),
+        // height 1.0：CJK 字体默认行盒上下留白不对称，会让小字号在胶囊里视觉偏上
         style: TextStyle(
           fontSize: 10,
+          height: 1.0,
           fontWeight: FontWeight.w700,
           color: t.coverBadgeFg,
         ),
