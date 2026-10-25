@@ -12,9 +12,16 @@ String getMixinKey(String orig) {
   return mixinKeyEncTab.map((n) => orig[n]).join("").substring(0, 32);
 }
 
-Map<String, dynamic> encWbi(Map<String, dynamic> params, String imgKey, String subKey) {
+/// WBI 签名（B 站 wbi 接口通用）。[wts] 可注入固定时间戳（特征测试锁定算法用）
+Map<String, dynamic> encWbi(
+  Map<String, dynamic> params,
+  String imgKey,
+  String subKey, {
+  int? wts,
+}) {
   String mixinKey = getMixinKey(imgKey + subKey);
-  int currentTime = (DateTime.now().millisecondsSinceEpoch / 1000).round();
+  int currentTime =
+      wts ?? (DateTime.now().millisecondsSinceEpoch / 1000).round();
   RegExp chrFilter = RegExp(r"[!'()*]");
 
   params["wts"] = currentTime.toString();

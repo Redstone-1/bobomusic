@@ -14,8 +14,8 @@ String hmacSha256(String key, String message) {
 
 /// Get Bilibili web ticket
 /// [csrf] CSRF token, can be empty or null
-/// Returns Promise of the ticket response in JSON format
-Future<String> getBiliTicket(String? csrf) async {
+/// [dio] 可注入共享实例（S2.2：全 SDK 复用同一 Dio）；缺省自建
+Future<String> getBiliTicket(String? csrf, {Dio? dio}) async {
   final ts = (DateTime.now().millisecondsSinceEpoch / 1000).floor();
   final hexSign = hmacSha256("XgwSnGZ1p", "ts$ts");
   const url =
@@ -28,8 +28,8 @@ Future<String> getBiliTicket(String? csrf) async {
     "csrf": csrf ?? "",
   };
 
-  final dio = Dio();
-  final response = await dio.post(
+  final client = dio ?? Dio();
+  final response = await client.post(
     url,
     queryParameters: params,
     options: Options(
