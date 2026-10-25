@@ -48,7 +48,12 @@ class PlaylistPage extends ConsumerWidget {
               child: _QuickCard(
                 emoji: "🎧",
                 label: "本地音乐",
-                count: "${localCount.value ?? 0} 首 · 待扫描",
+                // 0 首时引导扫描，有数后展示数量
+                count: switch (localCount.value) {
+                  null => "…",
+                  0 => "待扫描",
+                  final n => "$n 首",
+                },
                 playlist: const Playlist(
                   id: "builtin:local",
                   name: "本地音乐",

@@ -1,6 +1,8 @@
 import "package:bobomusic/app/app.dart";
 import "package:bobomusic/core/prefs/app_prefs.dart";
 import "package:bobomusic/core/theme/app_palette.dart";
+import "package:bobomusic/data/local_audio_scanner.dart";
+import "package:bobomusic/data/models/track.dart";
 import "package:bobomusic/core/widgets/song_list_tile.dart";
 import "package:bobomusic/core/widgets/theme_swatch.dart";
 import "package:bobomusic/features/home/home_tab.dart";
@@ -207,6 +209,56 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text("测试歌单"), findsNothing);
+  });
+
+  testWidgets("本地音乐扫描闭环：空态 → 扫描 → 列表与计数更新", (WidgetTester tester) async {
+    // 扫描器可替换全局：跳权限/文件系统/Isolate（host 平台权限层本就直接放行）
+    localScanTestOverride = const LocalScanResult(
+      tracks: [
+        Track(
+          id: "local:1:211:漠河舞厅:柳爽",
+          name: "漠河舞厅",
+          author: "柳爽",
+          duration: 211,
+          origin: OriginType.local,
+          localPath: "/music/a.mp3",
+        ),
+        Track(
+          id: "local:2:227:夜曲:周杰伦",
+          name: "夜曲",
+          author: "周杰伦",
+          duration: 227,
+          origin: OriginType.local,
+          localPath: "/music/b.mp3",
+        ),
+      ],
+      failed: [],
+    );
+    addTearDown(() => localScanTestOverride = null);
+
+    await tester.pumpWidget(await buildTestApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text("待扫描"), findsOneWidget); // 快捷卡 0 首引导
+
+    // 进本地音乐详情 → 空态 → 扫描
+    await tester.tap(find.text("本地音乐"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text("本地音乐是空的"), findsOneWidget);
+    await tester.tap(find.text("扫描本地音乐"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text("漠河舞厅"), findsOneWidget);
+    expect(find.text("夜曲"), findsOneWidget);
+    expect(find.text("扫描完成 · 共 2 首"), findsOneWidget);
+
+    // 返回歌单页：快捷卡计数已刷新
+    await tester.tap(find.text("返回"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text("2 首"), findsOneWidget);
   });
 
   testWidgets("搜索页：空态 → 输入 → 单曲/歌单分区", (WidgetTester tester) async {

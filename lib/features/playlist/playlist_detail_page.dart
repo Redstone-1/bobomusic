@@ -2,6 +2,8 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/overlays/app_sheet.dart";
+import "../../core/overlays/app_toast.dart";
+import "../../core/permissions/audio_permission.dart";
 import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/app_buttons.dart";
 import "../../core/widgets/aurora_background.dart";
@@ -10,12 +12,15 @@ import "../../core/widgets/empty_state.dart";
 import "../../core/widgets/page_header.dart";
 import "../../core/widgets/skeleton.dart";
 import "../../core/widgets/song_list_tile.dart";
+import "../../data/local_audio_scanner.dart";
 import "../../data/models/playlist.dart";
 import "../../data/models/track.dart";
 import "../../data/repositories/playlist_repository.dart";
 import "../../data/repositories/track_repository.dart";
 import "../player/mini_player_bar.dart";
 import "../player/player_card_page.dart";
+import "playlists_provider.dart"
+    show localCountProvider, playlistDetailTracksProvider;
 
 /// 歌单详情（对齐原型 renderSub/playlist）
 /// 两种数据模式：
@@ -41,6 +46,9 @@ class PlaylistDetailPage extends ConsumerStatefulWidget {
 class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
   late Future<List<Track>> _future;
   int _reloadSeq = 0;
+  bool _scanning = false;
+
+  bool get _isLocal => widget.playlist.id == "builtin:local";
 
   @override
   void initState() {
@@ -53,7 +61,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
     if (widget.playlist.id == "builtin:liked") {
       return TrackRepository().likedTracks();
     }
-    if (widget.playlist.id == "builtin:local") {
+    if (_isLocal) {
       return TrackRepository().localTracks();
     }
     return PlaylistRepository().items(widget.playlist.id);
@@ -66,82 +74,143 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
     });
   }
 
+  /// 本地扫描（C3）：权限 → 后台扫描 → 同步入库 → 失效相关 provider → toast
+  Future<void> _scan() async {
+    final granted = await requestAudioPermission();
+    if (!granted) {
+      if (mounted) AppToast.show(context, "未获得音频读取权限");
+      return;
+    }
+    setState(() => _scanning = true);
+    try {
+      final result = await scanLocalLibrary();
+      await TrackRepository().syncLocalTracks(result.tracks);
+      ref.invalidate(playlistDetailTracksProvider);
+      ref.invalidate(localCountProvider);
+      if (!mounted) return;
+      AppToast.show(
+        context,
+        result.failed.isEmpty
+            ? "扫描完成 · 共 ${result.tracks.length} 首"
+            : "扫描完成 ${result.tracks.length} 首 · ${result.failed.length} 首读取失败",
+      );
+    } catch (e) {
+      print("本地扫描失败: $e");
+      if (mounted) AppToast.show(context, "扫描失败，请重试");
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = AuroraTokens.of(context);
+    // 本地模式走 family provider（扫描 invalidate 后列表自动刷新）；
+    // 库/注入模式沿用局部 Future（重试走 _reloadSeq）
+    final localFuture = _isLocal
+        ? ref.watch(playlistDetailTracksProvider(widget.playlist).future)
+        : null;
 
     return Scaffold(
       body: AuroraBackground(
         child: MiniBarPage(
           child: SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 110),
-              children: [
-                const Align(alignment: Alignment.centerLeft, child: BackLink()),
-                PageHeader(
-                  title: widget.playlist.name,
-                  subtitle: "播放全部",
-                  trailing: GlassIconButton(
-                    icon: const Icon(Icons.shuffle_outlined),
-                    onTap: () {},
-                  ),
-                ),
-                const SizedBox(height: 14),
-                FutureBuilder(
-                  key: ValueKey(_reloadSeq),
-                  future: _future,
-                  builder: (context, snap) {
-                    if (snap.connectionState != ConnectionState.done) {
-                      return const SkeletonListView(rows: 6);
-                    }
-                    if (snap.hasError) {
-                      return EmptyState(
-                        compact: true,
-                        emoji: "⚠️",
-                        title: "加载失败",
-                        subtitle: "点击重试",
-                        action: GlassChip(label: "重试", onTap: _retry),
-                      );
-                    }
-                    final tracks = snap.data!;
-                    if (tracks.isEmpty) {
-                      return const EmptyState(
-                        emoji: "🎵",
-                        title: "歌单还是空的",
-                        subtitle: "从广场搜索或本地扫描添加歌曲",
-                      );
-                    }
-                    return Column(
+            // FutureBuilder 外提：空态走覆盖层（Stack + Positioned.fill 居中于
+            // 列表可视区且不占列表流，透明区域点击穿透到 BackLink/头部按钮）
+            child: FutureBuilder(
+              key: ValueKey(_reloadSeq),
+              future: localFuture ?? _future,
+              builder: (context, snap) {
+                final loading =
+                    snap.connectionState != ConnectionState.done || _scanning;
+                final tracks = snap.data;
+                final empty = !loading && !snap.hasError && tracks != null && tracks.isEmpty;
+                return Stack(
+                  children: [
+                    ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 110),
                       children: [
-                        for (final track in tracks)
-                          SongListTile(
-                            track: track,
-                            coverOverride: widget.trackCover,
-                            onTap: () =>
-                                PlayerCardPage.start(context, ref, track),
-                            onMorePressed: () => AppSheet.show(
-                              context,
-                              title: track.name,
-                              actions: [
-                                AppSheetAction(
-                                  icon: Icons.queue_music_outlined,
-                                  label: "下一首播放",
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: BackLink(),
+                        ),
+                        PageHeader(
+                          title: widget.playlist.name,
+                          subtitle: "播放全部",
+                          // 本地音乐：头部放扫描入口（重新扫描）；其余保持随机占位
+                          trailing: _isLocal
+                              ? GlassIconButton(
+                                  icon: const Icon(Icons.refresh),
+                                  onTap: _scanning ? null : _scan,
+                                )
+                              : GlassIconButton(
+                                  icon: const Icon(Icons.shuffle_outlined),
                                   onTap: () {},
                                 ),
-                                AppSheetAction(
-                                  icon: Icons.playlist_add,
-                                  label: "加入待播放",
-                                  onTap: () {},
+                        ),
+                        const SizedBox(height: 14),
+                        if (loading)
+                          const SkeletonListView(rows: 6)
+                        else if (snap.hasError)
+                          EmptyState(
+                            compact: true,
+                            emoji: "⚠️",
+                            title: "加载失败",
+                            subtitle: "点击重试",
+                            action: GlassChip(label: "重试", onTap: _retry),
+                          )
+                        else if (tracks!.isNotEmpty)
+                          Column(
+                            children: [
+                              for (final track in tracks)
+                                SongListTile(
+                                  track: track,
+                                  coverOverride: widget.trackCover,
+                                  onTap: () =>
+                                      PlayerCardPage.start(context, ref, track),
+                                  onMorePressed: () => AppSheet.show(
+                                    context,
+                                    title: track.name,
+                                    actions: [
+                                      AppSheetAction(
+                                        icon: Icons.queue_music_outlined,
+                                        label: "下一首播放",
+                                        onTap: () {},
+                                      ),
+                                      AppSheetAction(
+                                        icon: Icons.playlist_add,
+                                        label: "加入待播放",
+                                        onTap: () {},
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ],
-                            ),
+                            ],
                           ),
+                        SizedBox(height: t.radiusLg),
                       ],
-                    );
-                  },
-                ),
-                SizedBox(height: t.radiusLg),
-              ],
+                    ),
+                    if (empty)
+                      Positioned.fill(
+                        child: _isLocal
+                            ? EmptyState(
+                                emoji: "🎧",
+                                title: "本地音乐是空的",
+                                subtitle: "扫描设备存储中的音频文件",
+                                action: GlassChip(
+                                  label: "扫描本地音乐",
+                                  onTap: _scan,
+                                ),
+                              )
+                            : const EmptyState(
+                                emoji: "🎵",
+                                title: "歌单还是空的",
+                                subtitle: "从广场搜索或本地扫描添加歌曲",
+                              ),
+                      ),
+                  ],
+                );
+              },
             ),
           ),
         ),

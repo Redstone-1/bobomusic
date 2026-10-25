@@ -79,6 +79,68 @@ class TrackRepository {
     return (rows.first["c"] as int?) ?? 0;
   }
 
+  /// 本地扫描同步（C3）：事务内全量 upsert + 删除本次未再现的 local 条目
+  /// （playlist_items/queue 有 ON DELETE CASCADE，引用自动清理）
+  /// 重扫同文件指纹 id 不变 → liked_at/lyric 由 upsert 语义保留（§3.4-9）
+  Future<void> syncLocalTracks(List<Track> scanned) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.transaction((txn) async {
+      for (final track in scanned) {
+        final inserted = await txn.insert(
+          "tracks",
+          {
+            "id": track.id,
+            "name": track.name,
+            "author": track.author,
+            "cover": track.cover,
+            "duration": track.duration ?? 0,
+            "origin": OriginType.local.name,
+            "local_path": track.localPath,
+            "lyric": track.lyric,
+            "created_at": now,
+            "updated_at": now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+        if (inserted == 0) {
+          await txn.update(
+            "tracks",
+            {
+              "name": track.name,
+              "author": track.author,
+              "duration": track.duration ?? 0,
+              "local_path": track.localPath,
+              "updated_at": now,
+            },
+            where: "id = ?",
+            whereArgs: [track.id],
+          );
+        }
+      }
+      if (scanned.isEmpty) {
+        await txn.delete(
+          "tracks",
+          where: "origin = ?",
+          whereArgs: [OriginType.local.name],
+        );
+        return;
+      }
+      // 删除未再现条目；NOT IN 分批（占位符动态生成、值全参数化，硬规则 3）
+      final ids = [for (final t in scanned) t.id];
+      const chunkSize = 900; // SQLite 变量上限 999
+      for (var i = 0; i < ids.length; i += chunkSize) {
+        final end = i + chunkSize > ids.length ? ids.length : i + chunkSize;
+        final chunk = ids.sublist(i, end);
+        await txn.delete(
+          "tracks",
+          where:
+              "origin = ? AND id NOT IN (${List.filled(chunk.length, "?").join(",")})",
+          whereArgs: [OriginType.local.name, ...chunk],
+        );
+      }
+    });
+  }
+
   /// 全部曲目（本地音乐列表等）
   Future<List<Track>> getAll() async {
     final rows = await db.query("tracks", orderBy: "created_at DESC");

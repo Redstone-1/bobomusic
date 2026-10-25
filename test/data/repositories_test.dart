@@ -70,6 +70,57 @@ void main() {
     });
   });
 
+  group("syncLocalTracks（C3 本地扫描同步）", () {
+    Track local(String id, String name,
+            {String path = "/sdcard/a.mp3", int duration = 100}) =>
+        Track(
+          id: id,
+          name: name,
+          author: "歌手",
+          duration: duration,
+          origin: OriginType.local,
+          localPath: path,
+        );
+
+    test("首扫入库 + localTracks/localCount", () async {
+      await tracks.syncLocalTracks([local("local:1:100:a:b", "曲一"), local("local:2:200:c:d", "曲二")]);
+      expect((await tracks.localTracks()).length, 2);
+      expect(await tracks.localCount(), 2);
+    });
+
+    test("重扫同指纹：liked/歌词保留、元数据更新（§3.4-9）", () async {
+      await tracks.syncLocalTracks([local("local:1:100:a:b", "旧标题")]);
+      await tracks.setLiked("local:1:100:a:b", true);
+      await tracks.updateLyric("local:1:100:a:b", "[00:01.00]词");
+      // 同文件重扫：id 不变，仅标题/时长等元数据刷新
+      await tracks.syncLocalTracks([local("local:1:100:a:b", "新标题", duration: 120)]);
+      final got = await tracks.getById("local:1:100:a:b");
+      expect(got?.name, "新标题");
+      expect(got?.duration, 120);
+      expect(got?.liked, isTrue); // 喜欢未丢
+      expect(got?.lyric, "[00:01.00]词"); // 歌词未丢
+    });
+
+    test("重扫缺失：条目删除且歌单引用级联清理", () async {
+      final p = await playlists.create("我的歌单");
+      await tracks.syncLocalTracks([local("local:1:100:a:b", "曲一"), local("local:2:200:c:d", "曲二")]);
+      await playlists.addTrack(p.id, "local:1:100:a:b");
+      expect((await playlists.items(p.id)).length, 1);
+      // 曲一文件已被用户删除 → 只扫到曲二
+      await tracks.syncLocalTracks([local("local:2:200:c:d", "曲二")]);
+      expect(await tracks.getById("local:1:100:a:b"), isNull);
+      expect((await tracks.localTracks()).map((e) => e.id), ["local:2:200:c:d"]);
+      expect((await playlists.items(p.id)).length, 0); // FK 级联
+      expect(await tracks.localCount(), 1);
+    });
+
+    test("空扫描：清空全部本地条目", () async {
+      await tracks.syncLocalTracks([local("local:1:100:a:b", "曲一")]);
+      await tracks.syncLocalTracks(const []);
+      expect(await tracks.localCount(), 0);
+    });
+  });
+
   group("PlaylistRepository", () {
     test("create/list 计数与排序", () async {
       final p1 = await playlists.create("歌单一");
