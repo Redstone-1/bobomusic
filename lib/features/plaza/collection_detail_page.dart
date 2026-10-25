@@ -15,6 +15,7 @@ import "../../data/models/playlist.dart";
 import "../../data/repositories/queue_repository.dart";
 import "../../data/repositories/track_repository.dart";
 import "../player/mini_player_bar.dart";
+import "../player/playback_provider.dart";
 import "../player/player_card_page.dart";
 import "../playlist/playlists_provider.dart"
     show playlistDetailTracksProvider, queueTracksProvider;
@@ -29,6 +30,9 @@ class CollectionDetailPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = AuroraTokens.of(context);
     final tracksAsync = ref.watch(playlistDetailTracksProvider(collection));
+    final currentTrackId = ref.watch(
+      playbackProvider.select((s) => s.track?.id),
+    );
 
     return Scaffold(
       body: AuroraBackground(
@@ -141,6 +145,7 @@ class CollectionDetailPage extends ConsumerWidget {
                                 for (final track in tracks)
                                   SongListTile(
                                     track: track,
+                                    playing: track.id == currentTrackId,
                                     // 播放上下文 = 当前列表（§3.4-4）
                                     onTap: () => PlayerCardPage.start(
                                       context,

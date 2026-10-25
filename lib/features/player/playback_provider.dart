@@ -5,11 +5,13 @@ import "package:riverpod_annotation/riverpod_annotation.dart";
 import "../../core/prefs/app_prefs.dart";
 import "../../data/models/track.dart";
 import "../../data/origin_service.dart";
+import "../../data/repositories/queue_repository.dart";
 import "../../data/repositories/track_repository.dart";
 import "../../origin_sdk/bili/bili_api_error.dart";
 import "audio_engine.dart";
 import "just_audio_engine.dart";
 import "play_mode.dart";
+import "playback_audio_handler.dart";
 
 part "playback_provider.g.dart";
 
@@ -31,6 +33,12 @@ class PlaybackState {
   final Duration duration;
   final PlayMode mode;
 
+  /// 定时关闭截止时间（null = 未开启；仅会话内有效，不持久化）
+  final DateTime? sleepDeadline;
+
+  /// 播完当前曲后停止（定时关闭的「播完再停」模式）
+  final bool stopAfterTrack;
+
   const PlaybackState({
     this.track,
     this.queue = const [],
@@ -41,6 +49,8 @@ class PlaybackState {
     this.position = Duration.zero,
     this.duration = Duration.zero,
     this.mode = PlayMode.listLoop,
+    this.sleepDeadline,
+    this.stopAfterTrack = false,
   });
 
   PlaybackState copyWith({
@@ -53,6 +63,9 @@ class PlaybackState {
     Duration? position,
     Duration? duration,
     PlayMode? mode,
+    DateTime? sleepDeadline,
+    bool clearSleep = false,
+    bool? stopAfterTrack,
     bool clearError = false,
   }) =>
       PlaybackState(
@@ -65,6 +78,9 @@ class PlaybackState {
         position: position ?? this.position,
         duration: duration ?? this.duration,
         mode: mode ?? this.mode,
+        sleepDeadline:
+            clearSleep ? null : sleepDeadline ?? this.sleepDeadline,
+        stopAfterTrack: stopAfterTrack ?? this.stopAfterTrack,
       );
 }
 
@@ -91,7 +107,7 @@ const _kMode = "playback_mode";
 /// 播放状态机（§5.2-1：PlaySession + NextStrategy；引擎只做"取下一首→装载→播放"）
 /// 断点续播：进度去抖 5s 写盘，暂停/切歌/销毁立即写（§5.2-2）
 @Riverpod(keepAlive: true)
-class Playback extends _$Playback {
+class Playback extends _$Playback implements SystemPlaybackCommands {
   AudioEngine? _engine;
   StreamSubscription? _onPosition;
   StreamSubscription? _onDuration;
@@ -99,7 +115,9 @@ class Playback extends _$Playback {
   StreamSubscription? _onCompletion;
   StreamSubscription? _onError;
   Timer? _persistDebounce;
+  Timer? _sleepTimer;
   bool _restored = false;
+  DateTime _lastSystemSync = DateTime.fromMillisecondsSinceEpoch(0);
 
   /// 惰性创建并订阅事件流（首次使用时；dispose 统一取消）
   AudioEngine _resolveEngine() {
@@ -113,23 +131,87 @@ class Playback extends _$Playback {
   @override
   PlaybackState build() {
     ref.onDispose(_dispose);
+    // 通知栏/耳机键命令接到本状态机（Android 才有 handler）
+    playbackAudioHandler?.commands = this;
     _restoreFromPrefs();
     return const PlaybackState();
   }
 
-  /// 点播：以 [queue]（默认单曲）为会话队列播放 [track]
-  Future<void> play(Track track, {List<Track>? queue}) async {
-    final sessionQueue = (queue == null || queue.isEmpty) ? [track] : queue;
-    final index = sessionQueue.indexWhere((t) => t.id == track.id);
-    await _load(
-      sessionQueue,
-      index < 0 ? 0 : index,
-      autoplay: true,
+  // ---- 系统媒体会话命令（通知栏/耳机键） ----
+
+  @override
+  Future<void> systemPlay() async {
+    if (state.track == null) {
+      await toggle();
+      return;
+    }
+    if (!state.playing) await _resolveEngine().play();
+  }
+
+  @override
+  Future<void> systemPause() => pause();
+
+  @override
+  Future<void> systemNext() => next();
+
+  @override
+  Future<void> systemPrevious() => previous();
+
+  @override
+  Future<void> systemSeek(Duration position) => seek(position);
+
+  @override
+  Future<void> systemStop() async {
+    await _resolveEngine().stop();
+    state = state.copyWith(playing: false, position: Duration.zero);
+    _snapshot();
+    _syncSystem(force: true);
+  }
+
+  /// 状态机 → 系统会话；position 高频更新按 1s 节流（通知栏自身会推算进度）
+  void _syncSystem({bool force = false}) {
+    final handler = playbackAudioHandler;
+    if (handler == null) return;
+    final now = DateTime.now();
+    if (!force &&
+        now.difference(_lastSystemSync) < const Duration(seconds: 1)) {
+      return;
+    }
+    _lastSystemSync = now;
+    handler.sync(
+      SystemPlaybackSnapshot(
+        track: state.track,
+        playing: state.playing,
+        buffering: state.buffering,
+        position: state.position,
+        duration: state.duration,
+        mode: state.mode,
+        queueIndex: state.queueIndex,
+      ),
     );
   }
 
+  /// 点播：以 [queue]（默认单曲）为会话队列播放 [track]
+  Future<void> play(Track track, {List<Track>? queue}) async {
+    // 切歌/换曲前先把旧曲进度写盘（§5.2-2：暂停/切歌立即写，不等 5s 去抖）
+    _persistNow();
+    var sessionQueue = (queue == null || queue.isEmpty) ? [track] : queue;
+    var index = sessionQueue.indexWhere((t) => t.id == track.id);
+    // 传入列表不含点播曲时退回单曲，避免误播列表首曲
+    if (index < 0) {
+      sessionQueue = [track];
+      index = 0;
+    }
+    await _load(sessionQueue, index, autoplay: true);
+  }
+
   Future<void> toggle() async {
-    if (state.track == null) return;
+    if (state.track == null) {
+      // 无当前曲时从播放队列取第一首开播（插队队列优先，§3.4-5）
+      final queued = await _takeQueuedTrack();
+      if (queued != null) await _load([queued], 0, autoplay: true);
+      return;
+    }
     if (state.playing) {
       await _resolveEngine().pause();
     } else {
@@ -148,6 +230,7 @@ class Playback extends _$Playback {
     state = state.copyWith(position: position);
     _snapshot();
     _persistDebounced();
+    _syncSystem(force: true);
   }
 
   /// 循环切换播放模式（UI toast 文案取 label）
@@ -155,6 +238,7 @@ class Playback extends _$Playback {
     state = state.copyWith(mode: state.mode.next);
     _snapshot();
     appPrefs.setString(_kMode, state.mode.name);
+    _syncSystem(force: true);
   }
 
   Future<void> next() => _jump(auto: false, backward: false);
@@ -162,9 +246,76 @@ class Playback extends _$Playback {
   Future<void> previous() => _jump(auto: false, backward: true);
 
   /// 播完自动切歌的入口（completion 事件触发）
-  Future<void> _onCompleted() => _jump(auto: true, backward: false);
+  /// 「播完再停」开启时停在当前曲，不进入下一首（定时关闭）
+  Future<void> _onCompleted() async {
+    if (state.stopAfterTrack) {
+      _sleepTimer?.cancel();
+      _sleepTimer = null;
+      await _resolveEngine().stop();
+      state = state.copyWith(
+        playing: false,
+        position: Duration.zero,
+        clearSleep: true,
+        stopAfterTrack: false,
+      );
+      _snapshot();
+      _syncSystem(force: true);
+      return;
+    }
+    await _jump(auto: true, backward: false);
+  }
+
+  /// 定时关闭：到点暂停（仅本会话有效，不持久化）
+  void setSleepAfter(Duration duration) {
+    _sleepTimer?.cancel();
+    final deadline = DateTime.now().add(duration);
+    state = state.copyWith(sleepDeadline: deadline, stopAfterTrack: false);
+    _sleepTimer = Timer(duration, () async {
+      _sleepTimer = null;
+      if (state.track != null) {
+        await _resolveEngine().pause();
+        _persistNow();
+        state = state.copyWith(
+          playing: false,
+          clearSleep: true,
+          stopAfterTrack: false,
+        );
+      }
+    });
+  }
+
+  /// 定时关闭：播完当前曲再停
+  void setStopAfterCurrent() {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    state = state.copyWith(clearSleep: true, stopAfterTrack: true);
+  }
+
+  void cancelSleep() {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    state = state.copyWith(clearSleep: true, stopAfterTrack: false);
+  }
+
+  /// 清除错误态（全局提示已展示后调用，避免同一错误重复 toast）
+  void clearError() {
+    if (state.error != null) state = state.copyWith(clearError: true);
+  }
 
   Future<void> _jump({required bool auto, required bool backward}) async {
+    _persistNow();
+    // 「下一首播放」插队优先：手动下一首与播完自动切歌都先消费队列表首曲
+    if (!backward) {
+      final queued = await _takeQueuedTrack();
+      if (!ref.mounted) return;
+      if (queued != null) {
+        final session = [...state.queue];
+        final insertAt = state.queueIndex < 0 ? 0 : state.queueIndex + 1;
+        session.insert(insertAt, queued);
+        await _load(session, insertAt, autoplay: true);
+        return;
+      }
+    }
     final queue = state.queue;
     final target = nextIndex(
       mode: state.mode,
@@ -174,15 +325,25 @@ class Playback extends _$Playback {
       backward: backward,
       randomPick: playbackDepsTestOverride?.randomPick,
     );
-    _persistNow();
     if (target == null) {
       // 顺序模式到队尾（或队列空）：自然停止
       await _resolveEngine().stop();
       state = state.copyWith(playing: false, position: Duration.zero);
       _snapshot();
+      _syncSystem(force: true);
       return;
     }
     await _load(queue, target, autoplay: true);
+  }
+
+  /// 从播放队列表取队首（事务内删除并顺移；失败不阻塞正常切歌）
+  Future<Track?> _takeQueuedTrack() async {
+    try {
+      return await QueueRepository().takeFirst();
+    } catch (e) {
+      print("读取播放队列失败：$e");
+      return null;
+    }
   }
 
   Future<void> _load(
@@ -202,11 +363,15 @@ class Playback extends _$Playback {
       clearError: true,
     );
     _snapshot();
+    _syncSystem(force: true);
     try {
       final source = await _resolveSource(track);
+      if (!ref.mounted) return;
       await _resolveEngine().load(source, initialPosition: initialPosition);
+      if (!ref.mounted) return;
       if (autoplay) await _resolveEngine().play();
     } catch (e) {
+      if (!ref.mounted) return;
       // 装载失败：类型化错误上抛到 state（UI 提示），不静默挂死（§5.1-2）
       print("播放装载失败 [${track.id}] $e");
       // B 站 -404（"啥都木有"）= 视频/分 P 已被删除或下架，翻译成用户能懂的提示
@@ -215,6 +380,7 @@ class Playback extends _$Playback {
           : "$e";
       state = state.copyWith(buffering: false, playing: false, error: friendly);
       _snapshot();
+      _syncSystem(force: true);
     }
   }
 
@@ -241,18 +407,18 @@ class Playback extends _$Playback {
         if (!state.buffering) state = state.copyWith(position: p);
         _snapshot();
         _persistDebounced();
+        _syncSystem();
       },
     );
-    _onDuration = e.durationStream.listen(
-      (d) => state = state.copyWith(duration: d),
-    );
-    _onPlaying = e.playingStream.listen(
-      (playing) => state = state.copyWith(
-        playing: playing,
-        buffering: false,
-      ),
-    );
-    _onCompletion = e.completionStream.listen((_) => _onCompleted());
+    _onDuration = e.durationStream.listen((d) {
+      state = state.copyWith(duration: d);
+      _syncSystem(force: true);
+    });
+    _onPlaying = e.playingStream.listen((playing) {
+      state = state.copyWith(playing: playing, buffering: false);
+      _syncSystem(force: true);
+    });
+    _onCompletion = e.completionStream.listen((_) => unawaited(_onCompleted()));
     _onError = e.errorStream.listen((err) {
       print("播放引擎错误：$err");
       state = state.copyWith(
@@ -261,6 +427,7 @@ class Playback extends _$Playback {
         error: "$err",
       );
       _snapshot();
+      _syncSystem(force: true);
     });
   }
 
@@ -302,6 +469,7 @@ class Playback extends _$Playback {
     final modeName = appPrefs.getString(_kMode);
     final positionMs = appPrefs.getInt(_kPositionMs) ?? 0;
     final track = await TrackRepository().getById(trackId);
+    if (!ref.mounted) return;
     if (track == null) return;
     state = state.copyWith(
       track: track,
@@ -313,15 +481,21 @@ class Playback extends _$Playback {
           .firstOrNull ?? PlayMode.listLoop,
     );
     _snapshot();
+    _syncSystem(force: true);
   }
 
   void _dispose() {
     _persistNow();
+    playbackAudioHandler?.detach();
     _onPosition?.cancel();
     _onDuration?.cancel();
     _onPlaying?.cancel();
     _onCompletion?.cancel();
     _onError?.cancel();
     _persistDebounce?.cancel();
+    _sleepTimer?.cancel();
+    // 释放底层播放器（AudioPlayer 持有平台解码器/网络连接）
+    final engine = _engine;
+    if (engine != null) unawaited(engine.dispose());
   }
 }

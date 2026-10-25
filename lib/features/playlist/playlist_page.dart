@@ -13,6 +13,8 @@ import "../../core/widgets/scale_tap.dart";
 import "../../core/widgets/skeleton.dart";
 import "../../core/widgets/song_list_tile.dart";
 import "../../data/models/playlist.dart";
+import "../../data/repositories/queue_repository.dart";
+import "../player/playback_provider.dart";
 import "../player/player_card_page.dart";
 import "playlist_detail_page.dart";
 import "playlists_provider.dart";
@@ -28,6 +30,13 @@ class PlaylistPage extends ConsumerWidget {
     final likedCount = ref.watch(likedCountProvider);
     final localCount = ref.watch(localCountProvider);
     final queueAsync = ref.watch(queueTracksProvider);
+    final currentTrackId = ref.watch(
+      playbackProvider.select((s) => s.track?.id),
+    );
+    // 切歌/自动播完会消费插队队列：刷新歌单页队列区
+    ref.listen(playbackProvider.select((s) => s.track?.id), (_, __) {
+      ref.invalidate(queueTracksProvider);
+    });
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 150),
@@ -139,18 +148,41 @@ class PlaylistPage extends ConsumerWidget {
                 )
               : Column(
                   children: [
-                    for (final track in queue)
+                    for (final (index, track) in queue.indexed)
                       SongListTile(
                         track: track,
-                        // 队列区点播：会话队列 = 播放队列（queue 表）
-                        onTap: () => PlayerCardPage.start(
+                        playing: track.id == currentTrackId,
+                        // 队列区点播：从待播队列取出该曲，会话队列 = 当前队列快照
+                        onTap: () async {
+                          await QueueRepository().removeAt(index);
+                          ref.invalidate(queueTracksProvider);
+                          if (context.mounted) {
+                            PlayerCardPage.start(
+                              context,
+                              ref,
+                              track,
+                              queue: queue,
+                            );
+                          }
+                        },
+                        onMorePressed: () => AppSheet.show(
                           context,
-                          ref,
-                          track,
-                          queue: queue,
+                          title: track.name,
+                          actions: [
+                            AppSheetAction(
+                              icon: Icons.playlist_remove,
+                              label: "从队列移除",
+                              danger: true,
+                              onTap: () async {
+                                await QueueRepository().removeAt(index);
+                                ref.invalidate(queueTracksProvider);
+                                if (context.mounted) {
+                                  AppToast.show(context, "已从播放队列移除");
+                                }
+                              },
+                            ),
+                          ],
                         ),
-                        onMorePressed: () =>
-                            AppToast.show(context, "队列操作在队列引擎批次接入"),
                       ),
                   ],
                 ),

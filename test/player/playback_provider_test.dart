@@ -1,6 +1,7 @@
 import "package:bobomusic/core/prefs/app_prefs.dart";
 import "package:bobomusic/data/db/app_database.dart";
 import "package:bobomusic/data/models/track.dart";
+import "package:bobomusic/data/repositories/queue_repository.dart";
 import "package:bobomusic/data/repositories/track_repository.dart";
 import "package:bobomusic/features/player/audio_engine.dart";
 import "package:bobomusic/features/player/play_mode.dart";
@@ -18,7 +19,8 @@ import "../helpers/fake_engine.dart";
 void main() {
   setUpAll(() {
     sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
+    // 同步 FFI：播放切歌会查播放队列（插队），异步 isolate 会让微任务 flush 等不到结果
+    databaseFactory = databaseFactoryFfiNoIsolate;
   });
 
   late FakeEngine engine;
@@ -239,5 +241,97 @@ void main() {
     await pb().cycleMode(); // sequential → singleLoop（环绕）
     expect(st().mode, PlayMode.singleLoop);
     expect(appPrefs.getString("playback_mode"), "singleLoop");
+  });
+
+  /// 等待异步查库完成（ffi 隔离线程往返，微任务 flush 不够）
+  Future<void> waitFor(bool Function() predicate) async {
+    for (var i = 0; i < 200 && !predicate(); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 2));
+    }
+  }
+
+  test("插队队列优先：next 先消费队列首曲并清空该行", () async {
+    await TrackRepository().upsert(t("q", "队列曲"));
+    await QueueRepository().append("q");
+    await pb().play(t("a", "曲A"), queue: queue());
+    await flush();
+
+    await pb().next();
+    await waitFor(() => st().track?.id == "q");
+    expect(st().track?.id, "q");
+    expect(await QueueRepository().all(), isEmpty);
+    // 插队曲插入会话队列当前位之后，后续仍可继续原列表
+    expect(st().queue.map((e) => e.id).toList(), ["a", "q", "b", "c"]);
+  });
+
+  test("播完自动切歌同样先消费插队队列", () async {
+    await TrackRepository().upsert(t("q", "队列曲"));
+    await QueueRepository().append("q");
+    await pb().play(t("a", "曲A"), queue: queue());
+    await flush();
+
+    engine.emitCompletion();
+    await waitFor(() => st().track?.id == "q");
+    expect(st().track?.id, "q");
+    expect(await QueueRepository().all(), isEmpty);
+  });
+
+  test("无当前曲且队列非空：toggle 从队列开播", () async {
+    await TrackRepository().upsert(t("q", "队列曲"));
+    await QueueRepository().append("q");
+
+    await pb().toggle();
+    await waitFor(() => st().track?.id == "q");
+    expect(st().track?.id, "q");
+    expect(st().playing, isTrue);
+    expect(await QueueRepository().all(), isEmpty);
+  });
+
+  test("切歌前旧曲进度立即写盘（不等 5s 去抖）", () async {
+    await pb().play(t("a", "曲A"), queue: queue());
+    await flush();
+    engine.emitPosition(const Duration(seconds: 33));
+    await flush();
+    await pb().play(t("b", "曲B"), queue: queue());
+    await flush();
+    expect(appPrefs.getString("playback_track_id"), "a");
+    expect(appPrefs.getInt("playback_position_ms"), 33000);
+  });
+
+  test("点播列表不含目标曲：回退单曲，不误播列表首曲", () async {
+    await pb().play(t("c", "曲C"), queue: [t("a", "曲A"), t("b", "曲B")]);
+    await flush();
+    expect(st().track?.id, "c");
+    expect(st().queue.length, 1);
+  });
+
+  test("定时关闭：到点暂停并清空定时状态", () {
+    fakeAsync((async) {
+      pb().play(t("a", "曲A"), queue: queue());
+      async.flushMicrotasks();
+      pb().setSleepAfter(const Duration(minutes: 30));
+      expect(st().sleepDeadline, isNotNull);
+
+      async.elapse(const Duration(minutes: 30));
+      async.flushMicrotasks();
+      expect(st().playing, isFalse);
+      expect(engine.pauseCalls, 1);
+      expect(st().sleepDeadline, isNull);
+    });
+  });
+
+  test("定时关闭：播完再停不切下一首", () async {
+    await pb().play(t("a", "曲A"), queue: queue());
+    await flush();
+    pb().setStopAfterCurrent();
+    expect(st().stopAfterTrack, isTrue);
+
+    engine.emitCompletion();
+    await flush();
+    expect(st().track?.id, "a");
+    expect(st().playing, isFalse);
+    expect(engine.stopCalls, 1);
+    expect(engine.loads.length, 1);
+    expect(st().stopAfterTrack, isFalse);
   });
 }

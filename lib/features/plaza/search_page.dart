@@ -3,6 +3,7 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../core/overlays/app_sheet.dart";
 import "../../core/overlays/app_toast.dart";
 import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/app_buttons.dart";
@@ -16,13 +17,16 @@ import "../../data/models/track.dart";
 import "../../data/mappers.dart";
 import "../../data/origin_service.dart";
 import "../../data/repositories/playlist_repository.dart";
+import "../../data/repositories/queue_repository.dart";
 import "../../data/repositories/track_repository.dart";
 import "../../origin_sdk/origin_types.dart";
 import "../../data/models/playlist.dart";
 import "../player/mini_player_bar.dart";
+import "../player/playback_provider.dart";
 import "../player/player_card_page.dart";
 import "../playlist/playlist_detail_page.dart";
-import "../playlist/playlists_provider.dart" show collectionsProvider;
+import "../playlist/playlists_provider.dart"
+    show collectionsProvider, queueTracksProvider;
 
 /// 搜索页（S3.3 接 BiliApi 真搜索）：单曲/多P歌单结果 + 三态
 /// 防抖 300ms；结果不入库（点歌/收藏动作才落库）
@@ -115,9 +119,42 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     }
   }
 
+  /// 单曲结果操作：插队/追加（播放队列，§3.4-5）
+  void _showTrackActions(Track track) {
+    AppSheet.show(
+      context,
+      title: track.name,
+      actions: [
+        AppSheetAction(
+          icon: Icons.queue_music_outlined,
+          label: "下一首播放",
+          onTap: () async {
+            await TrackRepository().upsert(track);
+            await QueueRepository().insertNext(track.id, atPosition: 0);
+            ref.invalidate(queueTracksProvider);
+            if (mounted) AppToast.show(context, "已设为下一首播放");
+          },
+        ),
+        AppSheetAction(
+          icon: Icons.playlist_add,
+          label: "加入待播放",
+          onTap: () async {
+            await TrackRepository().upsert(track);
+            await QueueRepository().append(track.id);
+            ref.invalidate(queueTracksProvider);
+            if (mounted) AppToast.show(context, "已加入播放队列");
+          },
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = AuroraTokens.of(context);
+    final currentTrackId = ref.watch(
+      playbackProvider.select((s) => s.track?.id),
+    );
 
     return Scaffold(
       body: AuroraBackground(
@@ -188,9 +225,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                       else
                         SongListTile(
                           track: item.toTrack(),
+                          playing: item.toTrack().id == currentTrackId,
                           onTap: () => _playTrack(item.toTrack()),
                           onMorePressed: () =>
-                              AppToast.show(context, "加入歌单在 S4 接入"),
+                              _showTrackActions(item.toTrack()),
                         ),
                   ],
                 ),

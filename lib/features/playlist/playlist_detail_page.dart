@@ -16,11 +16,17 @@ import "../../data/local_audio_scanner.dart";
 import "../../data/models/playlist.dart";
 import "../../data/models/track.dart";
 import "../../data/repositories/playlist_repository.dart";
+import "../../data/repositories/queue_repository.dart";
 import "../../data/repositories/track_repository.dart";
 import "../player/mini_player_bar.dart";
+import "../player/playback_provider.dart";
 import "../player/player_card_page.dart";
 import "playlists_provider.dart"
-    show likedCountProvider, localCountProvider, playlistDetailTracksProvider;
+    show
+        likedCountProvider,
+        localCountProvider,
+        playlistDetailTracksProvider,
+        queueTracksProvider;
 
 /// 歌单详情（对齐原型 renderSub/playlist）
 /// 两种数据模式：
@@ -111,6 +117,9 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
   @override
   Widget build(BuildContext context) {
     final t = AuroraTokens.of(context);
+    final currentTrackId = ref.watch(
+      playbackProvider.select((s) => s.track?.id),
+    );
     // 本地模式走 family provider（扫描 invalidate 后列表自动刷新）；
     // 库/注入模式沿用局部 Future（重试走 _reloadSeq）
     final localFuture = _isLocal
@@ -182,6 +191,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
                               for (final track in tracks)
                                 SongListTile(
                                   track: track,
+                                  playing: track.id == currentTrackId,
                                   coverOverride: widget.trackCover,
                                   // 我喜欢：行首心形快速取消收藏，
                                   // 写库但不刷新列表（心形局部更新，下次进入重读）
@@ -212,12 +222,30 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
                                       AppSheetAction(
                                         icon: Icons.queue_music_outlined,
                                         label: "下一首播放",
-                                        onTap: () {},
+                                        onTap: () async {
+                                          await TrackRepository().upsert(track);
+                                          await QueueRepository().insertNext(
+                                            track.id,
+                                            atPosition: 0,
+                                          );
+                                          ref.invalidate(queueTracksProvider);
+                                          if (context.mounted) {
+                                            AppToast.show(context, "已设为下一首播放");
+                                          }
+                                        },
                                       ),
                                       AppSheetAction(
                                         icon: Icons.playlist_add,
                                         label: "加入待播放",
-                                        onTap: () {},
+                                        onTap: () async {
+                                          await TrackRepository().upsert(track);
+                                          await QueueRepository()
+                                              .append(track.id);
+                                          ref.invalidate(queueTracksProvider);
+                                          if (context.mounted) {
+                                            AppToast.show(context, "已加入播放队列");
+                                          }
+                                        },
                                       ),
                                     ],
                                   ),

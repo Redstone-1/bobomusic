@@ -26,6 +26,8 @@ class AppShell extends ConsumerWidget {
       (previous, next) {
         if (next != null) {
           AppToast.show(context, "播放失败：$next");
+          // 提示后清除错误，避免同一错误在后续重建中重复弹出
+          ref.read(playbackProvider.notifier).clearError();
         }
       },
     );

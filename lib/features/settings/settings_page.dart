@@ -9,6 +9,8 @@ import "../../core/theme/theme_providers.dart";
 import "../../core/widgets/glass_card.dart";
 import "../../core/widgets/page_header.dart";
 import "../../core/widgets/theme_swatch.dart";
+import "../player/playback_provider.dart";
+import "../player/sleep_timer_sheet.dart";
 
 /// 设置页（对齐原型 renderSetting）：主题真实驱动 + 关于组 + Gallery 隐藏入口
 class SettingsPage extends ConsumerWidget {
@@ -19,6 +21,8 @@ class SettingsPage extends ConsumerWidget {
     final t = AuroraTokens.of(context);
     final mode = ref.watch(appThemeModeProvider);
     final seed = ref.watch(appThemeSeedProvider);
+    // 只订阅定时关闭文案（不订阅 position，避免设置页每秒重建）
+    final sleepLabel = ref.watch(playbackProvider.select(sleepTimerLabel));
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 150),
@@ -91,9 +95,9 @@ class SettingsPage extends ConsumerWidget {
               _SettingRow(
                 icon: Icons.timer_outlined,
                 title: "定时关闭",
-                subtitle: "未开启",
+                subtitle: sleepLabel,
                 trailing: Icon(Icons.chevron_right, size: 20, color: t.fgMute),
-                onTap: () {},
+                onTap: () => showSleepTimerSheet(context, ref),
               ),
             ],
           ),
