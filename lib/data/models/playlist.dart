@@ -18,4 +18,11 @@ class Playlist {
     this.count = 0,
     this.coverHue,
   });
+
+  /// 相等性按 id（family provider 参数缓存与刷新依赖它）
+  @override
+  bool operator ==(Object other) => other is Playlist && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
 }
