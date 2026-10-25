@@ -14,7 +14,9 @@ import "../core/widgets/aurora_progress_bar.dart";
 import "../core/widgets/empty_state.dart";
 import "../core/widgets/glass_card.dart";
 import "../core/widgets/song_list_tile.dart";
+import "../core/widgets/skeleton.dart";
 import "../core/widgets/theme_swatch.dart";
+import "../features/plaza/search_page.dart";
 import "../data/models/track.dart";
 
 /// S1.2/S1.3 设计系统验证页（S1.4 移除）：明暗 × 8 主题色实时切换 + 全部组件陈列
@@ -234,7 +236,7 @@ class _DesignSystemDemoState extends ConsumerState<DesignSystemDemo> {
               const SizedBox(height: 20),
               const _InteractiveProgress(),
               const SizedBox(height: 22),
-              const _SectionTitle("空状态"),
+              const _SectionTitle("空状态 · 整页规格"),
               const GlassCard(
                 padding: EdgeInsets.all(16),
                 child: EmptyState(
@@ -242,6 +244,48 @@ class _DesignSystemDemoState extends ConsumerState<DesignSystemDemo> {
                   title: "还没有本地音乐",
                   subtitle: "点击右上角 + 扫描手机里的音频文件",
                 ),
+              ),
+              const SizedBox(height: 22),
+              const _SectionTitle("分区空态 · 紧凑版（歌单页/广场页内嵌）"),
+              GlassCard(
+                padding: const EdgeInsets.all(8),
+                child: const EmptyState(
+                  compact: true,
+                  emoji: "📂",
+                  title: "还没有歌单",
+                  subtitle: "点右上角 + 创建第一个歌单",
+                ),
+              ),
+              const Divider(height: 1),
+              GlassCard(
+                padding: const EdgeInsets.all(8),
+                child: EmptyState(
+                  compact: true,
+                  emoji: "🌐",
+                  title: "还没有收藏合集",
+                  subtitle: "在搜索中收藏喜欢的合集",
+                  action: GlassChip(
+                    label: "去搜索",
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SearchPage()),
+                    ),
+                  ),
+                ),
+              ),
+              GlassCard(
+                padding: const EdgeInsets.all(8),
+                child: const EmptyState(
+                  compact: true,
+                  emoji: "💿",
+                  title: "还没有播放记录",
+                  subtitle: "播放的歌曲会出现在这里",
+                ),
+              ),
+              const SizedBox(height: 22),
+              const _SectionTitle("加载占位 · 分区骨架（异步 loading 态）"),
+              GlassCard(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: SkeletonListView(rows: 3),
               ),
             ],
           ),

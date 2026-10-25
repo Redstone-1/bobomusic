@@ -12,6 +12,9 @@ import "../../core/widgets/scale_tap.dart";
 import "../../core/widgets/song_list_tile.dart";
 import "../../data/mock/mock_data.dart";
 import "../../data/models/track.dart";
+import "../../data/repositories/queue_repository.dart";
+import "../../data/repositories/track_repository.dart";
+import "../playlist/playlists_provider.dart" show likedCountProvider, queueTracksProvider;
 import "mock_playback.dart";
 import "spinning_cover.dart";
 
@@ -21,7 +24,9 @@ class PlayerCardPage extends ConsumerStatefulWidget {
   const PlayerCardPage({super.key});
 
   /// 仅开播（列表行点击用）：不弹卡，播放状态由迷你条承接
+  /// 播放即入库：喜欢/队列/历史的落点（upsert 保留已有喜欢/下载态）
   static void start(BuildContext context, WidgetRef ref, Track track) {
+    TrackRepository().upsert(track);
     ref.read(mockPlaybackProvider.notifier).play(track);
   }
 
@@ -51,7 +56,7 @@ class PlayerCardPage extends ConsumerStatefulWidget {
 }
 
 class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
-  bool _liked = false; // mock：喜欢态卡片内本地维护，S3 接全局喜欢
+  bool? _likedOverride; // 相对 track.liked 的本地覆盖（写库后与库态一致）
   bool _showLyrics = false; // 歌词视图 / 黑胶视图切换（原型 toggleLyrics）
 
   @override
@@ -95,8 +100,13 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
                 ),
                 _MetaRow(
                   track: track,
-                  liked: _liked,
-                  onToggleLike: () => setState(() => _liked = !_liked),
+                  liked: _likedOverride ?? track.liked,
+                  onToggleLike: () {
+                    final newLiked = !(_likedOverride ?? track.liked);
+                    TrackRepository().setLiked(track.id, newLiked);
+                    ref.invalidate(likedCountProvider);
+                    setState(() => _likedOverride = newLiked);
+                  },
                 ),
                 const SizedBox(height: 18),
                 _SeekRow(duration: track.duration ?? 240),
@@ -477,23 +487,38 @@ class _ControlsRow extends ConsumerWidget {
 }
 
 /// 底部动作行（原型 .pactions：收藏 / 歌词 / 下载 / 稍后；歌词项为切换开关）
-class _ActionsRow extends StatelessWidget {
+class _ActionsRow extends ConsumerWidget {
   final bool showLyrics;
   final VoidCallback onToggleLyrics;
 
   const _ActionsRow({required this.showLyrics, required this.onToggleLyrics});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final t = AuroraTokens.of(context);
     final actions = [
-      (Icons.favorite_border, "收藏", false,
-          () => AppToast.show(context, "收藏（S3 接全局喜欢）")),
+      (
+        Icons.favorite_border,
+        "收藏",
+        false,
+        () => AppToast.show(context, "在播放信息行点 ♡ 全局喜欢"),
+      ),
       (Icons.lyrics, "歌词", showLyrics, onToggleLyrics),
       (Icons.download_outlined, "下载", false,
           () => AppToast.show(context, "下载在 S5 接入")),
-      (Icons.add, "稍后", false,
-          () => AppToast.show(context, "S4 接播放队列数据")),
+      (
+        Icons.add,
+        "稍后",
+        false,
+        () {
+          final track = ref.read(mockPlaybackProvider).track;
+          if (track == null) return;
+          TrackRepository().upsert(track);
+          QueueRepository().append(track.id);
+          ref.invalidate(queueTracksProvider);
+          AppToast.show(context, "已加入播放队列");
+        },
+      ),
     ];
 
     return Container(

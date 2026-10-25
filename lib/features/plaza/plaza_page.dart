@@ -3,10 +3,16 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/theme/app_palette.dart";
 import "../../core/theme/aurora_tokens.dart";
+import "../../core/widgets/app_buttons.dart";
+import "../../core/widgets/cover_placeholder.dart";
+import "../../core/widgets/empty_state.dart";
 import "../../core/widgets/page_header.dart";
 import "../../core/widgets/scale_tap.dart";
-import "../../data/mock/mock_data.dart";
+import "../../core/widgets/skeleton.dart";
 import "../../data/models/playlist.dart";
+import "../../data/singers_provider.dart";
+import "../playlist/playlists_provider.dart" show collectionsProvider;
+import "../playlist/playlist_detail_page.dart";
 import "collection_detail_page.dart";
 import "search_page.dart";
 
@@ -16,6 +22,8 @@ class PlazaPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final singersAsync = ref.watch(hotSingersProvider);
+    final collectionsAsync = ref.watch(collectionsProvider);
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 150),
       children: [
@@ -26,40 +34,73 @@ class PlazaPage extends ConsumerWidget {
             MaterialPageRoute(builder: (_) => const SearchPage()),
           ),
         ),
-        SectionHeader(title: "热门歌手", trailing: "更多"),
-        SizedBox(
-          height: 100,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: mockSingers.length,
-            separatorBuilder: (context, index) => const SizedBox(width: 14),
-            itemBuilder: (_, i) => _SingerAvatar(singer: mockSingers[i]),
+        // 热门歌手：内置歌手数据（chinese.json），加载中骨架、空/失败整区隐藏
+        if (singersAsync.value case final singers? when singers.isNotEmpty) ...[
+          SectionHeader(title: "热门歌手", trailing: "更多"),
+          SizedBox(
+            height: 100,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: singers.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 14),
+              itemBuilder: (_, i) => _SingerAvatar(singer: singers[i]),
+            ),
           ),
-        ),
+        ],
+        // 收藏合集：真数据（收藏动作落库后 invalidate）
         SectionHeader(
           title: "收藏合集",
-          trailing: "${mockCollections.length} 个",
+          trailing: collectionsAsync.value == null
+              ? null
+              : "${collectionsAsync.value!.length} 个",
         ),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 14,
-          crossAxisSpacing: 14,
-          // 格子高 = 宽/0.72：方形封面 + 标题/副题文字区（含字体行高波动留余量），
-          // 390dp 窄屏实测余量 ≥15px（0.75 曾在真机字高下溢出 22px）
-          childAspectRatio: 0.72,
-          children: [
-            for (final col in mockCollections)
-              _CollectionCard(
-                collection: col,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => CollectionDetailPage(collection: col),
+        collectionsAsync.when(
+          loading: () => const SkeletonListView(rows: 2),
+          error: (e, _) => EmptyState(
+            compact: true,
+            emoji: "⚠️",
+            title: "合集加载失败",
+            subtitle: "点击重试",
+            action: GlassChip(
+              label: "重试",
+              onTap: () => ref.invalidate(collectionsProvider),
+            ),
+          ),
+          data: (collections) => collections.isEmpty
+              ? EmptyState(
+                  compact: true,
+                  emoji: "🌐",
+                  title: "还没有收藏合集",
+                  subtitle: "在搜索中收藏喜欢的合集",
+                  action: GlassChip(
+                    label: "去搜索",
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SearchPage()),
+                    ),
                   ),
+                )
+              : GridView.count(
+                  crossAxisCount: 2,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 14,
+                  crossAxisSpacing: 14,
+                  // 格子高 = 宽/0.72：方形封面 + 标题/副题文字区（含字体行高波动留余量），
+                  // 390dp 窄屏实测余量 ≥15px（0.75 曾在真机字高下溢出 22px）
+                  childAspectRatio: 0.72,
+                  children: [
+                    for (final col in collections)
+                      _CollectionCard(
+                        collection: col,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                CollectionDetailPage(collection: col),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-              ),
-          ],
         ),
       ],
     );
@@ -99,42 +140,50 @@ class _SearchBar extends StatelessWidget {
   }
 }
 
-/// 歌手头像（原型 .singer：圆头像 + 名称）
+/// 歌手头像（原型 .singer：圆头像真实封面 + 名称；点击进入歌手歌单）
 class _SingerAvatar extends StatelessWidget {
-  final MockSinger singer;
+  final SingerEntry singer;
 
   const _SingerAvatar({required this.singer});
 
   @override
   Widget build(BuildContext context) {
     final t = AuroraTokens.of(context);
-    return Column(
-      children: [
-        Container(
-          width: 74,
-          height: 74,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(
-              begin: const Alignment(-0.64, -0.77),
-              end: const Alignment(0.64, 0.77),
-              colors: coverGradientColors(singer.hue),
+    return ScaleTap(
+      pressedScale: 0.94,
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => PlaylistDetailPage(
+            playlist: Playlist(
+              id: "singer:${singer.id}",
+              name: singer.name,
+              type: PlaylistType.custom,
             ),
-            border: Border.all(color: t.hairline, width: 2),
+            tracks: singer.tracks,
           ),
         ),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: 74,
-          child: Text(
-            singer.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: t.fgDim),
+      ),
+      child: Column(
+        children: [
+          CoverPlaceholder(
+            cover: singer.tracks.firstOrNull?.cover,
+            text: singer.name,
+            size: 74,
+            radius: 37,
           ),
-        ),
-      ],
+          const SizedBox(height: 8),
+          SizedBox(
+            width: 74,
+            child: Text(
+              singer.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: t.fgDim),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

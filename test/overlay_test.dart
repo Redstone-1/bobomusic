@@ -1,4 +1,3 @@
-import "package:bobomusic/app/app.dart";
 import "package:bobomusic/core/overlays/app_dialog.dart";
 import "package:bobomusic/core/overlays/app_loading.dart";
 import "package:bobomusic/core/overlays/app_sheet.dart";
@@ -7,15 +6,16 @@ import "package:bobomusic/core/theme/app_palette.dart";
 import "package:bobomusic/core/theme/app_theme.dart";
 import "package:bobomusic/core/widgets/aurora_progress_bar.dart";
 import "package:flutter/material.dart";
-import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
+
+import "helpers/app_test_helper.dart";
 
 // S1.3 全局组件冒烟：弹窗 / 操作面板 / Toast / 进度条
 // 验证页含常驻动画，统一只 pump 固定帧
 // overlay 调用约定：context 必须能找到 Navigator（同时必然拥有主题 token），
 // 所以这里取 MaterialApp 之下的 Scaffold 元素 context，而不是 App 根 context
 Future<void> _pumpApp(WidgetTester tester) async {
-  await tester.pumpWidget(const ProviderScope(child: App()));
+  await tester.pumpWidget(await buildTestApp());
   await tester.pump();
 }
 

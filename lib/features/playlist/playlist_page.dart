@@ -1,37 +1,43 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../core/overlays/app_dialog.dart";
 import "../../core/overlays/app_sheet.dart";
 import "../../core/overlays/app_toast.dart";
 import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/app_buttons.dart";
 import "../../core/widgets/cover_placeholder.dart";
+import "../../core/widgets/empty_state.dart";
 import "../../core/widgets/page_header.dart";
 import "../../core/widgets/scale_tap.dart";
+import "../../core/widgets/skeleton.dart";
 import "../../core/widgets/song_list_tile.dart";
-import "../../data/mock/mock_data.dart";
 import "../../data/models/playlist.dart";
 import "../player/player_card_page.dart";
 import "playlist_detail_page.dart";
+import "playlists_provider.dart";
 
-/// 歌单页（对齐原型 renderOrder）
+/// 歌单页（对齐原型 renderOrder；S3.3 接真数据：歌单 CRUD / 我喜欢 / 播放队列）
 class PlaylistPage extends ConsumerWidget {
   const PlaylistPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = AuroraTokens.of(context);
+    final playlistsAsync = ref.watch(playlistsProvider);
+    final likedCount = ref.watch(likedCountProvider);
+    final localCount = ref.watch(localCountProvider);
+    final queueAsync = ref.watch(queueTracksProvider);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 150),
       children: [
         PageHeader(
           title: "我的歌单",
-          subtitle:
-              "本地 37 首 · 网络收藏 ${mockCustomPlaylists.fold<int>(0, (a, p) => a + p.count)} 首",
+          subtitle: "本地 ${localCount.value ?? 0} 首 · 网络收藏 0 首",
           trailing: GlassIconButton(
             icon: const Icon(Icons.add),
-            onTap: () => AppToast.show(context, "扫描本地音乐（S3 接真数据）"),
+            onTap: () => _createPlaylist(context, ref),
           ),
         ),
         const SizedBox(height: 16),
@@ -42,12 +48,12 @@ class PlaylistPage extends ConsumerWidget {
               child: _QuickCard(
                 emoji: "🎧",
                 label: "本地音乐",
-                count: "37 首 · 已扫描",
+                count: "${localCount.value ?? 0} 首 · 待扫描",
                 playlist: const Playlist(
                   id: "builtin:local",
                   name: "本地音乐",
                   type: PlaylistType.builtIn,
-                  count: 37,
+                  count: 0,
                 ),
               ),
             ),
@@ -56,84 +62,169 @@ class PlaylistPage extends ConsumerWidget {
               child: _QuickCard(
                 emoji: "💗",
                 label: "我喜欢的音乐",
-                count: "64 首",
+                count: "${likedCount.value ?? 0} 首",
                 playlist: const Playlist(
                   id: "builtin:liked",
                   name: "我喜欢的音乐",
                   type: PlaylistType.builtIn,
-                  count: 64,
+                  count: 0,
                 ),
               ),
             ),
           ],
         ),
-        SectionHeader(title: "自定义歌单", trailing: "${mockCustomPlaylists.length} 个"),
-        for (final pl in mockCustomPlaylists)
-          _PlaylistRow(
-            name: pl.name,
-            count: pl.count,
-            hue: pl.coverHue,
-            onTap: () => _openPlaylist(context, pl),
-            onMorePressed: () => _showRowActions(context, pl.name),
+        SectionHeader(
+          title: "自定义歌单",
+          trailing: playlistsAsync.value == null
+              ? null
+              : "${playlistsAsync.value!.length} 个",
+        ),
+        // 歌单目录三态
+        playlistsAsync.when(
+          loading: () => const SkeletonListView(rows: 3),
+          error: (e, _) => EmptyState(
+            compact: true,
+            emoji: "⚠️",
+            title: "歌单加载失败",
+            subtitle: "点击重试",
+            action: GlassChip(
+              label: "重试",
+              onTap: () => ref.invalidate(playlistsProvider),
+            ),
           ),
-        SectionHeader(title: "最近播放", trailing: "全部"),
-        for (final track in mockTracks.take(3))
-          SongListTile(
-            track: track,
-            onTap: () => PlayerCardPage.start(context, ref, track),
-            onMorePressed: () => _showTrackActions(context, track.name),
+          data: (playlists) => playlists.isEmpty
+              ? const EmptyState(
+                  compact: true,
+                  emoji: "📂",
+                  title: "还没有歌单",
+                  subtitle: "点右上角 + 创建第一个歌单",
+                )
+              : Column(
+                  children: [
+                    for (final pl in playlists)
+                      _PlaylistRow(
+                        name: pl.name,
+                        count: pl.count,
+                        onTap: () => _openPlaylist(context, pl),
+                        onMorePressed: () =>
+                            _showRowActions(context, ref, pl),
+                      ),
+                  ],
+                ),
+        ),
+        SectionHeader(title: "播放队列", trailing: null),
+        queueAsync.when(
+          loading: () => const SkeletonListView(rows: 2),
+          error: (e, _) => EmptyState(
+            compact: true,
+            emoji: "⚠️",
+            title: "队列加载失败",
+            subtitle: "点击重试",
+            action: GlassChip(
+              label: "重试",
+              onTap: () => ref.invalidate(queueTracksProvider),
+            ),
           ),
+          data: (queue) => queue.isEmpty
+              ? const EmptyState(
+                  compact: true,
+                  emoji: "🎶",
+                  title: "播放队列是空的",
+                  subtitle: "在歌曲菜单中选择「下一首播放 / 稍后听」",
+                )
+              : Column(
+                  children: [
+                    for (final track in queue)
+                      SongListTile(
+                        track: track,
+                        onTap: () => PlayerCardPage.start(context, ref, track),
+                        onMorePressed: () =>
+                            AppToast.show(context, "队列操作在 S4 接入"),
+                      ),
+                  ],
+                ),
+        ),
         // 底部留白缓冲，避免贴住 Dock
         SizedBox(height: t.radiusLg),
       ],
     );
   }
 
-  // 打开歌单详情（mock 阶段直接传 Playlist 对象；S3 改按 id 取数）
+  Future<void> _createPlaylist(BuildContext context, WidgetRef ref) async {
+    final name = await AppDialog.input(
+      context,
+      title: "新建歌单",
+      hint: "歌单名（1~20 字）",
+      validator: (v) =>
+          (v == null || v.trim().isEmpty) ? "歌单名不能为空" : null,
+    );
+    if (name == null || !context.mounted) return;
+    try {
+      await ref.read(playlistsProvider.notifier).create(name.trim());
+      if (context.mounted) AppToast.show(context, "已创建「$name」");
+    } catch (_) {
+      if (context.mounted) AppToast.show(context, "歌单名已存在");
+    }
+  }
+
   void _openPlaylist(BuildContext context, Playlist playlist) {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => PlaylistDetailPage(playlist: playlist)),
     );
   }
 
-  // 列表行长按/更多：底部操作面板（批次 2 起接真实动作）
-  void _showRowActions(BuildContext context, String name) {
+  void _showRowActions(BuildContext context, WidgetRef ref, Playlist pl) {
     AppSheet.show(
       context,
-      title: name,
+      title: pl.name,
       actions: [
         AppSheetAction(
           icon: Icons.edit_outlined,
           label: "重命名",
-          onTap: () => AppToast.show(context, "S3 接真数据后可用"),
+          onTap: () => _renamePlaylist(context, ref, pl),
         ),
         AppSheetAction(
           icon: Icons.delete_outline,
           label: "删除歌单",
           danger: true,
-          onTap: () => AppToast.show(context, "S3 接真数据后可用"),
+          onTap: () => _deletePlaylist(context, ref, pl),
         ),
       ],
     );
   }
 
-  void _showTrackActions(BuildContext context, String name) {
-    AppSheet.show(
+  Future<void> _renamePlaylist(
+    BuildContext context,
+    WidgetRef ref,
+    Playlist pl,
+  ) async {
+    final name = await AppDialog.input(
       context,
-      title: name,
-      actions: [
-        AppSheetAction(
-          icon: Icons.queue_music_outlined,
-          label: "下一首播放",
-          onTap: () => AppToast.show(context, "播放队列在批次 3/4 提供"),
-        ),
-        AppSheetAction(
-          icon: Icons.playlist_add,
-          label: "加入歌单",
-          onTap: () => AppToast.show(context, "S3 接真数据后可用"),
-        ),
-      ],
+      title: "重命名歌单",
+      initial: pl.name,
+      validator: (v) =>
+          (v == null || v.trim().isEmpty) ? "歌单名不能为空" : null,
     );
+    if (name == null || !context.mounted) return;
+    await ref.read(playlistsProvider.notifier).rename(pl.id, name.trim());
+    if (context.mounted) AppToast.show(context, "已重命名");
+  }
+
+  Future<void> _deletePlaylist(
+    BuildContext context,
+    WidgetRef ref,
+    Playlist pl,
+  ) async {
+    final ok = await AppDialog.confirm(
+      context,
+      title: "删除歌单",
+      message: "歌单「${pl.name}」将被删除，歌曲不受影响。",
+      danger: true,
+      confirmText: "删除",
+    );
+    if (!ok || !context.mounted) return;
+    await ref.read(playlistsProvider.notifier).remove(pl.id);
+    if (context.mounted) AppToast.show(context, "已删除");
   }
 }
 
@@ -206,14 +297,12 @@ class _QuickCard extends StatelessWidget {
 class _PlaylistRow extends StatelessWidget {
   final String name;
   final int count;
-  final int? hue;
   final VoidCallback onTap;
   final VoidCallback onMorePressed;
 
   const _PlaylistRow({
     required this.name,
     required this.count,
-    required this.hue,
     required this.onTap,
     required this.onMorePressed,
   });
@@ -231,7 +320,6 @@ class _PlaylistRow extends StatelessWidget {
         child: Row(
           children: [
             CoverPlaceholder(
-              hue: hue,
               text: name,
               size: 54,
               radius: t.radiusMd,
