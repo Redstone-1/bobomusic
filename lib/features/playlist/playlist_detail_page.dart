@@ -21,11 +21,18 @@ import "../player/player_card_page.dart";
 /// 两种数据模式：
 /// - [tracks] 非空：内存注入（热门歌手/合集等外部数据源）
 /// - [tracks] 为空：按 [playlist] 从库取数（我喜欢 → likedTracks；本地 → localTracks；自定义 → items）
+/// [trackCover] = 曲目行统一封面（如歌手歌单共用歌手写真），空则各行用自身封面
 class PlaylistDetailPage extends ConsumerStatefulWidget {
   final Playlist playlist;
   final List<Track>? tracks;
+  final String? trackCover;
 
-  const PlaylistDetailPage({super.key, required this.playlist, this.tracks});
+  const PlaylistDetailPage({
+    super.key,
+    required this.playlist,
+    this.tracks,
+    this.trackCover,
+  });
 
   @override
   ConsumerState<PlaylistDetailPage> createState() => _PlaylistDetailPageState();
@@ -109,6 +116,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
                         for (final track in tracks)
                           SongListTile(
                             track: track,
+                            coverOverride: widget.trackCover,
                             onTap: () =>
                                 PlayerCardPage.start(context, ref, track),
                             onMorePressed: () => AppSheet.show(

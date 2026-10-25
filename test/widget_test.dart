@@ -1,9 +1,12 @@
 import "package:bobomusic/app/app.dart";
 import "package:bobomusic/core/prefs/app_prefs.dart";
 import "package:bobomusic/core/theme/app_palette.dart";
+import "package:bobomusic/core/widgets/song_list_tile.dart";
 import "package:bobomusic/core/widgets/theme_swatch.dart";
 import "package:bobomusic/features/home/home_tab.dart";
 import "package:bobomusic/features/player/mock_playback.dart";
+import "package:bobomusic/features/plaza/singer_list_page.dart";
+import "package:bobomusic/features/playlist/playlist_detail_page.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -128,6 +131,46 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets("广场更多 → 歌手列表 → 歌手详情（对齐 2.7.0）", (WidgetTester tester) async {
+    await tester.pumpWidget(await buildTestApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400)); // 热门歌手资源加载
+
+    await tester.tap(find.text("广场"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // 「更多」→ 歌手列表页（广场头像同名文案在下层路由，用 descendant 限定）
+    await tester.tap(find.text("更多"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    final listPage = find.byType(SingerListPage);
+    expect(listPage, findsOneWidget);
+    expect(
+      find.descendant(of: listPage, matching: find.text("周杰伦")),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: listPage, matching: find.text("柳爽")),
+      findsOneWidget,
+    );
+
+    // 点歌手 → 歌单详情（内存注入曲目，副题回退曲目数「1 首」）
+    await tester.tap(find.descendant(of: listPage, matching: find.text("柳爽")));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text("漠河舞厅"), findsOneWidget);
+    // 曲目行统一用歌手封面（与广场头像同源），不用各行自身封面
+    final detailTiles = find.descendant(
+      of: find.byType(PlaylistDetailPage),
+      matching: find.byType(SongListTile),
+    );
+    expect(
+      tester.widget<SongListTile>(detailTiles).coverOverride,
+      "https://example.com/liushuang.jpg",
+    );
+  });
+
   testWidgets("歌单 CRUD：创建 → 打开空详情 → 删除", (WidgetTester tester) async {
     await tester.pumpWidget(await buildTestApp());
     await tester.pump();
@@ -188,6 +231,11 @@ void main() {
   });
 
   testWidgets("收藏合集闭环：搜索 → 收藏 → 广场展示 → 详情", (WidgetTester tester) async {
+    // 竖屏真机视口：宽松空态下移后，800×600 横向视口的「去搜索」会被底部 Dock 遮挡
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
     await tester.pumpWidget(await buildTestApp());
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));

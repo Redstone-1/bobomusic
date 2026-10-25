@@ -12,9 +12,9 @@ import "../../core/widgets/skeleton.dart";
 import "../../data/models/playlist.dart";
 import "../../data/singers_provider.dart";
 import "../playlist/playlists_provider.dart" show collectionsProvider;
-import "../playlist/playlist_detail_page.dart";
 import "collection_detail_page.dart";
 import "search_page.dart";
+import "singer_list_page.dart";
 
 /// 广场页（对齐原型 renderPlaza）：搜索入口 + 热门歌手 + 收藏合集
 class PlazaPage extends ConsumerWidget {
@@ -36,7 +36,14 @@ class PlazaPage extends ConsumerWidget {
         ),
         // 热门歌手：内置歌手数据（chinese.json），加载中骨架、空/失败整区隐藏
         if (singersAsync.value case final singers? when singers.isNotEmpty) ...[
-          SectionHeader(title: "热门歌手", trailing: "更多"),
+          SectionHeader(
+            title: "热门歌手",
+            trailing: "更多",
+            // 对齐 2.7.0：更多 → 歌手列表页（数据同源已 keepAlive，直接传入零等待）
+            onTrailingTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => SingerListPage(singers: singers)),
+            ),
+          ),
           SizedBox(
             height: 100,
             child: ListView.separated(
@@ -69,6 +76,7 @@ class PlazaPage extends ConsumerWidget {
           data: (collections) => collections.isEmpty
               ? EmptyState(
                   compact: true,
+                  spacious: true,
                   emoji: "🌐",
                   title: "还没有收藏合集",
                   subtitle: "在搜索中收藏喜欢的合集",
@@ -151,22 +159,12 @@ class _SingerAvatar extends StatelessWidget {
     final t = AuroraTokens.of(context);
     return ScaleTap(
       pressedScale: 0.94,
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => PlaylistDetailPage(
-            playlist: Playlist(
-              id: "singer:${singer.id}",
-              name: singer.name,
-              type: PlaylistType.custom,
-            ),
-            tracks: singer.tracks,
-          ),
-        ),
-      ),
+      onTap: () => openSingerDetail(context, singer),
       child: Column(
         children: [
+          // 头像用歌手条目级写真（对齐 2.7.0），缺失回退首曲封面
           CoverPlaceholder(
-            cover: singer.tracks.firstOrNull?.cover,
+            cover: singer.cover ?? singer.tracks.firstOrNull?.cover,
             text: singer.name,
             size: 74,
             radius: 37,

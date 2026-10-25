@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 
 import "../theme/aurora_tokens.dart";
+import "scale_tap.dart";
 
 /// 页面大标题（原型 .rowhead h1：28~30px 特粗 + 负字距；次级说明在其下）
 class PageHeader extends StatelessWidget {
@@ -52,11 +53,18 @@ class PageHeader extends StatelessWidget {
 }
 
 /// 区块标题行（原型 .sect：左标题 + 右说明）
+/// [onTrailingTap] 非空时右侧说明可点（如「更多」→ 次级页），带按压缩放反馈
 class SectionHeader extends StatelessWidget {
   final String title;
   final String? trailing;
+  final VoidCallback? onTrailingTap;
 
-  const SectionHeader({super.key, required this.title, this.trailing});
+  const SectionHeader({
+    super.key,
+    required this.title,
+    this.trailing,
+    this.onTrailingTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -79,9 +87,14 @@ class SectionHeader extends StatelessWidget {
             ),
           ),
           if (trailing != null)
-            Text(
-              trailing!,
-              style: TextStyle(fontSize: 12, color: t.fgDim),
+            ScaleTap(
+              // 纯说明文案（计数等）不可点时保持原样，不包手势
+              onTap: onTrailingTap,
+              pressedScale: 0.9,
+              child: Text(
+                trailing!,
+                style: TextStyle(fontSize: 12, color: t.fgDim),
+              ),
             ),
         ],
       ),

@@ -12,12 +12,16 @@ class SingerEntry {
   final String id;
   final String name;
   final String desc;
+
+  /// 歌手写真封面（条目级 cover，旧版 2.7.0 广场头像同源）；缺失回退首曲封面
+  final String? cover;
   final List<Track> tracks;
 
   const SingerEntry({
     required this.id,
     required this.name,
     required this.desc,
+    this.cover,
     required this.tracks,
   });
 
@@ -25,6 +29,7 @@ class SingerEntry {
         id: json["id"] as String,
         name: json["name"] as String,
         desc: (json["desc"] ?? "") as String,
+        cover: json["cover"] as String?,
         tracks: [
           for (final m in (json["musicList"] as List? ?? []))
             Track(

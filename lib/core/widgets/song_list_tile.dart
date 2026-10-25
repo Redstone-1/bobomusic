@@ -9,12 +9,14 @@ import "origin_tag.dart";
 /// 歌曲行（原型 .songrow）
 /// [playing] = 当前曲目高亮（§3.4-3：按曲目身份全局判定，由调用方传入）
 /// [showOriginTag] 控制音源标签显隐（D11）
+/// [coverOverride] 统一封面（歌手歌单等场景整列表共用一张封面），空则用曲目自身封面
 class SongListTile extends StatelessWidget {
   final Track track;
   final bool playing;
   final VoidCallback? onTap;
   final VoidCallback? onMorePressed;
   final bool showOriginTag;
+  final String? coverOverride;
 
   const SongListTile({
     super.key,
@@ -23,6 +25,7 @@ class SongListTile extends StatelessWidget {
     this.onTap,
     this.onMorePressed,
     this.showOriginTag = true,
+    this.coverOverride,
   });
 
   @override
@@ -39,7 +42,7 @@ class SongListTile extends StatelessWidget {
         child: Row(
           children: [
             CoverPlaceholder(
-              cover: track.cover,
+              cover: coverOverride ?? track.cover,
               hue: track.coverHue,
               text: track.name,
               size: 48,

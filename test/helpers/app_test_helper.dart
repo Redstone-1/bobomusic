@@ -94,7 +94,7 @@ final _mockSingers = [
       origin: models.OriginType.bili,
     ),
   ]),
-  SingerEntry(id: "s2", name: "柳爽", desc: "", tracks: const [
+  SingerEntry(id: "s2", name: "柳爽", desc: "", cover: "https://example.com/liushuang.jpg", tracks: const [
     models.Track(
       id: "s2_t1",
       name: "漠河舞厅",
