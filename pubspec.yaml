@@ -13,7 +13,7 @@ dependencies:
   flutter:
     sdk: flutter
 
-  cupertino_icons: ^1.0.6
+  cupertino_icons: ^2.0.0
 
   # 状态管理（D8：Riverpod 3 + codegen）
   flutter_riverpod: ^3.4.0
@@ -24,7 +24,7 @@ dependencies:
   crypto: ^3.0.6
 
   # 播放内核（S4 接入；桌面解码后端为 media_kit）
-  just_audio: ^0.9.39
+  just_audio: ^0.10.6
   audio_service: ^0.18.13
   media_kit_libs_linux: ^1.1.3
   media_kit_libs_windows_audio: ^1.0.9
@@ -37,16 +37,19 @@ dependencies:
   path_provider: ^2.1.5
   path: ^1.9.0
   flutter_cache_manager: ^3.4.0
-  cached_network_image: ^3.4.0
+  cached_network_image: ^4.0.4
 
   # 系统能力与信息
-  permission_handler: ^11.3.1
+  # permission_handler 钉 12.x：13.x 的 Android 子包要求 compileSdk 37，超出 Flutter 3.47 工具链矩阵
+  permission_handler: ^12.0.0
   url_launcher: ^6.3.1
-  package_info_plus: ^8.0.2
-  device_info_plus: ^11.2.0
-  window_manager: ^0.4.2
-  file_picker: ^8.1.2
-  share_plus: ^10.1.2
+  package_info_plus: ^10.2.2
+  device_info_plus: ^13.3.0
+  window_manager: ^0.5.2
+  file_picker: ^13.2.0
+  # share_plus 钉 13.1.x：13.2.0 起迁移 AGP 内置 Kotlin，其 KGP 回退路径在 AGP 9 宿主下编译丢类；
+  # 而 12.x 依赖 win32 5.x 与 plus 家族 13 线（win32 6.x）互斥，故锁 13.0~13.1 窗口
+  share_plus: ">=13.0.0 <13.2.0"
 
   # 本地音乐元数据读取（S3 本地扫描用，§8 未单列）
   audio_metadata_reader: ^1.1.0
@@ -54,7 +57,7 @@ dependencies:
   # UI
   bot_toast: ^4.1.3
   flutter_svg: ^2.0.17
-  flutter_lyric: ^2.0.4+6
+  flutter_lyric: ^4.1.0
   markdown_widget: ^2.2.0
   uuid: ^4.3.3
 
@@ -62,8 +65,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
-  flutter_lints: ^3.0.0
-  flutter_launcher_icons: ^0.13.1
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
   # Riverpod codegen 工具链（lint 走 Dart 3.10+ 新 analyzer 插件系统，无需 custom_lint）
   build_runner: ^2.4.13
