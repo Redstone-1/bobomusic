@@ -54,6 +54,12 @@ class DownloadService {
   );
 
   Future<DownloadResult> download(Track track) async {
+    // 先入库：搜索/广场条目可能尚未落库，否则 markDownloaded 会更新 0 行
+    try {
+      await TrackRepository().upsert(track);
+    } catch (e) {
+      print("下载前入库失败 [${track.id}]：$e");
+    }
     // 已是本地可播文件（本地扫描/上次下载）
     final localPath = track.localPath;
     if (localPath != null && localPath.isNotEmpty) {
@@ -113,10 +119,19 @@ class DownloadService {
       await TrackRepository().markDownloaded(track.id, target.path);
 
       // iOS 不能写公共下载目录：保存到文档目录后调起分享面板导出
+      // 导出失败不影响“已下载”结论（文件仍在文档目录）
       if (override?.exportFile != null) {
-        await override!.exportFile!(target);
+        try {
+          await override!.exportFile!(target);
+        } catch (e) {
+          print("导出文件失败：$e");
+        }
       } else if (Platform.isIOS) {
-        await _export(target);
+        try {
+          await _export(target);
+        } catch (e) {
+          print("导出文件失败：$e");
+        }
       }
       return DownloadResult(
         DownloadStatus.done,

@@ -336,6 +336,41 @@ void main() {
     expect(engine.loads.single.source.url, file.path);
   });
 
+  test("已下载曲目：localPath 不存在于旧 Track 时回库补查并本地播放", () async {
+    final file = File(
+      "${Directory.systemTemp.path}/bobo_local_db_${DateTime.now().microsecondsSinceEpoch}.m4a",
+    )..writeAsStringSync("audio");
+    addTearDown(() {
+      if (file.existsSync()) file.deleteSync();
+    });
+    // 库内登记下载路径；播放对象仍是“下载前”的旧 Track（无 localPath）
+    await TrackRepository().upsert(
+      Track(
+        id: "bili:downloaded_db",
+        name: "已下载",
+        author: "歌手",
+        duration: 200,
+        origin: OriginType.bili,
+        localPath: file.path,
+      ),
+    );
+    playbackDepsTestOverride = PlaybackDeps(engine: engine);
+
+    await pb().play(
+      Track(
+        id: "bili:downloaded_db",
+        name: "已下载",
+        author: "歌手",
+        duration: 200,
+        origin: OriginType.bili,
+      ),
+    );
+    await flush();
+
+    expect(engine.loads.single.source.isLocal, isTrue);
+    expect(engine.loads.single.source.url, file.path);
+  });
+
   test("酷我曲目：取流走 kuwoApi（不碰 B 站）", () async {
     final old = data.kuwoApi;
     addTearDown(() => data.kuwoApi = old);

@@ -52,6 +52,17 @@ void main() {
         origin: OriginType.bili,
       );
 
+  test("搜索曲未入库也可下载：先 upsert 再登记 localPath", () async {
+    final track = t("bili:not_in_db");
+    // 故意不预先 upsert
+    final result = await downloadService.download(track);
+
+    expect(result.status, DownloadStatus.done);
+    final stored = await TrackRepository().getById(track.id);
+    expect(stored, isNotNull);
+    expect(stored?.localPath, result.path);
+  });
+
   test("下载在线曲：写入目标目录并登记 localPath（离线标记）", () async {
     final track = t("bili:1_BV1_2");
     await TrackRepository().upsert(track);

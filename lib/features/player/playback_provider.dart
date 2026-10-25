@@ -391,7 +391,16 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
   Future<PlaySource> _resolveSource(Track track) async {
     final override = playbackDepsTestOverride?.resolveSource;
     if (override != null) return override(track);
-    final localPath = track.localPath;
+    var localPath = track.localPath;
+    // 列表可能持旧 Track（下载前对象无 localPath）：回库补查，保证离线可播
+    if (localPath == null || localPath.isEmpty) {
+      try {
+        final stored = await TrackRepository().getById(track.id);
+        localPath = stored?.localPath;
+      } catch (_) {
+        // 查库失败按在线处理
+      }
+    }
     if (localPath != null && localPath.isNotEmpty) {
       try {
         if (File(localPath).existsSync()) {
