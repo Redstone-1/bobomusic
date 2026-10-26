@@ -7,7 +7,8 @@ import "../../core/widgets/aurora_background.dart";
 import "../../core/widgets/back_link.dart";
 import "../../core/widgets/page_header.dart";
 
-/// 帮助 / 声明 / 鸣谢：渲染 assets/markdown 下的静态文档（markdown_widget）
+/// 帮助：渲染 assets/markdown 下的长文档（markdown_widget）
+/// 声明/鸣谢使用独立信息页（info_pages.dart），不走通用 Markdown
 class DocPage extends StatelessWidget {
   final String title;
   final String asset;

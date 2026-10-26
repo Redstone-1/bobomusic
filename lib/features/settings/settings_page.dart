@@ -17,6 +17,7 @@ import "../player/playback_provider.dart";
 import "../player/range_proxy_source.dart";
 import "../player/sleep_timer_sheet.dart";
 import "doc_page.dart";
+import "info_pages.dart";
 import "settings_info.dart";
 import "update_checker.dart";
 
@@ -140,15 +141,17 @@ class SettingsPage extends ConsumerWidget {
                 icon: Icons.description_outlined,
                 title: "声明",
                 trailing: Icon(Icons.chevron_right, size: 20, color: t.fgMute),
-                onTap: () =>
-                    _openDoc(context, "声明与限制", "assets/markdown/limit.md"),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const DeclarationPage()),
+                ),
               ),
               _SettingRow(
                 icon: Icons.volunteer_activism_outlined,
                 title: "鸣谢",
                 trailing: Icon(Icons.chevron_right, size: 20, color: t.fgMute),
-                onTap: () =>
-                    _openDoc(context, "鸣谢", "assets/markdown/thanks.md"),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ThanksPage()),
+                ),
               ),
             ],
           ),
