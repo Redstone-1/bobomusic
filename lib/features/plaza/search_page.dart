@@ -15,7 +15,6 @@ import "../../core/widgets/skeleton.dart";
 import "../../core/widgets/song_list_tile.dart";
 import "../../data/models/track.dart";
 import "../../data/mappers.dart";
-import "../../data/music_source.dart";
 import "../../data/origin_service.dart";
 import "../../data/repositories/playlist_repository.dart";
 import "../../data/repositories/queue_repository.dart";
@@ -31,7 +30,16 @@ import "../playlist/playlist_detail_page.dart";
 import "../playlist/playlists_provider.dart"
     show collectionsProvider, queueTracksProvider;
 
-/// 搜索页（S3.3 接 BiliApi 真搜索）：单曲/多P歌单结果 + 三态
+/// 搜索音源（默认 B 站；仅本页生效，不再写全局设置）
+enum _SearchSource {
+  bili("B 站"),
+  kuwo("酷我");
+
+  final String label;
+  const _SearchSource(this.label);
+}
+
+/// 搜索页（S3.3 接真搜索）：单曲/多P歌单结果 + 三态
 /// 防抖 300ms；结果不入库（点歌/收藏动作才落库）
 class SearchPage extends ConsumerStatefulWidget {
   const SearchPage({super.key});
@@ -47,6 +55,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   Object? _error;
   String _query = "";
   List<SearchItem> _results = [];
+  _SearchSource _source = _SearchSource.bili;
 
   @override
   void initState() {
@@ -67,10 +76,26 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     _query = q;
     _debounce?.cancel();
     if (q.isEmpty) {
-      setState(() {});
+      setState(() {
+        _results = [];
+        _loading = false;
+        _error = null;
+      });
       return;
     }
     _debounce = Timer(const Duration(milliseconds: 300), () => _search(q));
+  }
+
+  /// 切换音源：清空旧结果并立即重搜当前关键词（默认 B 站）
+  void _setSource(_SearchSource source) {
+    if (_source == source) return;
+    setState(() {
+      _source = source;
+      _results = [];
+      _error = null;
+    });
+    final q = _controller.text.trim();
+    if (q.isNotEmpty) _search(q);
   }
 
   Future<void> _search(String q) async {
@@ -79,9 +104,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       _error = null;
     });
     try {
-      // 默认音源由设置决定（D11）；B 站/酷我共用 OriginService 契约
-      final api =
-          ref.read(musicSourceProvider) == MusicSource.kuwo ? kuwoApi : biliApi;
+      // 本页音源选择（默认 B 站）；B 站/酷我共用 OriginService 契约
+      final api = _source == _SearchSource.kuwo ? kuwoApi : biliApi;
       final resp = await api.search(SearchParams(keyword: q, page: 1));
       if (!mounted) return;
       setState(() {
@@ -214,6 +238,25 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                           borderSide: BorderSide(color: t.primary),
                         ),
                       ),
+                    ),
+                    // 音源选择（默认 B 站；本页切换，不写全局设置）
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Text(
+                          "音源",
+                          style: TextStyle(fontSize: 12, color: t.fgDim),
+                        ),
+                        const SizedBox(width: 10),
+                        for (final source in _SearchSource.values) ...[
+                          GlassChip(
+                            label: source.label,
+                            selected: _source == source,
+                            onTap: () => _setSource(source),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                      ],
                     ),
                     // 加载骨架留在列表流（贴搜索框下方）；空/失败/无结果走覆盖层
                     if (_controller.text.trim().isNotEmpty && _loading)

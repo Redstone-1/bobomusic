@@ -284,10 +284,8 @@ void main() {
     expect(find.text("没有找到相关的内容"), findsNothing);
   });
 
-  testWidgets("默认音源酷我：搜索走酷我结果", (WidgetTester tester) async {
-    await tester.pumpWidget(
-      await buildTestApp(prefs: {"music_source": "kuwo"}),
-    );
+  testWidgets("搜索页切换酷我音源：结果来自酷我", (WidgetTester tester) async {
+    await tester.pumpWidget(await buildTestApp());
     await tester.pump();
 
     await tester.tap(find.text("广场"));
@@ -296,12 +294,15 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
+    // 默认 B 站；改为酷我后重搜
+    await tester.tap(find.text("酷我"));
+    await tester.pump();
     await tester.enterText(find.byType(TextField), "夜");
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
 
     expect(find.text("酷我夜曲"), findsOneWidget);
-    expect(find.text("夜航西飞"), findsNothing); // 默认音源为酷我时不走 B 站
+    expect(find.text("夜航西飞"), findsNothing); // 切到酷我后不走 B 站
   });
 
   testWidgets("收藏合集闭环：搜索 → 收藏 → 广场展示 → 详情", (WidgetTester tester) async {
