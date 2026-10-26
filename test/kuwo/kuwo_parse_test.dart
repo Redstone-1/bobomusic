@@ -106,4 +106,62 @@ void main() {
   test("SDK OriginType 已扩展 kuwo，且按 value 桥接", () {
     expect(OriginType.getByValue("kuwo"), OriginType.kuwo);
   });
+
+  group("parseKuwoRankHtml", () {
+    test("官方榜单 SSR：可见歌名/歌手 + musicList 的 rid/封面/时长", () {
+      const html = '''
+        <p class="song_name" data-v>夜曲</p><p class="artist" data-v>周杰伦</p>
+        <p class="song_name" data-v>七里香</p><p class="artist" data-v>周杰伦</p>
+        "bang/index/bangList":[{leader:"酷我热歌榜",musicList:[
+          {musicrid:"MUSIC_143849264",artist:"周杰伦",pic120:"https:\\\\u002F\\\\u002Fimg.example\\\\u002Fa.jpg",duration:227,payInfo:{x:"y"}},
+          {musicrid:456,artist:"周杰伦",pic120:"https:\\\\u002F\\\\u002Fimg.example\\\\u002Fb.jpg",duration:240}
+        ]}]
+      ''';
+      final items = parseKuwoRankHtml(html);
+      expect(items, hasLength(2));
+      expect(items[0].id, "kuwo:143849264");
+      expect(items[0].name, "夜曲");
+      expect(items[0].author, "周杰伦");
+      expect(items[0].cover, "https://img.example/a.jpg");
+      expect(items[0].duration, 227);
+      expect(items[1].id, "kuwo:456");
+      expect(items[1].name, "七里香");
+    });
+
+    test("没有榜单数据返回空列表", () {
+      expect(parseKuwoRankHtml("<html>no rank</html>"), isEmpty);
+    });
+
+    test("可见榜单标题：歌名/歌手成对解析", () {
+      const html = '''
+        <p class="song_name" data-v>山风山风等等我</p>
+        <p class="artist" data-v>万海东</p>
+        <p class="song_name" data-v>人生路漫漫</p>
+        <p class="artist" data-v>白小白</p>
+      ''';
+      final titles = parseKuwoRankTitles(html);
+      expect(titles, hasLength(2));
+      expect(titles[0].name, "山风山风等等我");
+      expect(titles[0].artist, "万海东");
+    });
+
+    test("搜索结果匹配：拒绝错歌手，接受同歌手版本", () {
+      const title = KuwoRankTitle(name: "山风山风等等我", artist: "万海东");
+      final wrong = _hotItem("1", "山风山风等等我", "别的歌手");
+      final right = _hotItem("2", "山风山风等等我 (DJ沈念版)", "万海东");
+      expect(pickKuwoRankItem([wrong, right], title)?.id, "kuwo:2");
+      expect(pickKuwoRankItem([wrong], title), isNull);
+    });
+  });
 }
+
+SearchItem _hotItem(String id, String name, String artist) => SearchItem(
+      id: "kuwo:$id",
+      cover: "",
+      name: name,
+      duration: 200,
+      author: artist,
+      origin: OriginType.kuwo,
+      isSeasonDisplay: false,
+      type: SearchType.music,
+    );

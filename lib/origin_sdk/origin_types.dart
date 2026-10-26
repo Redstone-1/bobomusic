@@ -87,6 +87,19 @@ class SearchItem {
   });
 }
 
+/// 酷我官方热榜条目：标题/歌手来自榜单页，item 为 SSR 或兜底搜索解析出的可播条目
+class KuwoHotHit {
+  final String name;
+  final String artist;
+  final SearchItem? item;
+
+  const KuwoHotHit({
+    required this.name,
+    required this.artist,
+    this.item,
+  });
+}
+
 class UgcSeason {
   final int mid;
   final int seasonId;
@@ -273,4 +286,7 @@ abstract class OriginService {
 
   /// 歌曲详情
   Future<MusicUrl> getMusicUrl(String id);
+
+  /// 热门歌曲（可选能力；默认无数据，酷我实现真实榜单）
+  Future<List<SearchItem>> hotSongs() async => const [];
 }

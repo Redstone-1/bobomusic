@@ -13,6 +13,7 @@ import "../../core/theme/theme_providers.dart";
 import "../../core/widgets/glass_card.dart";
 import "../../core/widgets/page_header.dart";
 import "../../core/widgets/theme_swatch.dart";
+import "../download/downloads_page.dart";
 import "../player/playback_provider.dart";
 import "../player/range_proxy_source.dart";
 import "../player/sleep_timer_sheet.dart";
@@ -101,6 +102,15 @@ class SettingsPage extends ConsumerWidget {
                 // Gallery 隐藏入口（S1.5）：长按版本行进入组件演示页
                 onLongPress: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const DesignSystemDemo()),
+                ),
+              ),
+              _SettingRow(
+                icon: Icons.download_outlined,
+                title: "下载管理",
+                subtitle: "已下载与下载中的任务",
+                trailing: Icon(Icons.chevron_right, size: 20, color: t.fgMute),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const DownloadsPage()),
                 ),
               ),
               _SettingRow(

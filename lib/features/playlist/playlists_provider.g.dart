@@ -170,6 +170,45 @@ final class QueueTracksProvider extends $FunctionalProvider<
 
 String _$queueTracksHash() => r'6a7f37c551c6edebcd633fcb8112ae550d073e0d';
 
+/// 最近播放（歌单页；切歌后由页面 invalidate）
+
+@ProviderFor(recentTracks)
+final recentTracksProvider = RecentTracksProvider._();
+
+/// 最近播放（歌单页；切歌后由页面 invalidate）
+
+final class RecentTracksProvider extends $FunctionalProvider<
+        AsyncValue<List<Track>>, List<Track>, FutureOr<List<Track>>>
+    with $FutureModifier<List<Track>>, $FutureProvider<List<Track>> {
+  /// 最近播放（歌单页；切歌后由页面 invalidate）
+  RecentTracksProvider._()
+      : super(
+          from: null,
+          argument: null,
+          retry: null,
+          name: r'recentTracksProvider',
+          isAutoDispose: true,
+          dependencies: null,
+          $allTransitiveDependencies: null,
+        );
+
+  @override
+  String debugGetCreateSourceHash() => _$recentTracksHash();
+
+  @$internal
+  @override
+  $FutureProviderElement<List<Track>> $createElement(
+          $ProviderPointer pointer) =>
+      $FutureProviderElement(pointer);
+
+  @override
+  FutureOr<List<Track>> create(Ref ref) {
+    return recentTracks(ref);
+  }
+}
+
+String _$recentTracksHash() => r'465003af082af60cf7634e75490590d06bff0236';
+
 /// 歌单/我喜欢/本地音乐详情曲目（family 按Playlist 取数）
 
 @ProviderFor(playlistDetailTracks)

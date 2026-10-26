@@ -4,7 +4,6 @@ import "package:bobomusic/data/db/app_database.dart";
 import "package:bobomusic/data/models/track.dart" as models;
 import "package:bobomusic/data/origin_service.dart";
 import "package:bobomusic/data/repositories/track_repository.dart";
-import "package:bobomusic/data/singers_provider.dart";
 import "package:bobomusic/features/player/audio_engine.dart";
 import "package:bobomusic/features/player/playback_provider.dart";
 import "package:bobomusic/origin_sdk/bili/types.dart" as bili;
@@ -74,6 +73,9 @@ class FakeBiliApi implements sdk.OriginService {
   Future<List<sdk.SearchSuggestItem>> searchSuggest(String keyword) async => [];
 
   @override
+  Future<List<sdk.SearchItem>> hotSongs() async => const [];
+
+  @override
   Future<sdk.SearchItem> searchDetail(String id) async =>
       throw UnimplementedError();
 
@@ -110,6 +112,20 @@ class FakeKuwoApi implements sdk.OriginService {
       const [];
 
   @override
+  Future<List<sdk.SearchItem>> hotSongs() async => [
+        const sdk.SearchItem(
+          id: "kuwo:hot_1",
+          cover: "",
+          name: "酷我热歌",
+          duration: 200,
+          author: "酷我歌手",
+          origin: sdk.OriginType.kuwo,
+          isSeasonDisplay: false,
+          type: sdk.SearchType.music,
+        ),
+      ];
+
+  @override
   Future<sdk.SearchItem> searchDetail(String id) async =>
       throw UnimplementedError();
 
@@ -117,35 +133,6 @@ class FakeKuwoApi implements sdk.OriginService {
   Future<sdk.MusicUrl> getMusicUrl(String id) async =>
       sdk.MusicUrl(url: "https://kuwo.example/999.mp3");
 }
-
-/// 测试用热门歌手（与真实 chinese.json 同构）
-final _mockSingers = [
-  SingerEntry(id: "s1", name: "周杰伦", desc: "", tracks: const [
-    models.Track(
-      id: "s1_t1",
-      name: "夜曲-周杰伦",
-      author: "无损音乐合集",
-      duration: 227,
-      origin: models.OriginType.bili,
-    ),
-    models.Track(
-      id: "s1_t2",
-      name: "七里香",
-      author: "无损音乐合集",
-      duration: 240,
-      origin: models.OriginType.bili,
-    ),
-  ]),
-  SingerEntry(id: "s2", name: "柳爽", desc: "", cover: "https://example.com/liushuang.jpg", tracks: const [
-    models.Track(
-      id: "s2_t1",
-      name: "漠河舞厅",
-      author: "柳爽",
-      duration: 311,
-      origin: models.OriginType.bili,
-    ),
-  ]),
-];
 
 /// 测试用歌词服务：返回固定 LRC，避免真实网络；保留播放卡歌词视图断言用行
 class FakeLyricService implements LyricService {
@@ -190,7 +177,6 @@ Future<Widget> buildTestApp({
   biliApi = FakeBiliApi();
   kuwoApi = FakeKuwoApi();
   lyricService = FakeLyricService();
-  hotSingersTestOverride = _mockSingers;
   fakePlaybackEngine = FakeEngine();
   playbackDepsTestOverride = PlaybackDeps(
     engine: fakePlaybackEngine!,

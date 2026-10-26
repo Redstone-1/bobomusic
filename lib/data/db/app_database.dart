@@ -11,7 +11,7 @@ late Database appDb;
 Future<void> initAppDatabase({String? path}) async {
   appDb = await openDatabase(
     path ?? "bobomusic3.db",
-    version: 2,
+    version: 3,
     singleInstance: false,
     onConfigure: (db) async {
       // 级联删除依赖外键开关（sqflite 默认关闭）
@@ -23,11 +23,20 @@ Future<void> initAppDatabase({String? path}) async {
 }
 
 /// v1 → v2：歌词时间校准偏移（S4.4 手动校准需要跨启动保留）
+/// v2 → v3：播放历史（歌单页「最近播放」，track_id 主键保证同曲只留最新一条）
 Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
   if (oldVersion < 2) {
     await db.execute(
       "ALTER TABLE tracks ADD COLUMN lyric_offset INTEGER NOT NULL DEFAULT 0",
     );
+  }
+  if (oldVersion < 3) {
+    await db.execute("""
+      CREATE TABLE play_history (
+        track_id TEXT PRIMARY KEY REFERENCES tracks(id) ON DELETE CASCADE,
+        played_at INTEGER NOT NULL
+      )
+    """);
   }
 }
 
@@ -74,6 +83,12 @@ Future<void> _onCreate(Database db, int _) async {
       track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
       position INTEGER NOT NULL,
       added_at INTEGER NOT NULL
+    )
+  """);
+  await db.execute("""
+    CREATE TABLE play_history (
+      track_id TEXT PRIMARY KEY REFERENCES tracks(id) ON DELETE CASCADE,
+      played_at INTEGER NOT NULL
     )
   """);
 }

@@ -67,6 +67,11 @@ void main() {
       final got = await tracks.getById("local:x");
       expect(got?.localPath, "/sdcard/a.m4a");
       expect(got?.lyric, "[00:01.00]测试");
+      expect((await tracks.downloadedTracks()).map((e) => e.id), ["local:x"]);
+
+      await tracks.clearDownloaded("local:x");
+      expect(await tracks.downloadedTracks(), isEmpty);
+      expect((await tracks.getById("local:x"))?.localPath, isNull);
     });
 
     test("歌词校准偏移：写读一致、upsert 保留、换歌词归零", () async {

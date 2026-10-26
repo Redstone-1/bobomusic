@@ -233,6 +233,26 @@ class TrackRepository {
     );
   }
 
+  /// 已下载曲目（本地文件存在性由 UI 播放时再校验；按下载时间倒序）
+  Future<List<Track>> downloadedTracks() async {
+    final rows = await db.query(
+      "tracks",
+      where: "downloaded_at IS NOT NULL AND local_path IS NOT NULL",
+      orderBy: "downloaded_at DESC",
+    );
+    return [for (final r in rows) _fromRow(r)];
+  }
+
+  /// 取消下载标记（删除文件由调用方负责；不影响喜欢/歌词/歌单引用）
+  Future<void> clearDownloaded(String id) async {
+    await db.update(
+      "tracks",
+      {"local_path": null, "downloaded_at": null},
+      where: "id = ?",
+      whereArgs: [id],
+    );
+  }
+
   Future<void> delete(String id) async =>
       db.delete("tracks", where: "id = ?", whereArgs: [id]);
 }

@@ -47,7 +47,7 @@ final class LyricControllerProvider
   }
 }
 
-String _$lyricControllerHash() => r'a08995d8345a8453ecd5d4b48f6044fc2b435846';
+String _$lyricControllerHash() => r'c6b2634235559cd157e6189959dc4c029635b772';
 
 /// 歌词控制器（keepAlive）：自动匹配 / 手动搜索替换 / 校准 / 删除
 /// 歌词属于曲目（tracks.lyric），写库后所有歌单共享（§3.4-7）

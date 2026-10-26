@@ -7,6 +7,7 @@ import "package:riverpod_annotation/riverpod_annotation.dart";
 import "../../core/prefs/app_prefs.dart";
 import "../../data/models/track.dart";
 import "../../data/origin_service.dart";
+import "../../data/repositories/history_repository.dart";
 import "../../data/repositories/queue_repository.dart";
 import "../../data/repositories/track_repository.dart";
 import "../../origin_sdk/bili/bili_api_error.dart";
@@ -355,6 +356,20 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     }
   }
 
+  /// 播放历史：曲目先确保入库（外键约束），同一曲目只保留最新一条。
+  /// 返回 (recorded, previousMs)：recorded=是否成功写入；
+  /// previousMs=写入前的旧时间戳，装载失败时用它回滚（失败播放不留「最近播放」）
+  Future<({bool recorded, int? previousMs})> _recordHistory(Track track) async {
+    try {
+      await TrackRepository().upsert(track);
+      final previousMs = await HistoryRepository().record(track.id);
+      return (recorded: true, previousMs: previousMs);
+    } catch (e) {
+      print("记录播放历史失败：$e");
+      return (recorded: false, previousMs: null);
+    }
+  }
+
   Future<void> _load(
     List<Track> queue,
     int index, {
@@ -362,6 +377,10 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     Duration? initialPosition,
   }) async {
     final track = queue[index];
+    // 先记录历史再切 state：歌单页监听 track 变化后立即查询也能拿到最新记录；
+    // 记下旧时间戳，装载失败时回滚，失败播放不留「最近播放」
+    final history = await _recordHistory(track);
+    if (!ref.mounted) return;
     state = state.copyWith(
       track: track,
       queue: queue,
@@ -387,6 +406,14 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       // 避免播放器启动后、下个去抖周期前被杀导致“已出队但快照仍是旧曲”
       _persistNow();
     } catch (e) {
+      // 回滚乐观写入的播放历史（recorded=false 时没写过，无需回滚）
+      if (history.recorded) {
+        try {
+          await HistoryRepository().restore(track.id, history.previousMs);
+        } catch (err) {
+          print("回滚播放历史失败：$err");
+        }
+      }
       if (!ref.mounted) return;
       // 装载失败：类型化错误上抛到 state（UI 提示），不静默挂死（§5.1-2）
       print("播放装载失败 [${track.id}] $e");

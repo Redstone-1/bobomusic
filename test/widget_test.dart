@@ -3,12 +3,10 @@ import "package:bobomusic/core/prefs/app_prefs.dart";
 import "package:bobomusic/core/theme/app_palette.dart";
 import "package:bobomusic/data/local_audio_scanner.dart";
 import "package:bobomusic/data/models/track.dart";
-import "package:bobomusic/core/widgets/song_list_tile.dart";
+import "package:bobomusic/core/widgets/eq_bars.dart";
 import "package:bobomusic/core/widgets/theme_swatch.dart";
 import "package:bobomusic/features/home/home_tab.dart";
 import "package:bobomusic/features/player/playback_provider.dart";
-import "package:bobomusic/features/plaza/singer_list_page.dart";
-import "package:bobomusic/features/playlist/playlist_detail_page.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -59,73 +57,70 @@ void main() {
     expect(find.text("本地音乐"), findsOneWidget);
     expect(find.text("我喜欢的音乐"), findsOneWidget);
     expect(find.text("还没有歌单"), findsOneWidget); // 空库 → 分区空态
-    expect(find.text("播放队列是空的"), findsOneWidget);
+    expect(find.text("还没有播放记录"), findsOneWidget);
   });
 
-  testWidgets("点歌曲只开播（迷你条在场），点迷你条才弹播放卡", (WidgetTester tester) async {
+  testWidgets("歌单页下载入口 → 下载管理空态", (WidgetTester tester) async {
     await tester.pumpWidget(await buildTestApp());
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400)); // 热门歌手资源加载
+
+    await tester.tap(find.byKey(const Key("downloads_entry")));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text("下载管理"), findsOneWidget);
+    expect(find.text("还没有下载"), findsOneWidget);
+    expect(find.text("下载中 0"), findsOneWidget);
+  });
+
+  testWidgets("点热歌只开播（迷你条在场），点迷你条才弹播放卡", (WidgetTester tester) async {
+    await tester.pumpWidget(await buildTestApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500)); // 酷我热歌加载
     final container = ProviderScope.containerOf(
       tester.element(find.byType(App)),
     );
-    const firstSingerTrackId = "s1_t1"; // mock 歌手周杰伦首曲
 
-    // 广场 → 热门歌手（chinese.json）→ 歌手详情
+    // 广场 → 酷我热歌榜主卡 → 只开播
     await tester.tap(find.text("广场"));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.text("周杰伦"));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text("立即播放"));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
 
-    // 详情第一首 → 只开播，详情页迷你条在场
-    await tester.tap(find.textContaining("夜曲"));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 600));
     expect(find.text("正在播放"), findsNothing); // 播放卡未弹
     expect(find.byKey(const Key("mini_player")), findsOneWidget);
     expect(find.byKey(const Key("mini_prev")), findsOneWidget);
     expect(find.byKey(const Key("mini_next")), findsOneWidget);
+    expect(container.read(playbackProvider).track?.id, "kuwo:hot_1");
     // 单句歌词按播放位置取当前行（6s → 第二行），验证刷新同步
     fakePlaybackEngine!.emitPosition(const Duration(seconds: 6));
     await tester.pump();
     expect(find.text("我们如此短暂地相逢"), findsOneWidget);
     expect(container.read(playbackProvider).playing, isTrue);
 
-    // 点迷你条 → 弹播放卡
+    // 点迷你条 → 弹播放卡；暂停后收起
     await tester.tap(find.byKey(const Key("mini_player")));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text("正在播放"), findsOneWidget);
-
-    // 暂停 → 下一首（会话队列内切到同歌手下一首）
     await tester.tap(find.byKey(const Key("player_play")));
     await tester.pump();
     expect(container.read(playbackProvider).playing, isFalse);
-    await tester.tap(find.byIcon(Icons.skip_next));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400)); // 引擎装载微任务
-    expect(
-      container.read(playbackProvider).track?.id,
-      isNot(firstSingerTrackId),
-    );
 
-    // 收起 → 迷你条仍在
     await tester.tap(find.byKey(const Key("player_close")));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text("正在播放"), findsNothing);
     expect(find.byKey(const Key("mini_player")), findsOneWidget);
 
-    // 切歌自动续播；迷你条播放键可再暂停
-    expect(container.read(playbackProvider).playing, isTrue);
+    // 迷你条播放键可恢复播放
     await tester.tap(find.byKey(const Key("mini_play")));
     await tester.pump();
-    expect(container.read(playbackProvider).playing, isFalse);
+    expect(container.read(playbackProvider).playing, isTrue);
   });
 
-  testWidgets("窄视口（390dp）切广场：合集卡片无溢出（回归）", (WidgetTester tester) async {
+  testWidgets("窄视口（390dp）切广场：热歌区无溢出（回归）", (WidgetTester tester) async {
     // 真机宽度才暴露的溢出（测试默认视口 800 宽不会触发）
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1.0;
@@ -138,47 +133,19 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
+    expect(find.text("热门歌曲"), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets("广场更多 → 歌手列表 → 歌手详情（对齐 2.7.0）", (WidgetTester tester) async {
+  testWidgets("广场热歌未播放：不显示波浪动效", (WidgetTester tester) async {
     await tester.pumpWidget(await buildTestApp());
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400)); // 热门歌手资源加载
-
     await tester.tap(find.text("广场"));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    // 「更多」→ 歌手列表页（广场头像同名文案在下层路由，用 descendant 限定）
-    await tester.tap(find.text("更多"));
-    await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-    final listPage = find.byType(SingerListPage);
-    expect(listPage, findsOneWidget);
-    expect(
-      find.descendant(of: listPage, matching: find.text("周杰伦")),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: listPage, matching: find.text("柳爽")),
-      findsOneWidget,
-    );
 
-    // 点歌手 → 歌单详情（内存注入曲目，副题回退曲目数「1 首」）
-    await tester.tap(find.descendant(of: listPage, matching: find.text("柳爽")));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 600));
-    expect(find.text("漠河舞厅"), findsOneWidget);
-    // 曲目行统一用歌手封面（与广场头像同源），不用各行自身封面
-    final detailTiles = find.descendant(
-      of: find.byType(PlaylistDetailPage),
-      matching: find.byType(SongListTile),
-    );
-    expect(
-      tester.widget<SongListTile>(detailTiles).coverOverride,
-      "https://example.com/liushuang.jpg",
-    );
+    // 未播放时热门歌曲行不能因为 item/current 都是 null 而误判为播放中
+    expect(find.byType(EqBars), findsNothing);
   });
 
   testWidgets("歌单 CRUD：创建 → 打开空详情 → 删除", (WidgetTester tester) async {
@@ -311,66 +278,15 @@ void main() {
     expect(find.text("夜航西飞"), findsNothing); // 切到酷我后不走 B 站
   });
 
-  testWidgets("收藏合集闭环：搜索 → 收藏 → 广场展示 → 详情", (WidgetTester tester) async {
-    // 竖屏真机视口：宽松空态下移后，800×600 横向视口的「去搜索」会被底部 Dock 遮挡
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-
+  testWidgets("播放卡：默认歌词", (WidgetTester tester) async {
     await tester.pumpWidget(await buildTestApp());
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
 
-    // 广场初始空态
+    // 广场 → 酷我热歌主卡开播 → 迷你条 → 播放卡
     await tester.tap(find.text("广场"));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text("还没有收藏合集"), findsOneWidget);
-
-    // 去搜索 → 输入 → 防抖后出结果
-    await tester.tap(find.text("去搜索"));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.enterText(find.byType(TextField), "民谣");
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.pump();
-
-    // 收藏多P歌单结果
-    await tester.tap(find.byIcon(Icons.bookmark_add_outlined));
-    await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-
-    // 返回广场 → 合集卡片在场（折叠线以下，先拖进来）
-    await tester.tap(find.text("返回"));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text("华语民谣·深夜电台"), findsOneWidget);
-    await tester.drag(find.text("热门歌手"), const Offset(0, -600));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    // 点卡片 → 合集详情
-    await tester.tap(find.text("华语民谣·深夜电台"));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text("加入待播放"), findsOneWidget);
-  });
-
-  testWidgets("播放卡：默认歌词与播放队列", (WidgetTester tester) async {
-    await tester.pumpWidget(await buildTestApp());
-    await tester.pump();
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(App)),
-    );
-
-    // 开播并进入播放卡（广场 → 歌手详情 → 第一首 → 迷你条 → 播放卡）
-    await tester.tap(find.text("广场"));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.text("周杰伦"));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 600));
-    await tester.tap(find.textContaining("夜曲"));
+    await tester.tap(find.text("立即播放"));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
     await tester.tap(find.byKey(const Key("mini_player")));
@@ -389,21 +305,6 @@ void main() {
       ),
       findsOneWidget,
     );
-
-    // 打开播放队列 sheet（会话队列 = 歌手歌单 2 首）
-    await tester.tap(find.byKey(const Key("player_queue")));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text("播放队列 · 2 首"), findsOneWidget);
-    // 当前播放曲目也要保留更多按钮（波浪在其左侧，不再替换按钮）
-    expect(find.byIcon(Icons.more_vert), findsNWidgets(2));
-
-    // 点队列中的曲目切歌，sheet 关闭
-    await tester.tap(find.text("七里香"));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(container.read(playbackProvider).track?.name, "七里香");
-    expect(find.text("播放队列 · 2 首"), findsNothing);
   });
 
   testWidgets("默认主题色为青绿色（natureGreen）", (WidgetTester tester) async {

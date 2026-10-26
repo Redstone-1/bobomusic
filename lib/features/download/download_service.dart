@@ -53,7 +53,10 @@ class DownloadService {
     ),
   );
 
-  Future<DownloadResult> download(Track track) async {
+  Future<DownloadResult> download(
+    Track track, {
+    void Function(double progress)? onProgress,
+  }) async {
     // 先入库：搜索/广场条目可能尚未落库，否则 markDownloaded 会更新 0 行
     try {
       await TrackRepository().upsert(track);
@@ -66,6 +69,7 @@ class DownloadService {
       try {
         if (await File(localPath).exists()) {
           await TrackRepository().markDownloaded(track.id, localPath);
+          onProgress?.call(1);
           return const DownloadResult(
             DownloadStatus.already,
             "已下载，可直接离线播放",
@@ -96,6 +100,7 @@ class DownloadService {
       // 目标已存在且非空：视为已下载（避免重复占空间）
       if (await target.exists() && await target.length() > 0) {
         await TrackRepository().markDownloaded(track.id, target.path);
+        onProgress?.call(1);
         return DownloadResult(
           DownloadStatus.already,
           "已下载：${target.path}",
@@ -107,16 +112,19 @@ class DownloadService {
       final cache = RangeProxySource.cacheFileFor(track.id);
       if (await cache.exists() && await cache.length() > 0) {
         await cache.copy(target.path);
+        onProgress?.call(1);
       } else if (override != null) {
         await override.fetch(track, target);
+        onProgress?.call(1);
       } else {
-        await _fetch(track, target);
+        await _fetch(track, target, onProgress);
       }
 
       if (!await target.exists() || await target.length() == 0) {
         return const DownloadResult(DownloadStatus.failed, "下载结果为空，请重试");
       }
       await TrackRepository().markDownloaded(track.id, target.path);
+      onProgress?.call(1);
 
       // iOS 不能写公共下载目录：保存到文档目录后调起分享面板导出
       // 导出失败不影响“已下载”结论（文件仍在文档目录）
@@ -147,7 +155,11 @@ class DownloadService {
     }
   }
 
-  Future<void> _fetch(Track track, File target) async {
+  Future<void> _fetch(
+    Track track,
+    File target,
+    void Function(double progress)? onProgress,
+  ) async {
     // 本地曲（路径存在但上面未命中，通常为异常）直接复制文件
     if (track.origin == OriginType.local) {
       final src = track.localPath;
@@ -155,6 +167,7 @@ class DownloadService {
         throw StateError("本地文件不存在");
       }
       await File(src).copy(target.path);
+      onProgress?.call(1);
       return;
     }
     final musicUrl = track.origin == OriginType.kuwo
@@ -164,6 +177,9 @@ class DownloadService {
       musicUrl.url,
       target.path,
       options: Options(headers: musicUrl.headers),
+      onReceiveProgress: (received, total) {
+        if (total > 0) onProgress?.call(received / total);
+      },
     );
   }
 

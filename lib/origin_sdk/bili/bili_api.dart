@@ -134,6 +134,9 @@ class BiliApi implements OriginService {
   }
 
   @override
+  Future<List<SearchItem>> hotSongs() async => const [];
+
+  @override
   Future<MusicUrl> getMusicUrl(String id) async {
     // LRU 命中直接秒回（冷播省一次签名+RTT）
     final cached = _playurlCache.get(id);

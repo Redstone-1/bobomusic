@@ -180,7 +180,7 @@ class LocalAudioScanner {
   }
 }
 
-/// 可替换全局：测试注入扫描结果（跳过权限/文件系统/Isolate，同 hotSingersTestOverride 模式）
+/// 可替换全局：测试注入扫描结果（跳过权限/文件系统/Isolate，同 appDb 等环境单例模式）
 LocalScanResult? localScanTestOverride;
 
 /// 扫描入口（生产用）：按平台解析根目录后后台扫描

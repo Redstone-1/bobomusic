@@ -13,9 +13,15 @@ import "../../core/widgets/scale_tap.dart";
 import "../../core/widgets/skeleton.dart";
 import "../../core/widgets/song_list_tile.dart";
 import "../../data/models/playlist.dart";
+import "../../data/models/track.dart";
+import "../../data/repositories/history_repository.dart";
 import "../../data/repositories/queue_repository.dart";
+import "../../data/repositories/track_repository.dart";
+import "../download/download_actions.dart";
+import "../download/downloads_page.dart";
 import "../player/playback_provider.dart";
 import "../player/player_card_page.dart";
+import "add_to_playlist_sheet.dart";
 import "playlist_detail_page.dart";
 import "playlists_provider.dart";
 
@@ -29,13 +35,13 @@ class PlaylistPage extends ConsumerWidget {
     final playlistsAsync = ref.watch(playlistsProvider);
     final likedCount = ref.watch(likedCountProvider);
     final localCount = ref.watch(localCountProvider);
-    final queueAsync = ref.watch(queueTracksProvider);
+    final recentAsync = ref.watch(recentTracksProvider);
     final currentTrackId = ref.watch(
       playbackProvider.select((s) => s.track?.id),
     );
-    // 切歌/自动播完会消费插队队列：刷新歌单页队列区
+    // 播放状态机在切歌前已写入 history；track 变化后刷新最近播放
     ref.listen(playbackProvider.select((s) => s.track?.id), (_, __) {
-      ref.invalidate(queueTracksProvider);
+      ref.invalidate(recentTracksProvider);
     });
 
     return ListView(
@@ -44,9 +50,22 @@ class PlaylistPage extends ConsumerWidget {
         PageHeader(
           title: "我的歌单",
           subtitle: "本地 ${localCount.value ?? 0} 首 · 网络收藏 0 首",
-          trailing: GlassIconButton(
-            icon: const Icon(Icons.add),
-            onTap: () => _createPlaylist(context, ref),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GlassIconButton(
+                key: const Key("downloads_entry"),
+                icon: const Icon(Icons.download_outlined),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const DownloadsPage()),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GlassIconButton(
+                icon: const Icon(Icons.add),
+                onTap: () => _createPlaylist(context, ref),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 16),
@@ -126,63 +145,44 @@ class PlaylistPage extends ConsumerWidget {
                   ],
                 ),
         ),
-        SectionHeader(title: "播放队列", trailing: null),
-        queueAsync.when(
-          loading: () => const SkeletonListView(rows: 2),
+        SectionHeader(
+          title: "最近播放",
+          trailing: recentAsync.value?.isNotEmpty == true ? "清空" : null,
+          onTrailingTap: () => _clearRecent(context, ref),
+        ),
+        recentAsync.when(
+          loading: () => const SkeletonListView(rows: 3),
           error: (e, _) => EmptyState(
             compact: true,
             emoji: "⚠️",
-            title: "队列加载失败",
+            title: "最近播放加载失败",
             subtitle: "点击重试",
             action: GlassChip(
               label: "重试",
-              onTap: () => ref.invalidate(queueTracksProvider),
+              onTap: () => ref.invalidate(recentTracksProvider),
             ),
           ),
-          data: (queue) => queue.isEmpty
+          data: (recent) => recent.isEmpty
               ? const EmptyState(
                   compact: true,
-                  emoji: "🎶",
-                  title: "播放队列是空的",
-                  subtitle: "在歌曲菜单中选择「下一首播放 / 稍后听」",
+                  emoji: "🕘",
+                  title: "还没有播放记录",
+                  subtitle: "播放过的歌曲会出现在这里",
                 )
               : Column(
                   children: [
-                    for (final (index, track) in queue.indexed)
+                    for (final track in recent.take(10))
                       SongListTile(
                         track: track,
                         playing: track.id == currentTrackId,
-                        // 队列区点播：从待播队列取出该曲，会话队列 = 当前队列快照
-                        onTap: () async {
-                          await QueueRepository().removeAt(index);
-                          ref.invalidate(queueTracksProvider);
-                          if (context.mounted) {
-                            PlayerCardPage.start(
-                              context,
-                              ref,
-                              track,
-                              queue: queue,
-                            );
-                          }
-                        },
-                        onMorePressed: () => AppSheet.show(
+                        onTap: () => PlayerCardPage.start(
                           context,
-                          title: track.name,
-                          actions: [
-                            AppSheetAction(
-                              icon: Icons.playlist_remove,
-                              label: "从队列移除",
-                              danger: true,
-                              onTap: () async {
-                                await QueueRepository().removeAt(index);
-                                ref.invalidate(queueTracksProvider);
-                                if (context.mounted) {
-                                  AppToast.show(context, "已从播放队列移除");
-                                }
-                              },
-                            ),
-                          ],
+                          ref,
+                          track,
+                          queue: recent,
                         ),
+                        onMorePressed: () =>
+                            _showRecentActions(context, ref, track),
                       ),
                   ],
                 ),
@@ -212,6 +212,49 @@ class PlaylistPage extends ConsumerWidget {
     } catch (_) {
       if (context.mounted) AppToast.show(context, "歌单名已存在");
     }
+  }
+
+  Future<void> _clearRecent(BuildContext context, WidgetRef ref) async {
+    final ok = await AppDialog.confirm(
+      context,
+      title: "清空最近播放",
+      message: "只清空播放记录，不会删除歌曲、歌单或下载文件。",
+      confirmText: "清空",
+      danger: true,
+    );
+    if (ok != true || !context.mounted) return;
+    await HistoryRepository().clear();
+    ref.invalidate(recentTracksProvider);
+    if (context.mounted) AppToast.show(context, "已清空最近播放");
+  }
+
+  void _showRecentActions(BuildContext context, WidgetRef ref, Track track) {
+    AppSheet.show(
+      context,
+      title: track.name,
+      actions: [
+        AppSheetAction(
+          icon: Icons.library_add_outlined,
+          label: "加入歌单",
+          onTap: () => showAddToPlaylistSheet(context, ref, track),
+        ),
+        AppSheetAction(
+          icon: Icons.queue_music_outlined,
+          label: "下一首播放",
+          onTap: () async {
+            await TrackRepository().upsert(track);
+            await QueueRepository().insertNext(track.id, atPosition: 0);
+            ref.invalidate(queueTracksProvider);
+            if (context.mounted) AppToast.show(context, "已设为下一首播放");
+          },
+        ),
+        AppSheetAction(
+          icon: Icons.download_outlined,
+          label: "下载",
+          onTap: () => downloadTrack(context, track),
+        ),
+      ],
+    );
   }
 
   /// 歌单名校验（§2.1 沿用旧版：非空、≤20 字、不能数字开头）

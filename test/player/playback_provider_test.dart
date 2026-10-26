@@ -4,6 +4,7 @@ import "package:bobomusic/core/prefs/app_prefs.dart";
 import "package:bobomusic/data/db/app_database.dart";
 import "package:bobomusic/data/models/track.dart";
 import "package:bobomusic/data/origin_service.dart" as data;
+import "package:bobomusic/data/repositories/history_repository.dart";
 import "package:bobomusic/data/repositories/queue_repository.dart";
 import "package:bobomusic/data/repositories/track_repository.dart";
 import "package:bobomusic/features/player/audio_engine.dart";
@@ -175,6 +176,22 @@ void main() {
     expect(st().playing, isFalse);
     expect(st().buffering, isFalse);
     expect(engine.loads, isEmpty);
+  });
+
+  test("装载失败：乐观写入的播放历史被回滚，不留「最近播放」", () async {
+    playbackDepsTestOverride = PlaybackDeps(
+      engine: engine,
+      resolveSource: (t) async => throw Exception("解析失败"),
+    );
+    await pb().play(t("a", "曲A"), queue: queue());
+    await flush();
+    expect(await HistoryRepository().recent(), isEmpty);
+  });
+
+  test("装载成功：播放历史记录当前曲", () async {
+    await pb().play(t("a", "曲A"), queue: queue());
+    await flush();
+    expect((await HistoryRepository().recent()).map((e) => e.id), ["a"]);
   });
 
   test("B 站 -404（视频失效）翻译成用户友好提示", () async {
@@ -528,6 +545,9 @@ class _FakeKuwoApi implements sdk.OriginService {
   @override
   Future<List<sdk.SearchSuggestItem>> searchSuggest(String keyword) async =>
       const [];
+
+  @override
+  Future<List<sdk.SearchItem>> hotSongs() async => const [];
 
   @override
   Future<sdk.SearchItem> searchDetail(String id) async =>

@@ -1,0 +1,296 @@
+import "dart:io";
+
+import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
+
+import "../../core/overlays/app_dialog.dart";
+import "../../core/overlays/app_sheet.dart";
+import "../../core/overlays/app_toast.dart";
+import "../../core/theme/aurora_tokens.dart";
+import "../../core/widgets/app_buttons.dart";
+import "../../core/widgets/aurora_background.dart";
+import "../../core/widgets/aurora_progress_bar.dart";
+import "../../core/widgets/back_link.dart";
+import "../../core/widgets/cover_placeholder.dart";
+import "../../core/widgets/empty_state.dart";
+import "../../core/widgets/glass_card.dart";
+import "../../core/widgets/page_header.dart";
+import "../../core/widgets/skeleton.dart";
+import "../../core/widgets/song_list_tile.dart";
+import "../../data/models/track.dart";
+import "../../data/repositories/track_repository.dart";
+import "../player/mini_player_bar.dart";
+import "../player/playback_provider.dart";
+import "../player/player_card_page.dart";
+import "../playlist/add_to_playlist_sheet.dart";
+import "download_tasks.dart";
+
+enum _DownloadTab { done, active }
+
+/// 下载管理：已完成（tracks.downloaded_at）+ 下载中（内存任务）
+class DownloadsPage extends ConsumerStatefulWidget {
+  const DownloadsPage({super.key});
+
+  @override
+  ConsumerState<DownloadsPage> createState() => _DownloadsPageState();
+}
+
+class _DownloadsPageState extends ConsumerState<DownloadsPage> {
+  _DownloadTab _tab = _DownloadTab.done;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AuroraTokens.of(context);
+    final doneAsync = ref.watch(downloadedTracksProvider);
+    final tasks = ref.watch(downloadTasksProvider);
+    final active = [
+      for (final task in tasks)
+        if (task.status != DownloadTaskStatus.completed) task,
+    ];
+    final downloading = active.where((task) => task.active).length;
+
+    return Scaffold(
+      body: AuroraBackground(
+        child: MiniBarPage(
+          child: SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+              children: [
+                const BackLink(),
+                PageHeader(
+                  title: "下载管理",
+                  subtitle:
+                      "已完成 ${doneAsync.value?.length ?? 0} 首 · 下载中 $downloading 首",
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    GlassChip(
+                      label: "已下载 ${doneAsync.value?.length ?? 0}",
+                      selected: _tab == _DownloadTab.done,
+                      onTap: () => setState(() => _tab = _DownloadTab.done),
+                    ),
+                    const SizedBox(width: 10),
+                    GlassChip(
+                      label: "下载中 ${active.length}",
+                      selected: _tab == _DownloadTab.active,
+                      onTap: () => setState(() => _tab = _DownloadTab.active),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                if (_tab == _DownloadTab.done)
+                  _buildDone(
+                    doneAsync,
+                    // watch 留在 build 内：方法层只消费参数，防止日后挪用出错
+                    ref.watch(playbackProvider.select((s) => s.track?.id)),
+                  )
+                else
+                  _buildActive(active),
+                SizedBox(height: t.radiusLg),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDone(AsyncValue<List<Track>> doneAsync, String? currentTrackId) {
+    return doneAsync.when(
+      loading: () => const SkeletonListView(rows: 4),
+      error: (e, _) => EmptyState(
+        compact: true,
+        emoji: "⚠️",
+        title: "下载列表加载失败",
+        subtitle: "点击重试",
+        action: GlassChip(
+          label: "重试",
+          onTap: () => ref.invalidate(downloadedTracksProvider),
+        ),
+      ),
+      data: (tracks) {
+        if (tracks.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.only(top: 72),
+            child: EmptyState(
+              compact: true,
+              icon: Icons.download_for_offline_outlined,
+              title: "还没有下载",
+              subtitle: "在歌曲菜单中选择「下载」，离线也能听",
+            ),
+          );
+        }
+        return Column(
+          children: [
+            for (final track in tracks)
+              SongListTile(
+                track: track,
+                playing: track.id == currentTrackId,
+                onTap: () => PlayerCardPage.start(
+                  context,
+                  ref,
+                  track,
+                  queue: tracks,
+                ),
+                onMorePressed: () => _showDoneActions(track),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildActive(List<DownloadTask> tasks) {
+    if (tasks.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 72),
+        child: EmptyState(
+          compact: true,
+          icon: Icons.hourglass_empty_rounded,
+          title: "没有正在下载的任务",
+          subtitle: "下载完成后会出现在「已下载」",
+        ),
+      );
+    }
+    return Column(
+      children: [
+        for (final task in tasks) ...[
+          _TaskTile(task: task),
+          const SizedBox(height: 10),
+        ],
+      ],
+    );
+  }
+
+  void _showDoneActions(Track track) {
+    AppSheet.show(
+      context,
+      title: track.name,
+      actions: [
+        AppSheetAction(
+          icon: Icons.library_add_outlined,
+          label: "加入歌单",
+          onTap: () => showAddToPlaylistSheet(context, ref, track),
+        ),
+        AppSheetAction(
+          icon: Icons.delete_outline,
+          label: "删除下载",
+          danger: true,
+          onTap: () => _deleteDownload(track),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _deleteDownload(Track track) async {
+    final ok = await AppDialog.confirm(
+      context,
+      title: "删除下载",
+      message: "将删除本地文件并移除离线标记，歌单中的引用不受影响。",
+      confirmText: "删除",
+      danger: true,
+    );
+    if (ok != true || !mounted) return;
+
+    final path = track.localPath;
+    try {
+      if (path != null && await File(path).exists()) {
+        await File(path).delete();
+      }
+    } catch (e) {
+      print("删除下载文件失败：$e");
+      if (mounted) AppToast.show(context, "文件删除失败，请检查存储权限");
+      return;
+    }
+    await TrackRepository().clearDownloaded(track.id);
+    ref.invalidate(downloadedTracksProvider);
+    if (mounted) AppToast.show(context, "已删除下载");
+  }
+}
+
+class _TaskTile extends ConsumerWidget {
+  final DownloadTask task;
+
+  const _TaskTile({required this.task});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = AuroraTokens.of(context);
+    final failed = task.status == DownloadTaskStatus.failed;
+    final status = switch (task.status) {
+      DownloadTaskStatus.queued => "排队中",
+      DownloadTaskStatus.downloading =>
+        "下载中 ${(task.progress * 100).round()}%",
+      DownloadTaskStatus.completed => "已完成",
+      DownloadTaskStatus.failed => task.message ?? "下载失败",
+    };
+
+    return GlassCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CoverPlaceholder(
+                cover: task.track.cover,
+                text: task.track.name,
+                size: 44,
+                radius: t.radiusSm,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      task.track.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: t.fg,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      task.track.author,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11.5, color: t.fgDim),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      status,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: failed ? t.primary : t.fgMute,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (failed)
+                IconButton(
+                  tooltip: "重试",
+                  onPressed: () =>
+                      ref.read(downloadTasksProvider.notifier).retry(task.track),
+                  icon: Icon(Icons.refresh, size: 20, color: t.primary),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          AuroraProgressBar(
+            value: task.progress.clamp(0.0, 1.0),
+            height: 3,
+            showThumb: false,
+          ),
+        ],
+      ),
+    );
+  }
+}
