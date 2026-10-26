@@ -21,6 +21,9 @@ class FakeEngine implements AudioEngine {
   Duration position = Duration.zero;
   Duration duration = const Duration(minutes: 3);
 
+  /// 默认 play() 会发 playing=true；自动切源场景可关闭，模拟引擎不再重复发事件
+  bool emitPlayingOnPlay = true;
+
   @override
   Stream<Duration> get positionStream => _positionCtrl.stream;
 
@@ -48,7 +51,7 @@ class FakeEngine implements AudioEngine {
   Future<void> play() async {
     playCalls++;
     playing = true;
-    _playingCtrl.add(true);
+    if (emitPlayingOnPlay) _playingCtrl.add(true);
   }
 
   @override

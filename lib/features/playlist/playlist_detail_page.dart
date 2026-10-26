@@ -163,6 +163,9 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
               builder: (context, snap) {
                 final loading =
                     snap.connectionState != ConnectionState.done || _scanning;
+                // 已有列表刷新时保留列表，仅用头部按钮禁用/局部状态提示；
+                // 骨架只用于「首次加载且尚无数据」，避免骨架与列表同时存在
+                final showSkeleton = loading && !snap.hasData;
                 final tracks = snap.data;
                 final empty = !loading && !snap.hasError && tracks != null && tracks.isEmpty;
                 return Stack(
@@ -211,7 +214,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
                                     ),
                         ),
                         const SizedBox(height: 14),
-                        if (loading)
+                        if (showSkeleton)
                           const SkeletonListView(rows: 6)
                         else if (snap.hasError)
                           EmptyState(

@@ -90,32 +90,43 @@ class SongListTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            // 喜欢心形（我喜欢列表快速取消收藏）：置于右侧更多菜单左邻
-            if (likedHeart != null) ...[
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: onHeartTap == null
-                    ? null
-                    : () => onHeartTap!(!likedHeart!),
-                child: Icon(
-                  likedHeart! ? Icons.favorite : Icons.favorite_border,
-                  size: 18,
-                  color: likedHeart! ? t.primary : t.fgMute,
+            // 尾部操作固定顺序：喜欢（仅喜欢列表）→ 播放波浪 → 更多。
+            // 更多按钮始终保留；用它做固定宽度锚点，避免喜欢/波浪互相挤压。
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (likedHeart != null) ...[
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onHeartTap == null
+                        ? null
+                        : () => onHeartTap!(!likedHeart!),
+                    child: Icon(
+                      likedHeart! ? Icons.favorite : Icons.favorite_border,
+                      size: 18,
+                      color: likedHeart! ? t.primary : t.fgMute,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                if (playing) ...[
+                  const EqBars(),
+                  const SizedBox(width: 8),
+                ],
+                IconButton(
+                  onPressed: onMorePressed,
+                  icon: const Icon(Icons.more_vert),
+                  iconSize: 18,
+                  color: t.fgMute,
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
+                  padding: EdgeInsets.zero,
                 ),
-              ),
-              const SizedBox(width: 12),
-            ],
-            // 播放中显示均衡器，否则显示更多操作
-            if (playing)
-              const EqBars()
-            else
-              IconButton(
-                onPressed: onMorePressed,
-                icon: const Icon(Icons.more_vert),
-                iconSize: 18,
-                color: t.fgMute,
-                visualDensity: VisualDensity.compact,
-              ),
+              ],
+            ),
           ],
         ),
       ),

@@ -258,8 +258,23 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                         ],
                       ],
                     ),
-                    // 加载骨架留在列表流（贴搜索框下方）；空/失败/无结果走覆盖层
+                    // 刷新时保留旧结果，只用细进度线提示；仅首次加载展示骨架，
+                    // 避免骨架屏与已有列表同时占位（所有者 2026-10-27 反馈）
                     if (_controller.text.trim().isNotEmpty && _loading)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(2),
+                          child: LinearProgressIndicator(
+                            minHeight: 2,
+                            color: t.primary,
+                            backgroundColor: t.surface2,
+                          ),
+                        ),
+                      ),
+                    if (_controller.text.trim().isNotEmpty &&
+                        _loading &&
+                        _results.isEmpty)
                       const Padding(
                         padding: EdgeInsets.only(top: 16),
                         child: SkeletonListView(rows: 5),

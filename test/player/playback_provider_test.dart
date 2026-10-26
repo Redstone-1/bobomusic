@@ -88,6 +88,21 @@ void main() {
     expect(st().playing, isTrue);
   });
 
+  test("自动下一曲：引擎不重复发 playing 时也清缓冲并继续走进度", () async {
+    await pb().play(t("a", "曲A"), queue: queue());
+    await flush();
+    // 真实 just_audio 同一实例切源时常不再发 playing=true
+    engine.emitPlayingOnPlay = false;
+    engine.emitCompletion();
+    await flush();
+
+    expect(st().track?.id, "b");
+    expect(st().buffering, isFalse);
+    engine.emitPosition(const Duration(seconds: 12));
+    await flush();
+    expect(st().position, const Duration(seconds: 12));
+  });
+
   test("单曲循环播完同曲重播（重新装载、进度归零）", () async {
     await pb().play(t("a", "曲A"), queue: queue());
     await flush();

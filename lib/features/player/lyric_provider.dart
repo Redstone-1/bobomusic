@@ -60,14 +60,18 @@ class LyricController extends _$LyricController {
   /// 自动匹配只尝试一次/曲（失败后不反复请求网络，用户可手动搜索）
   final Set<String> _autoTried = {};
 
+  /// 加载代次：快速切歌时让旧曲的异步结果失效，避免覆盖新曲歌词
+  int _loadSeq = 0;
+
   @override
   LyricState build() => const LyricState();
 
   /// 曲目切换时调用：先读库；无歌词则自动匹配（网易→LRCLIB→备胎）
   Future<void> loadFor(Track track) async {
-    if (state.trackId == track.id) return;
+    if (state.trackId == track.id && !state.loading) return;
+    final request = ++_loadSeq;
     final stored = await TrackRepository().getById(track.id);
-    if (!ref.mounted) return;
+    if (!ref.mounted || request != _loadSeq) return;
     final raw = stored?.lyric ?? track.lyric ?? "";
     final offset = stored?.lyricOffsetMs ?? track.lyricOffsetMs;
     if (raw.trim().isNotEmpty) {
@@ -86,7 +90,11 @@ class LyricController extends _$LyricController {
     }
     _autoTried.add(track.id);
     final found = await _autoMatch(track);
-    if (!ref.mounted || state.trackId != track.id) return;
+    if (!ref.mounted ||
+        request != _loadSeq ||
+        state.trackId != track.id) {
+      return;
+    }
     if (found == null || found.trim().isEmpty) {
       state = state.copyWith(
         loading: false,
@@ -95,7 +103,11 @@ class LyricController extends _$LyricController {
       return;
     }
     await TrackRepository().updateLyric(track.id, found);
-    if (!ref.mounted || state.trackId != track.id) return;
+    if (!ref.mounted ||
+        request != _loadSeq ||
+        state.trackId != track.id) {
+      return;
+    }
     state = LyricState(
       trackId: track.id,
       raw: found,

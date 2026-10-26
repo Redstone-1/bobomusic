@@ -85,6 +85,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text("正在播放"), findsNothing); // 播放卡未弹
     expect(find.byKey(const Key("mini_player")), findsOneWidget);
+    expect(find.byKey(const Key("mini_prev")), findsOneWidget);
+    expect(find.byKey(const Key("mini_next")), findsOneWidget);
+    // 单句歌词按播放位置取当前行（6s → 第二行），验证刷新同步
+    fakePlaybackEngine!.emitPosition(const Duration(seconds: 6));
+    await tester.pump();
+    expect(find.text("我们如此短暂地相逢"), findsOneWidget);
     expect(container.read(playbackProvider).playing, isTrue);
 
     // 点迷你条 → 弹播放卡
@@ -350,7 +356,7 @@ void main() {
     expect(find.text("加入待播放"), findsOneWidget);
   });
 
-  testWidgets("播放卡：歌词视图切换与播放队列", (WidgetTester tester) async {
+  testWidgets("播放卡：默认歌词与播放队列", (WidgetTester tester) async {
     await tester.pumpWidget(await buildTestApp());
     await tester.pump();
     final container = ProviderScope.containerOf(
@@ -371,23 +377,26 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
 
-    // 切歌词视图：mock 歌词行在场
-    await tester.tap(find.text("歌词"));
+    // 播放卡默认就是歌词视图（不再有黑胶/PageView）
+    expect(find.byKey(const Key("player_pager")), findsNothing);
+    expect(find.byKey(const Key("player_lyrics")), findsOneWidget);
+    fakePlaybackEngine!.emitPosition(const Duration(seconds: 6));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text("仿佛如同一场梦"), findsOneWidget);
-
-    // 切回黑胶
-    await tester.tap(find.text("歌词"));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text("仿佛如同一场梦"), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key("player_lyrics")),
+        matching: find.text("我们如此短暂地相逢"),
+      ),
+      findsOneWidget,
+    );
 
     // 打开播放队列 sheet（会话队列 = 歌手歌单 2 首）
     await tester.tap(find.byKey(const Key("player_queue")));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text("播放队列 · 2 首"), findsOneWidget);
+    // 当前播放曲目也要保留更多按钮（波浪在其左侧，不再替换按钮）
+    expect(find.byIcon(Icons.more_vert), findsNWidgets(2));
 
     // 点队列中的曲目切歌，sheet 关闭
     await tester.tap(find.text("七里香"));
@@ -397,16 +406,29 @@ void main() {
     expect(find.text("播放队列 · 2 首"), findsNothing);
   });
 
+  testWidgets("默认主题色为青绿色（natureGreen）", (WidgetTester tester) async {
+    await tester.pumpWidget(await buildTestApp());
+    await tester.pump();
+
+    final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    final expected = buildAuroraTokens(
+      AppThemeColor.natureGreen,
+      Brightness.light,
+    ).primary;
+    expect(app.theme?.colorScheme.primary, expected);
+    expect(appPrefs.getString("theme_color"), isNull);
+  });
+
   testWidgets("主题色/明暗选择持久化写回 appPrefs", (WidgetTester tester) async {
     await tester.pumpWidget(await buildTestApp());
     await tester.pump();
 
     await tester.tap(find.text("设置"));
     await tester.pump();
-    // 第二个色点（自然绿——深空黑已置首）→ theme_color 写回
-    await tester.tap(find.byType(ThemeSwatch).at(1));
+    // 第三个色点（晚霞红——默认已是青绿色，只有选不同色才写盘）
+    await tester.tap(find.byType(ThemeSwatch).at(2));
     await tester.pump();
-    expect(appPrefs.getString("theme_color"), "natureGreen");
+    expect(appPrefs.getString("theme_color"), "sunsetRed");
 
     // 深色分段 → theme_mode 写回（默认已是亮色，选同值不写盘）
     await tester.tap(find.text("深色"));

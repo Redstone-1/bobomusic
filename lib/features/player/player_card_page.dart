@@ -5,11 +5,10 @@ import "../../core/overlays/app_dialog.dart";
 import "../../core/overlays/app_loading.dart";
 import "../../core/overlays/app_sheet.dart";
 import "../../core/overlays/app_toast.dart";
-import "../../core/widgets/cover_placeholder.dart";
-import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/app_buttons.dart";
 import "../../core/widgets/aurora_background.dart";
 import "../../core/widgets/aurora_progress_bar.dart";
+import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/empty_state.dart";
 import "../../core/widgets/origin_tag.dart";
 import "../../core/widgets/scale_tap.dart";
@@ -26,10 +25,9 @@ import "open_bilibili.dart";
 import "play_mode.dart";
 import "playback_provider.dart";
 import "sleep_timer_sheet.dart";
-import "spinning_cover.dart";
 
-/// 全屏播放卡片（对齐原型 .player：封面模糊背景 + 黑胶 + seek + 控制区 + 动作行）
-/// S4-A2 接真引擎；歌词视图（mock 时间轴）与真歌词链在 4.4
+/// 全屏播放卡片（对齐原型 .player：歌词 + seek + 控制区 + 动作行）
+/// 所有者 2026-10-26 反馈：移除黑胶，播放卡默认只显示歌词
 class PlayerCardPage extends ConsumerStatefulWidget {
   const PlayerCardPage({super.key});
 
@@ -76,7 +74,6 @@ class PlayerCardPage extends ConsumerStatefulWidget {
 
 class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
   bool? _likedOverride; // 相对 track.liked 的本地覆盖（写库后与库态一致）
-  bool _showLyrics = false; // 歌词视图 / 黑胶视图切换（原型 toggleLyrics）
 
   @override
   void initState() {
@@ -92,6 +89,14 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
     }
   }
 
+  /// 喜欢/取消喜欢：心形与动作行共用同一份库态/本地覆盖
+  void _toggleLike(Track track) {
+    final newLiked = !(_likedOverride ?? track.liked);
+    TrackRepository().setLiked(track.id, newLiked);
+    ref.invalidate(likedCountProvider);
+    setState(() => _likedOverride = newLiked);
+  }
+
   @override
   Widget build(BuildContext context) {
     // 切歌时重新加载歌词（保持同一播放卡内的歌词跟随），
@@ -104,7 +109,6 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
     });
     // 高频 position 不进本层：只订阅曲目/播放态/总时长，进度由 _SeekRow/_LyricView 各自 select
     final track = ref.watch(playbackProvider.select((s) => s.track));
-    final playing = ref.watch(playbackProvider.select((s) => s.playing));
     final duration = ref.watch(playbackProvider.select((s) => s.duration));
     // 理论不可达（打开前必 play）；防御：无曲直接回退
     if (track == null) {
@@ -125,41 +129,21 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
           child: Column(
             children: [
               _TopBar(onClose: () => Navigator.of(context).pop()),
-              // 黑胶区 / 歌词区（弹性占据，切换渐变过渡）
-              Expanded(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  child: _showLyrics
-                      ? const _LyricView(key: Key("player_lyrics"))
-                      : Center(
-                          key: const Key("player_disc"),
-                          child: _VinylDisc(
-                            letter: track.name.characters.first,
-                            spinning: playing,
-                            cover: track.cover,
-                          ),
-                        ),
-                ),
+              // 播放卡只保留歌词视图（所有者 2026-10-26 反馈：不要黑胶）
+              const Expanded(
+                child: _LyricView(key: Key("player_lyrics")),
               ),
-              _MetaRow(
-                track: track,
+              _MetaRow(track: track),
+              const SizedBox(height: 12),
+              // 参考酷狗：动作行在进度条上方，主控制行在进度条下方
+              _ActionsRow(
                 liked: _likedOverride ?? track.liked,
-                onToggleLike: () {
-                  final newLiked = !(_likedOverride ?? track.liked);
-                  TrackRepository().setLiked(track.id, newLiked);
-                  ref.invalidate(likedCountProvider);
-                  setState(() => _likedOverride = newLiked);
-                },
+                onToggleLike: () => _toggleLike(track),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 10),
               _SeekRow(durationSec: durationSec),
               _ControlsRow(),
-              _ActionsRow(
-                showLyrics: _showLyrics,
-                onToggleLyrics: () =>
-                    setState(() => _showLyrics = !_showLyrics),
-              ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
             ],
           ),
         ),
@@ -240,94 +224,11 @@ class _TopBar extends ConsumerWidget {
   }
 }
 
-/// 黑胶唱片（原型 .disc：280 圆盘 + 同心纹 + 内嵌封面 22% + 中孔；播放中 14s 旋转）
-class _VinylDisc extends StatelessWidget {
-  final String letter;
-  final bool spinning;
-
-  /// 歌曲封面（无则回退主题色纯色占位）
-  final String? cover;
-
-  const _VinylDisc({
-    required this.letter,
-    required this.spinning,
-    this.cover,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AuroraTokens.of(context);
-    return SpinningCover(
-      spinning: spinning,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Container(
-            width: 280,
-            height: 280,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: t.bg2,
-              border: Border.all(color: t.hairline, width: 1),
-              boxShadow: [
-                BoxShadow(
-                  color: t.shadow,
-                  blurRadius: 60,
-                  offset: const Offset(0, 30),
-                  spreadRadius: -24,
-                ),
-              ],
-            ),
-          ),
-          // 同心纹（token 化的等效实现，替代原型 repeating-radial-gradient）
-          for (final d in const [220.0, 186.0])
-            Container(
-              width: d,
-              height: d,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: t.hairline, width: 1),
-              ),
-            ),
-          // 内嵌封面（inset 22%）：歌曲封面（无则纯色占位）+ 描边圆环
-          SizedBox(
-            width: 157,
-            height: 157,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                CoverPlaceholder(
-                  cover: cover,
-                  text: letter,
-                  size: 157,
-                  radius: 78.5,
-                ),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: t.hairlineStrong, width: 1),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 曲目信息 + 喜欢（D11：播放页显示音源标签）
+/// 曲目信息（D11：播放页显示音源标签）
 class _MetaRow extends StatelessWidget {
   final Track track;
-  final bool liked;
-  final VoidCallback onToggleLike;
 
-  const _MetaRow({
-    required this.track,
-    required this.liked,
-    required this.onToggleLike,
-  });
+  const _MetaRow({required this.track});
 
   @override
   Widget build(BuildContext context) {
@@ -363,12 +264,6 @@ class _MetaRow extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-          IconButton(
-            onPressed: onToggleLike,
-            icon: Icon(liked ? Icons.favorite : Icons.favorite_border),
-            color: liked ? t.primary : t.fgDim,
-            iconSize: 24,
           ),
         ],
       ),
@@ -408,6 +303,7 @@ class _SeekRow extends ConsumerWidget {
           Expanded(
             child: AuroraProgressBar(
               value: progress,
+              height: 4,
               onChanged: (fraction) => ref
                   .read(playbackProvider.notifier)
                   .seek(Duration(seconds: (durationSec * fraction).round())),
@@ -428,9 +324,9 @@ class _SeekRow extends ConsumerWidget {
 class _ControlsRow extends ConsumerWidget {
   static const _modeIcons = {
     PlayMode.singleLoop: Icons.repeat_one,
-    PlayMode.listLoop: Icons.queue_music,
+    PlayMode.listLoop: Icons.repeat,
     PlayMode.shuffle: Icons.shuffle,
-    PlayMode.sequential: Icons.repeat,
+    PlayMode.sequential: Icons.format_list_numbered,
   };
 
   const _ControlsRow();
@@ -448,13 +344,14 @@ class _ControlsRow extends ConsumerWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           IconButton(
+            tooltip: "播放模式：${mode.label}",
             onPressed: () {
               notifier.cycleMode();
               AppToast.show(context, mode.next.label);
             },
             icon: Icon(_modeIcons[mode]),
-            // 单曲循环为"激活"样式（高亮），其余弱化
-            color: mode == PlayMode.singleLoop ? t.primary : t.fgMute,
+            // 播放模式是常驻控制项，统一使用主题色（不再只有单曲循环高亮）
+            color: t.primary,
             iconSize: 24,
           ),
           IconButton(
@@ -476,6 +373,7 @@ class _ControlsRow extends ConsumerWidget {
           ),
           IconButton(
             key: const Key("player_queue"),
+            tooltip: "播放队列",
             onPressed: () => _openQueue(context, ref),
             icon: const Icon(Icons.queue_music_outlined),
             color: t.primary,
@@ -522,24 +420,24 @@ class _ControlsRow extends ConsumerWidget {
   }
 }
 
-/// 底部动作行（原型 .pactions：收藏 / 歌词 / 下载 / 稍后；歌词项为切换开关）
+/// 动作行（喜欢 / 下载 / 稍后），位于进度条上方
 class _ActionsRow extends ConsumerWidget {
-  final bool showLyrics;
-  final VoidCallback onToggleLyrics;
+  final bool liked;
+  final VoidCallback onToggleLike;
 
-  const _ActionsRow({required this.showLyrics, required this.onToggleLyrics});
+  const _ActionsRow({required this.liked, required this.onToggleLike});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = AuroraTokens.of(context);
     final actions = [
       (
-        Icons.favorite_border,
-        "收藏",
-        false,
-        () => AppToast.show(context, "在播放信息行点 ♡ 全局喜欢"),
+        liked ? Icons.favorite : Icons.favorite_border,
+        "喜欢",
+        liked,
+        onToggleLike,
+        22.0,
       ),
-      (Icons.lyrics, "歌词", showLyrics, onToggleLyrics),
       (
         Icons.download_outlined,
         "下载",
@@ -548,9 +446,10 @@ class _ActionsRow extends ConsumerWidget {
           final track = ref.read(playbackProvider).track;
           if (track != null) downloadTrack(context, track);
         },
+        20.0,
       ),
       (
-        Icons.add,
+        Icons.add_rounded,
         "稍后",
         false,
         () {
@@ -561,29 +460,30 @@ class _ActionsRow extends ConsumerWidget {
           ref.invalidate(queueTracksProvider);
           AppToast.show(context, "已加入播放队列");
         },
+        22.0,
       ),
     ];
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 26),
-      padding: const EdgeInsets.only(top: 18),
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: t.hairline, width: 1)),
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(30, 4, 30, 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          for (final (icon, label, active, onTap) in actions)
+          for (final (icon, label, active, onTap, size) in actions)
             ScaleTap(
               onTap: onTap,
               child: Column(
                 children: [
-                  Icon(icon, size: 20, color: active ? t.primary : t.fgDim),
-                  const SizedBox(height: 6),
+                  Icon(
+                    icon,
+                    size: size,
+                    color: active ? t.primary : t.fgDim,
+                  ),
+                  const SizedBox(height: 4),
                   Text(
                     label,
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 10.5,
                       fontWeight: FontWeight.w600,
                       color: active ? t.primary : t.fgDim,
                     ),

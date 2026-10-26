@@ -379,6 +379,10 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       await _resolveEngine().load(source, initialPosition: initialPosition);
       if (!ref.mounted) return;
       if (autoplay) await _resolveEngine().play();
+      if (!ref.mounted) return;
+      // 同一引擎切源时 playingStream 不一定会再次发 true（自动下一曲常见），
+      // 只等 playing 事件清 buffering 会让 position 流被永久丢弃，进度条/歌词停在旧位置
+      state = state.copyWith(buffering: false);
       // 切歌后立即写新曲与队列快照：与 queue 表 takeFirst 的删除时序对齐，
       // 避免播放器启动后、下个去抖周期前被杀导致“已出队但快照仍是旧曲”
       _persistNow();
