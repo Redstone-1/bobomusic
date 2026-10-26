@@ -45,6 +45,29 @@ void main() {
   });
 
   group("kuwoSongToSearchItem", () {
+    test("旧接口单引号 JSON：解析 + 实体/封面/时长映射", () {
+      const raw =
+          "{'TOTAL':'3511','abslist':[{'MUSICRID':'MUSIC_143849264','SONGNAME':'夜曲&nbsp;(mp3.2)','ARTIST':'周杰伦','DURATION':'227','web_albumpic_short':'120/11/8/a.jpg'}]}";
+      final data = parseKuwoJson(raw) as Map;
+      expect(data["TOTAL"], "3511");
+      final item = kuwoSongToSearchItem(
+        (data["abslist"] as List).first as Map,
+      );
+      expect(item, isNotNull);
+      expect(item!.id, "kuwo:143849264");
+      expect(item.name, "夜曲 (mp3.2)");
+      expect(item.author, "周杰伦");
+      expect(item.duration, 227);
+      expect(item.cover, "https://img4.kuwo.cn/star/albumcover/120/11/8/a.jpg");
+      expect(item.origin, OriginType.kuwo);
+    });
+
+    test("标准 JSON 不受影响（新接口 200 / 非法提示也能解析）", () {
+      final data = parseKuwoJson('{"success":false,"message":"illegal"}');
+      expect(data["success"], isFalse);
+      expect(parseKuwoUrl({"url": "https://x/a.mp3"}), "https://x/a.mp3");
+    });
+
     test("新接口字段：id 前缀 + origin + 时长/封面", () {
       final item = kuwoSongToSearchItem({
         "rid": 123,

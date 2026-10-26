@@ -54,9 +54,10 @@ class KuwoApi implements OriginService {
       final list = data["data"]?["list"] as List? ?? const [];
       final items = _mapSongs(list);
       if (items.isNotEmpty) {
+        final total = _asInt(data["data"]?["total"]);
         return KuwoSearchResponse(
           current: params.page,
-          total: (data["data"]?["total"] as num?)?.toInt() ?? items.length,
+          total: total > 0 ? total : items.length,
           pageSize: size,
           data: items,
         );
@@ -82,9 +83,10 @@ class KuwoApi implements OriginService {
       final data = _json(response.data);
       final list = data["abslist"] as List? ?? const [];
       final items = _mapSongs(list);
+      final total = _asInt(data["TOTAL"]);
       return KuwoSearchResponse(
         current: params.page,
-        total: (data["TOTAL"] as num?)?.toInt() ?? items.length,
+        total: total > 0 ? total : items.length,
         pageSize: size,
         data: items,
       );
@@ -143,15 +145,7 @@ class KuwoApi implements OriginService {
     return items;
   }
 
-  dynamic _json(dynamic data) {
-    if (data is String) {
-      // 老接口返回 JSON 文本；个别情况下带前缀
-      final start = data.indexOf("{");
-      final text = start > 0 ? data.substring(start) : data;
-      return jsonDecode(text);
-    }
-    return data;
-  }
+  dynamic _json(dynamic data) => parseKuwoJson(data);
 }
 
 /// 酷我搜索单条 → 统一 SearchItem（新/旧接口字段兼容；纯函数便于测试）
@@ -160,13 +154,18 @@ SearchItem? kuwoSongToSearchItem(Map song) {
   final rawRid =
       "${song["rid"] ?? song["musicrid"] ?? song["MUSICRID"] ?? song["id"] ?? ""}";
   final rid = rawRid.replaceFirst(RegExp(r"^MUSIC_"), "");
-  final name = "${song["name"] ?? song["songName"] ?? song["SONGNAME"] ?? ""}";
+  final name = decodeKuwoText(
+    "${song["name"] ?? song["songName"] ?? song["SONGNAME"] ?? ""}",
+  );
   if (rid.isEmpty || name.isEmpty) return null;
-  final artist = "${song["artist"] ?? song["artistName"] ?? song["ARTIST"] ?? ""}";
-  final cover = "${song["pic"] ?? song["albumpic"] ?? song["web_albumpic_short"] ?? song["cover"] ?? ""}";
+  final artist = decodeKuwoText(
+    "${song["artist"] ?? song["artistName"] ?? song["ARTIST"] ?? ""}",
+  );
+  final rawCover =
+      "${song["pic"] ?? song["albumpic"] ?? song["web_albumpic_short"] ?? song["cover"] ?? ""}";
   return SearchItem(
     id: "kuwo:$rid",
-    cover: cover,
+    cover: kuwoCoverUrl(rawCover),
     name: name,
     duration: parseKuwoDuration(
       song["duration"] ?? song["DURATION"] ?? song["songTimeMinutes"],
@@ -176,6 +175,23 @@ SearchItem? kuwoSongToSearchItem(Map song) {
     isSeasonDisplay: false,
     type: SearchType.music,
   );
+}
+
+/// 旧接口文本清洗：HTML 实体、标签、首尾空白
+String decodeKuwoText(String value) => value
+    .replaceAll("&nbsp;", " ")
+    .replaceAll("&amp;", "&")
+    .replaceAll("&apos;", "'")
+    .replaceAll("&#39;", "'")
+    .replaceAll(RegExp(r"<[^>]*>"), "")
+    .trim();
+
+/// 旧接口封面是相对路径（120/11/8/xxx.jpg），补全 Kuwo 图床前缀
+String kuwoCoverUrl(String raw) {
+  final cover = raw.trim();
+  if (cover.isEmpty) return "";
+  if (cover.startsWith("http://") || cover.startsWith("https://")) return cover;
+  return "https://img4.kuwo.cn/star/albumcover/$cover";
 }
 
 /// 酷我时长统一成秒（新接口 int 秒 / 旧接口 DURATION 秒 / mm:ss 字符串）
@@ -220,6 +236,66 @@ String? parseKuwoUrl(dynamic data) {
 
 bool _looksLikeUrl(String value) =>
     value.startsWith("http://") || value.startsWith("https://");
+
+/// 酷我旧接口返回“单引号 JSON”（{'abslist':[...]}），先按标准 JSON 解析，
+/// 失败再把单引号分隔符转成双引号；并裁掉前后缀非 JSON 文本
+dynamic parseKuwoJson(dynamic data) {
+  if (data is! String) return data;
+  var text = data.trim();
+  final start = text.indexOf("{");
+  if (start > 0) text = text.substring(start);
+  final end = text.lastIndexOf("}");
+  if (end >= 0 && end + 1 < text.length) text = text.substring(0, end + 1);
+  try {
+    return jsonDecode(text);
+  } catch (_) {
+    return jsonDecode(_singleQuoteToDouble(text));
+  }
+}
+
+/// 单引号 JSON → 双引号 JSON（字符串内部的双引号转义；保留转义单引号）
+String _singleQuoteToDouble(String input) {
+  final out = StringBuffer();
+  var inString = false;
+  for (var i = 0; i < input.length; i++) {
+    final ch = input[i];
+    if (inString) {
+      if (ch == r"\" && i + 1 < input.length) {
+        final next = input[i + 1];
+        if (next == "'") {
+          out.write("'");
+          i++;
+          continue;
+        }
+        out.write(ch);
+        continue;
+      }
+      if (ch == "'") {
+        out.write('"');
+        inString = false;
+        continue;
+      }
+      if (ch == '"') {
+        out.write(r'\"');
+        continue;
+      }
+      out.write(ch);
+    } else {
+      if (ch == "'") {
+        out.write('"');
+        inString = true;
+        continue;
+      }
+      out.write(ch);
+    }
+  }
+  return out.toString();
+}
+
+int _asInt(dynamic value) {
+  if (value is num) return value.toInt();
+  return int.tryParse("$value") ?? 0;
+}
 
 /// 搜索响应（OriginService 只要求 SearchResponse 抽象，提供具体实现）
 class KuwoSearchResponse extends SearchResponse {
