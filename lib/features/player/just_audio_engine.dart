@@ -41,6 +41,7 @@ class JustAudioEngine implements AudioEngine {
             url: source.url,
             backupUrl: source.backupUrl,
             headers: source.headers,
+            contentType: source.contentType,
           );
     await _player.setAudioSource(audioSource, initialPosition: initialPosition);
   }

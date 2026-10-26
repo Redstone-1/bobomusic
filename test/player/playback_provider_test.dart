@@ -198,7 +198,7 @@ void main() {
     });
   });
 
-  test("暂停立即写盘（不等去抖）", () async {
+  test("暂停立即写盘（不等去抖），队列快照与曲目同刻写入", () async {
     fakeAsync((async) async {
       await pb().play(t("a", "曲A"), queue: queue());
       async.flushMicrotasks();
@@ -208,6 +208,8 @@ void main() {
       async.flushMicrotasks();
       expect(appPrefs.getString("playback_track_id"), "a");
       expect(appPrefs.getInt("playback_position_ms"), 20000);
+      expect(appPrefs.getString("playback_queue_ids"), '["a","b","c"]');
+      expect(appPrefs.getInt("playback_queue_index"), 0);
     });
   });
 
@@ -233,6 +235,75 @@ void main() {
     expect(restored.mode, PlayMode.shuffle);
     expect(restored.playing, isFalse); // 恢复为暂停态，点播放续播
     expect(engine.loads, isEmpty); // 未触发装载
+  });
+
+  test("冷启动恢复会话队列：快照 id 回库重建，已删曲目剔除", () async {
+    await TrackRepository().upsert(t("a", "曲A"));
+    await TrackRepository().upsert(t("b", "曲B"));
+    SharedPreferences.setMockInitialValues(const {
+      "playback_track_id": "b",
+      "playback_position_ms": 10000,
+      "playback_mode": "listLoop",
+      // x 未入库：恢复时自动剔除；下标按当前曲定位（b → 1）
+      "playback_queue_ids": '["a","x","b"]',
+      "playback_queue_index": 1,
+    });
+    await initAppPrefs();
+    final c2 = ProviderContainer();
+    addTearDown(c2.dispose);
+    c2.read(playbackProvider);
+    for (var i = 0;
+        i < 200 && c2.read(playbackProvider).queue.length < 2;
+        i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 2));
+    }
+    final restored = c2.read(playbackProvider);
+    expect(restored.queue.map((e) => e.id).toList(), ["a", "b"]);
+    expect(restored.queueIndex, 1);
+    expect(restored.playing, isFalse);
+    expect(engine.loads, isEmpty);
+  });
+
+  test("冷启动恢复：重复曲目按保存下标定位", () async {
+    await TrackRepository().upsert(t("a", "曲A"));
+    await TrackRepository().upsert(t("b", "曲B"));
+    SharedPreferences.setMockInitialValues(const {
+      "playback_track_id": "a",
+      "playback_queue_ids": '["a","b","a"]',
+      "playback_queue_index": 2,
+      "playback_mode": "listLoop",
+    });
+    await initAppPrefs();
+    final c2 = ProviderContainer();
+    addTearDown(c2.dispose);
+    c2.read(playbackProvider);
+    for (var i = 0;
+        i < 200 && c2.read(playbackProvider).queue.length < 3;
+        i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 2));
+    }
+    final restored = c2.read(playbackProvider);
+    expect(restored.queue.map((e) => e.id).toList(), ["a", "b", "a"]);
+    expect(restored.queueIndex, 2);
+  });
+
+  test("冷启动恢复：当前曲不在队列快照（或快照损坏）时退回单曲", () async {
+    await TrackRepository().upsert(t("a", "曲A"));
+    SharedPreferences.setMockInitialValues(const {
+      "playback_track_id": "a",
+      "playback_queue_ids": "not-json",
+    });
+    await initAppPrefs();
+    final c2 = ProviderContainer();
+    addTearDown(c2.dispose);
+    c2.read(playbackProvider);
+    for (var i = 0; i < 200 && c2.read(playbackProvider).track == null; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 2));
+    }
+    final restored = c2.read(playbackProvider);
+    expect(restored.track?.id, "a");
+    expect(restored.queue.length, 1);
+    expect(restored.queueIndex, 0);
   });
 
   test("播放模式循环轮转并持久化", () async {
@@ -261,11 +332,14 @@ void main() {
     await flush();
 
     await pb().next();
-    await waitFor(() => st().track?.id == "q");
+    await waitFor(() => appPrefs.getString("playback_track_id") == "q");
     expect(st().track?.id, "q");
     expect(await QueueRepository().all(), isEmpty);
     // 插队曲插入会话队列当前位之后，后续仍可继续原列表
     expect(st().queue.map((e) => e.id).toList(), ["a", "q", "b", "c"]);
+    // takeFirst 出队后立刻持久化新会话快照（修复出队/恢复时序不一致）
+    expect(appPrefs.getString("playback_queue_ids"), '["a","q","b","c"]');
+    expect(appPrefs.getInt("playback_queue_index"), 1);
   });
 
   test("播完自动切歌同样先消费插队队列", () async {
@@ -291,15 +365,18 @@ void main() {
     expect(await QueueRepository().all(), isEmpty);
   });
 
-  test("切歌前旧曲进度立即写盘（不等 5s 去抖）", () async {
+  test("切歌立即写新曲与队列快照（不等 5s 去抖）", () async {
     await pb().play(t("a", "曲A"), queue: queue());
     await flush();
     engine.emitPosition(const Duration(seconds: 33));
     await flush();
     await pb().play(t("b", "曲B"), queue: queue());
     await flush();
-    expect(appPrefs.getString("playback_track_id"), "a");
-    expect(appPrefs.getInt("playback_position_ms"), 33000);
+    // 切歌后快照必须已经是新曲 + 新下标，避免被旧曲覆盖
+    expect(appPrefs.getString("playback_track_id"), "b");
+    expect(appPrefs.getInt("playback_position_ms"), 0);
+    expect(appPrefs.getString("playback_queue_ids"), '["a","b","c"]');
+    expect(appPrefs.getInt("playback_queue_index"), 1);
   });
 
   test("点播列表不含目标曲：回退单曲，不误播列表首曲", () async {
@@ -389,6 +466,7 @@ void main() {
     await flush();
 
     expect(engine.loads.single.source.url, "https://kuwo.example/123.mp3");
+    expect(engine.loads.single.source.contentType, "audio/mpeg");
     expect(
       engine.loads.single.source.headers?["Referer"],
       "https://www.kuwo.cn/",
@@ -444,5 +522,6 @@ class _FakeKuwoApi implements sdk.OriginService {
   Future<sdk.MusicUrl> getMusicUrl(String id) async => sdk.MusicUrl(
         url: "https://kuwo.example/${id.split(":").last}.mp3",
         headers: const {"Referer": "https://www.kuwo.cn/"},
+        contentType: "audio/mpeg",
       );
 }

@@ -127,7 +127,7 @@ class SearchSuggestItem {
   });
 }
 
-/// 歌曲简要信息
+/// 歌曲简要信息（SDK 只保留映射所需字段；旧版歌单/链表字段已随 mock 退役）
 class MusicItem {
   final String id; // ID
   final String cover; // 封面
@@ -135,40 +135,15 @@ class MusicItem {
   final int duration; // 时长
   final String author; // 作者
   final OriginType origin; // 来源
-  String orderName = ""; // 隶属于哪个歌单
-  String localPath = ""; // 本地音乐的本地路径
-  String playId = ""; // 播放 id
-  String lyric = ""; // 歌词
-  String prev = ""; // 上一曲
-  String next = ""; // 下一曲
-  String isFirst = ""; // 是否列表第一首
-  String isLast = ""; // 是否列表最后一首
 
-  MusicItem({
-    String? orderName,
-    String? localPath,
-    String? playId,
-    String? lyric,
-    String? prev,
-    String? next,
-    String? isFirst,
-    String? isLast,
+  const MusicItem({
     required this.id,
     required this.cover,
     required this.name,
     required this.duration,
     required this.author,
     required this.origin,
-  }) {
-    this.orderName = orderName ?? "";
-    this.localPath = localPath ?? "";
-    this.playId = playId ?? "";
-    this.lyric = lyric ?? "";
-    this.prev = prev ?? "";
-    this.next = next ?? "";
-    this.isFirst = isFirst ?? "";
-    this.isLast = isLast ?? "";
-  }
+  });
 
   factory MusicItem.fromJson(Map<String, dynamic> json) {
     return MusicItem(
@@ -177,15 +152,7 @@ class MusicItem {
       name: json["name"],
       duration: json["duration"],
       author: json["author"],
-      playId: json["playId"],
-      lyric: json["lyric"],
       origin: OriginType.getByValue(json["origin"]),
-      orderName: json["orderName"],
-      localPath: json["localPath"],
-      prev: json["prev"],
-      next: json["next"],
-      isFirst: json["isFirst"],
-      isLast: json["isLast"],
     );
   }
 
@@ -197,45 +164,7 @@ class MusicItem {
       "duration": duration,
       "author": author,
       "origin": origin.value,
-      "playId": playId,
-      "lyric": lyric,
-      "orderName": orderName,
-      "localPath": localPath,
-      "prev": prev,
-      "next": next,
-      "isFirst": isFirst,
-      "isLast": isLast,
     };
-  }
-
-  MusicItem copyWith({
-    String? id,
-    String? cover,
-    String? name,
-    int? duration,
-    String? author,
-    OriginType? origin,
-    String? playId,
-    String? lyric,
-    String? orderName,
-    String? localPath,
-    String? prev,
-    String? next,
-  }) {
-    return MusicItem(
-      id: id ?? this.id,
-      cover: cover ?? this.cover,
-      name: name ?? this.name,
-      duration: duration ?? this.duration,
-      author: author ?? this.author,
-      origin: origin ?? this.origin,
-      playId: playId ?? this.playId,
-      lyric: lyric ?? this.lyric,
-      orderName: orderName ?? this.orderName,
-      localPath: localPath ?? this.localPath,
-      prev: prev ?? this.prev,
-      next: next ?? this.next,
-    );
   }
 }
 
@@ -319,7 +248,16 @@ class MusicUrl {
 
   /// 备用直链（B 站 dash backupUrl 首项；主 CDN 异常时降级，§5.3-4）
   final String? backupUrl;
-  const MusicUrl({required this.url, this.headers, this.backupUrl});
+
+  /// 流内容类型（流式音源声明给播放内核：B 站 dash m4a 按 video/mp4，
+  /// 酷我 mp3 为 audio/mpeg；声明错误可能导致平台解码器拒绝）
+  final String contentType;
+  const MusicUrl({
+    required this.url,
+    this.headers,
+    this.backupUrl,
+    this.contentType = "video/mp4",
+  });
 }
 
 /// 歌单源服务

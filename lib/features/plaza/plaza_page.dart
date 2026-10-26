@@ -212,7 +212,8 @@ class _CollectionCard extends StatelessWidget {
                     gradient: LinearGradient(
                       begin: const Alignment(-0.64, -0.77),
                       end: const Alignment(0.64, 0.77),
-                      colors: coverGradientColors(collection.coverHue ?? 212),
+                      // 固定色相（历史视觉；数据层无逐合集色相字段）
+                      colors: coverGradientColors(212),
                     ),
                   ),
                 ),

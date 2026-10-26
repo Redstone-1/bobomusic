@@ -189,7 +189,7 @@ class DownloadService {
 }
 
 /// 文件名清洗（纯函数）：去掉路径非法字符、压缩空白、限制长度
-/// 在线曲固定 .m4a（B 站 dash / 酷我 mp3 由下载器写原始字节，扩展名仅作展示）
+/// 在线曲按音源扩展名（B 站 dash=.m4a / 酷我 mp3=.mp3），本地曲沿用原扩展名
 String downloadFileName(Track track) {
   final raw = "${track.name} - ${track.author}".trim();
   var safe = raw
@@ -199,5 +199,6 @@ String downloadFileName(Track track) {
   if (safe.isEmpty) safe = track.id;
   if (safe.length > 80) safe = safe.substring(0, 80);
   final localExt = track.localPath == null ? "" : p.extension(track.localPath!);
-  return "$safe${localExt.isEmpty ? ".m4a" : localExt}";
+  if (localExt.isNotEmpty) return "$safe$localExt";
+  return "$safe${track.origin == OriginType.kuwo ? ".mp3" : ".m4a"}";
 }

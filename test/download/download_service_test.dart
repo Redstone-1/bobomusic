@@ -139,6 +139,12 @@ void main() {
       ),
     );
     expect(local.endsWith(".flac"), isTrue);
+
+    // 酷我在线曲为 mp3，扩展名随音源（不再误标 .m4a）
+    final kuwo = downloadFileName(
+      const Track(id: "kuwo:1", name: "酷我曲", author: "歌手", origin: OriginType.kuwo),
+    );
+    expect(kuwo.endsWith(".mp3"), isTrue);
   });
 }
 

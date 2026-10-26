@@ -12,6 +12,9 @@ class PlaySource {
   /// 请求头（B 站 CDN 必须带 Referer）
   final Map<String, String>? headers;
 
+  /// 流内容类型（仅网络源用：B 站 dash m4a=video/mp4 / 酷我 mp3=audio/mpeg）
+  final String contentType;
+
   /// true = [url] 是本地文件路径，直读不走网络
   final bool isLocal;
 
@@ -20,6 +23,7 @@ class PlaySource {
     required this.url,
     this.backupUrl,
     this.headers,
+    this.contentType = "video/mp4",
     this.isLocal = false,
   });
 }

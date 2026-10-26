@@ -94,9 +94,11 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
 
   @override
   Widget build(BuildContext context) {
-    // 切歌时重新加载歌词（保持同一播放卡内的歌词跟随）
+    // 切歌时重新加载歌词（保持同一播放卡内的歌词跟随），
+    // 并清掉上一曲的喜欢覆盖，回退新曲库态（防跨曲残留）
     ref.listen(playbackProvider.select((s) => s.track), (_, next) {
       if (next != null) {
+        setState(() => _likedOverride = null);
         ref.read(lyricControllerProvider.notifier).loadFor(next);
       }
     });
@@ -132,7 +134,6 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
                       : Center(
                           key: const Key("player_disc"),
                           child: _VinylDisc(
-                            hue: track.coverHue ?? 212,
                             letter: track.name.characters.first,
                             spinning: playing,
                             cover: track.cover,
@@ -241,7 +242,6 @@ class _TopBar extends ConsumerWidget {
 
 /// 黑胶唱片（原型 .disc：280 圆盘 + 同心纹 + 内嵌封面 22% + 中孔；播放中 14s 旋转）
 class _VinylDisc extends StatelessWidget {
-  final int hue;
   final String letter;
   final bool spinning;
 
@@ -249,7 +249,6 @@ class _VinylDisc extends StatelessWidget {
   final String? cover;
 
   const _VinylDisc({
-    required this.hue,
     required this.letter,
     required this.spinning,
     this.cover,

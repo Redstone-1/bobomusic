@@ -11,9 +11,6 @@ class CoverPlaceholder extends StatelessWidget {
 
   /// 占位首字（真实封面加载中/失败时也不留白）
   final String? text;
-
-  /// 兼容保留（旧渐变方案的曲目色相入参，纯色方案不使用）
-  final int? hue;
   final double size;
   final double radius;
 
@@ -21,7 +18,6 @@ class CoverPlaceholder extends StatelessWidget {
     super.key,
     this.cover,
     this.text,
-    this.hue,
     this.size = 48,
     this.radius = 12,
   });

@@ -8,15 +8,11 @@ class Playlist {
   final PlaylistType type;
   final int count; // mock 用：曲目数（真数据由 playlist_items 聚合）
 
-  /// 仅 mock 用：占位封面色相
-  final int? coverHue;
-
   const Playlist({
     required this.id,
     required this.name,
     required this.type,
     this.count = 0,
-    this.coverHue,
   });
 
   /// 相等性按 id（family provider 参数缓存与刷新依赖它）

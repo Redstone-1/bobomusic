@@ -61,6 +61,26 @@ class TrackRepository {
     return rows.isEmpty ? null : _fromRow(rows.first);
   }
 
+  /// 批量按 id 取曲（断点恢复重建会话队列用）：保持传入顺序，
+  /// 库中已删除的 id 自动剔除；IN 逐 id 生成占位符并分批 ≤900（SQLite 变量上限）
+  Future<List<Track>> getByIds(List<String> ids) async {
+    if (ids.isEmpty) return const [];
+    final found = <Track>[];
+    const chunkSize = 900;
+    for (var i = 0; i < ids.length; i += chunkSize) {
+      final end = i + chunkSize > ids.length ? ids.length : i + chunkSize;
+      final chunk = ids.sublist(i, end);
+      final rows = await db.query(
+        "tracks",
+        where: "id IN (${List.filled(chunk.length, "?").join(",")})",
+        whereArgs: chunk,
+      );
+      found.addAll([for (final r in rows) _fromRow(r)]);
+    }
+    final byId = {for (final t in found) t.id: t};
+    return [for (final id in ids) if (byId.containsKey(id)) byId[id]!];
+  }
+
   /// 本地音乐曲目（origin = local，倒序；本地扫描来源，排除下载目录由扫描器负责）
   Future<List<Track>> localTracks() async {
     final rows = await db.query(

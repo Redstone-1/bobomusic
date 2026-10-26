@@ -87,10 +87,35 @@ void main() {
     final resp = await source.request(0, null);
     expect(resp.sourceLength, content.length);
     expect(resp.offset, 0);
+    expect(resp.contentType, "video/mp4");
     expect(refererSeen, isTrue, reason: "必须带 Referer");
     final data = await drain(resp.stream);
     expect(data.length, content.length);
     expect(data, content);
+  });
+
+  test("contentType 透传：酷我流按 audio/mpeg 声明", () async {
+    mode = "range206";
+    final source = RangeProxySource(
+      key: "kuwo:123",
+      url: "http://127.0.0.1:${server.port}/audio.mp3",
+      headers: const {"Referer": "https://www.kuwo.cn/"},
+      contentType: "audio/mpeg",
+    );
+    final resp = await source.request(0, null);
+    expect(resp.contentType, "audio/mpeg");
+    expect(await drain(resp.stream), content);
+  });
+
+  test("缓存文件扩展名随音源：kuwo: 前缀 .mp3，其余 .m4a", () {
+    expect(
+      RangeProxySource.cacheFileFor("kuwo:123").path.endsWith(".mp3"),
+      isTrue,
+    );
+    expect(
+      RangeProxySource.cacheFileFor("bili:1_BVx_2").path.endsWith(".m4a"),
+      isTrue,
+    );
   });
 
   test("中段 Range（模拟 seek）：字节区间正确", () async {
@@ -159,6 +184,23 @@ void main() {
     expect(resp.sourceLength, content.length);
     final data = await drain(resp.stream);
     expect(data, content);
+  });
+
+  test("酷我 mp3：缓存文件名 .mp3，contentType 按 audio/mpeg 声明", () async {
+    mode = "range206";
+    final source = RangeProxySource(
+      key: "kuwo:123",
+      url: "http://127.0.0.1:${server.port}/audio.mp3",
+      contentType: "audio/mpeg",
+    );
+    final resp = await source.request(0, null);
+    expect(resp.contentType, "audio/mpeg");
+    await drain(resp.stream);
+    await Future<void>.delayed(Duration.zero);
+
+    final cached = RangeProxySource.cacheFileFor("kuwo:123");
+    expect(cached.path.endsWith(".mp3"), isTrue);
+    expect(await cached.exists(), isTrue);
   });
 
   test("parseContentRange 解析与容错", () {

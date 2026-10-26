@@ -49,7 +49,6 @@ class SongListTile extends StatelessWidget {
           children: [
             CoverPlaceholder(
               cover: coverOverride ?? track.cover,
-              hue: track.coverHue,
               text: track.name,
               size: 48,
               radius: t.radiusSm,

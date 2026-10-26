@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:convert";
 import "dart:io";
 
 import "package:riverpod_annotation/riverpod_annotation.dart";
@@ -106,6 +107,11 @@ PlaybackDeps? playbackDepsTestOverride;
 const _kTrackId = "playback_track_id";
 const _kPositionMs = "playback_position_ms";
 const _kMode = "playback_mode";
+
+/// 会话队列快照（id 列表 JSON + 当前下标）：跨启动恢复点歌列表上下文，
+/// 与插队/稍后听的 queue 表互不相干（queue 表自身持久，由 takeFirst 消费）
+const _kQueueIds = "playback_queue_ids";
+const _kQueueIndex = "playback_queue_index";
 
 /// 播放状态机（§5.2-1：PlaySession + NextStrategy；引擎只做"取下一首→装载→播放"）
 /// 断点续播：进度去抖 5s 写盘，暂停/切歌/销毁立即写（§5.2-2）
@@ -373,6 +379,9 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       await _resolveEngine().load(source, initialPosition: initialPosition);
       if (!ref.mounted) return;
       if (autoplay) await _resolveEngine().play();
+      // 切歌后立即写新曲与队列快照：与 queue 表 takeFirst 的删除时序对齐，
+      // 避免播放器启动后、下个去抖周期前被杀导致“已出队但快照仍是旧曲”
+      _persistNow();
     } catch (e) {
       if (!ref.mounted) return;
       // 装载失败：类型化错误上抛到 state（UI 提示），不静默挂死（§5.1-2）
@@ -383,6 +392,7 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
           : "$e";
       state = state.copyWith(buffering: false, playing: false, error: friendly);
       _snapshot();
+      _persistNow();
       _syncSystem(force: true);
     }
   }
@@ -421,6 +431,7 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
         url: musicUrl.url,
         backupUrl: musicUrl.backupUrl,
         headers: musicUrl.headers,
+        contentType: musicUrl.contentType,
       );
     }
     final musicUrl = await biliApi.getMusicUrl(track.id);
@@ -429,6 +440,7 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       url: musicUrl.url,
       backupUrl: musicUrl.backupUrl,
       headers: musicUrl.headers,
+      contentType: musicUrl.contentType,
     );
   }
 
@@ -473,11 +485,15 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
   Track? _snapTrack;
   Duration _snapPosition = Duration.zero;
   PlayMode _snapMode = PlayMode.listLoop;
+  List<Track> _snapQueue = const [];
+  int _snapQueueIndex = -1;
 
   void _snapshot() {
     if (state.track != null) _snapTrack = state.track;
     _snapPosition = state.position;
     _snapMode = state.mode;
+    _snapQueue = state.queue;
+    _snapQueueIndex = state.queueIndex;
   }
 
   void _persistNow() {
@@ -488,10 +504,17 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     appPrefs.setString(_kTrackId, track.id);
     appPrefs.setInt(_kPositionMs, _snapPosition.inMilliseconds);
     appPrefs.setString(_kMode, _snapMode.name);
+    // 队列快照与曲目同刻写入，保证恢复时 (track, queue, index) 三元一致
+    appPrefs.setString(
+      _kQueueIds,
+      jsonEncode([for (final t in _snapQueue) t.id]),
+    );
+    appPrefs.setInt(_kQueueIndex, _snapQueueIndex);
   }
 
-  /// 冷启动断点恢复：曲目/进度/模式回填（暂停态；点播放续播），
-  /// 队列恢复走 queue 表（B 批接线时补）
+  /// 冷启动断点恢复：曲目/进度/模式 + 会话队列快照回填（暂停态；点播放续播）。
+  /// 队列快照只存 id，回库重建；已删除曲目自动剔除，当前曲不在快照中则退回单曲。
+  /// 插队/稍后听走 queue 表（自身跨启动持久），由 takeFirst 消费，无需在此恢复。
   Future<void> _restoreFromPrefs() async {
     if (_restored) return;
     _restored = true;
@@ -502,10 +525,33 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     final track = await TrackRepository().getById(trackId);
     if (!ref.mounted) return;
     if (track == null) return;
+    var queue = <Track>[track];
+    var index = 0;
+    final idsJson = appPrefs.getString(_kQueueIds);
+    if (idsJson != null) {
+      try {
+        final ids = (jsonDecode(idsJson) as List).cast<String>();
+        final restored = await TrackRepository().getByIds(ids);
+        var idx = restored.indexWhere((t) => t.id == trackId);
+        // 队列允许重复曲目：优先用保存下标，其次按曲目 id 定位
+        final savedIndex = appPrefs.getInt(_kQueueIndex) ?? -1;
+        if (savedIndex >= 0 &&
+            savedIndex < restored.length &&
+            restored[savedIndex].id == trackId) {
+          idx = savedIndex;
+        }
+        if (idx >= 0) {
+          queue = restored;
+          index = idx;
+        }
+      } catch (_) {
+        // 快照损坏按单曲恢复
+      }
+    }
     state = state.copyWith(
       track: track,
-      queue: [track],
-      queueIndex: 0,
+      queue: queue,
+      queueIndex: index,
       position: Duration(milliseconds: positionMs),
       mode: PlayMode.values
           .where((m) => m.name == modeName)

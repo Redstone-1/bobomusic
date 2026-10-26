@@ -2,7 +2,7 @@
 enum OriginType { bili, kuwo, local }
 
 /// 曲目实体（mock 形状 = 重构计划 §3.1 tracks 表）
-/// S3 起由 Repository 从真数据映射；[coverHue] 仅为 mock 占位封面保留
+/// S3 起由 Repository 从真数据映射
 class Track {
   final String id;
   final String name;
@@ -21,9 +21,6 @@ class Track {
   /// 歌词时间校准偏移（毫秒；正数 = 歌词延后显示）
   final int lyricOffsetMs;
 
-  /// 仅 mock 用：占位封面色相（真实数据用 cover 图链）
-  final int? coverHue;
-
   const Track({
     required this.id,
     required this.name,
@@ -35,6 +32,5 @@ class Track {
     this.localPath,
     this.lyric,
     this.lyricOffsetMs = 0,
-    this.coverHue,
   });
 }

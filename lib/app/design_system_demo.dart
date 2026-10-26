@@ -316,7 +316,6 @@ const _demoTracks = [
     name: "夜航西飞",
     author: "陈鸿宇",
     duration: 252,
-    coverHue: 212,
   ),
   Track(
     id: "demo-2",
@@ -324,7 +323,6 @@ const _demoTracks = [
     author: "柳爽",
     duration: 311,
     origin: OriginType.kuwo,
-    coverHue: 8,
   ),
   Track(
     id: "demo-3",
@@ -332,7 +330,6 @@ const _demoTracks = [
     author: "未知歌手",
     duration: 198,
     origin: OriginType.local,
-    coverHue: 46,
   ),
 ];
 

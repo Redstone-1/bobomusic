@@ -20,6 +20,14 @@ import "package:just_audio/just_audio.dart";
   return (int.parse(match.group(2)!), int.parse(match.group(3)!));
 }
 
+/// 已转正缓存音频判定（.m4a = B 站 dash / .mp3 = 酷我）
+bool _isCacheAudio(String path) =>
+    path.endsWith(".m4a") || path.endsWith(".mp3");
+
+/// 缓存目录内全部产物（含下载中的 .part）
+bool _isCacheArtifact(String path) =>
+    _isCacheAudio(path) || path.endsWith(".part");
+
 /// 缓存总量治理（§5.3-5）：超 [maxFiles] 对象或 [maxBytes] 总量时按
 /// lastAccessed（LRU）删最旧，直到两项均达标。尽力而为：任何异常不外抛
 /// （异步执行，目录被并发清理等竞态直接放弃本轮）
@@ -32,7 +40,7 @@ Future<void> pruneAudioCache(
     if (!await dir.exists()) return;
     final files = <File>[];
     await for (final e in dir.list()) {
-      if (e is File && e.path.endsWith(".m4a")) files.add(e);
+      if (e is File && _isCacheAudio(e.path)) files.add(e);
     }
     if (files.length <= maxFiles) {
       var total = 0;
@@ -82,21 +90,24 @@ class RangeProxySource extends StreamAudioSource {
   /// 请求头（B 站 CDN 必须带 Referer，缺省 403）
   final Map<String, String>? headers;
 
+  /// 流内容类型（B 站 dash 按 video/mp4，酷我 mp3 为 audio/mpeg）
+  final String contentType;
+
   /// 缓存根目录（main 初始化为应用缓存目录下 bobomusic_audio；测试可指临时目录）
   static late Directory cacheDir;
 
-  /// 缓存文件（key=origin-id 的 md5 文件名；下载模块命中即复制）
-  static File cacheFileFor(String key) =>
-      File("${cacheDir.path}/${md5.convert(utf8.encode(key))}.m4a");
+  /// 缓存文件（key=origin-id 的 md5 文件名；扩展名随音源，下载模块命中即复制）
+  static File cacheFileFor(String key) => File(
+      "${cacheDir.path}/${md5.convert(utf8.encode(key))}"
+      "${key.startsWith("kuwo:") ? ".mp3" : ".m4a"}");
 
-  /// 音频缓存占用（.m4a + 下载中的 .part，字节）
+  /// 音频缓存占用（音频缓存 + 下载中的 .part，字节）
   static Future<int> cacheSize() async {
     try {
       if (!await cacheDir.exists()) return 0;
       var total = 0;
       await for (final e in cacheDir.list()) {
-        if (e is File &&
-            (e.path.endsWith(".m4a") || e.path.endsWith(".part"))) {
+        if (e is File && _isCacheArtifact(e.path)) {
           total += await e.length();
         }
       }
@@ -112,8 +123,7 @@ class RangeProxySource extends StreamAudioSource {
     try {
       if (!await cacheDir.exists()) return 0;
       await for (final e in cacheDir.list()) {
-        if (e is File &&
-            (e.path.endsWith(".m4a") || e.path.endsWith(".part"))) {
+        if (e is File && _isCacheArtifact(e.path)) {
           try {
             freed += await e.length();
             await e.delete();
@@ -134,6 +144,7 @@ class RangeProxySource extends StreamAudioSource {
     required this.url,
     this.backupUrl,
     this.headers,
+    this.contentType = "video/mp4",
   }) : super(tag: key) {
     // origin-id 可能含路径非法字符（冒号等），md5 短哈希作缓存文件名
     final name = md5.convert(utf8.encode(key)).toString();
@@ -153,8 +164,8 @@ class RangeProxySource extends StreamAudioSource {
         contentLength: last - s + 1,
         offset: s,
         stream: _cacheFile.openRead(s, last + 1).cast<Uint8List>(),
-        // B 站 dash 音频按 video/mp4 声明（实际 m4a），demux 依赖此声明
-        contentType: "video/mp4",
+        // B 站 dash 按 video/mp4 声明（实际 m4a），demux 依赖此声明
+        contentType: contentType,
       );
     }
     return _fetch(s, end);
@@ -210,7 +221,7 @@ class RangeProxySource extends StreamAudioSource {
       contentLength: endIdx - start + 1,
       offset: start,
       stream: stream,
-      contentType: "video/mp4",
+      contentType: contentType,
     );
   }
 

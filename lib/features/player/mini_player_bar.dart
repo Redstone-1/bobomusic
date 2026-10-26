@@ -34,19 +34,17 @@ class MiniBarPage extends StatelessWidget {
 }
 
 /// 封面静止（所有者 2026-10-25 定稿：迷你条封面不旋转）；进度线从封面右侧起
+/// 本体只订阅 track/playing 低频字段；高频 position 由 [_MiniProgress] 细粒度订阅，
+/// 进度 tick 不再整条重建（BackdropFilter 重建代价高）
 class MiniPlayerBar extends ConsumerWidget {
   const MiniPlayerBar({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = AuroraTokens.of(context);
-    final pb = ref.watch(playbackProvider);
-    final track = pb.track;
+    final track = ref.watch(playbackProvider.select((s) => s.track));
+    final playing = ref.watch(playbackProvider.select((s) => s.playing));
     if (track == null) return const SizedBox.shrink();
-    final progress = pb.duration.inMilliseconds > 0
-        ? (pb.position.inMilliseconds / pb.duration.inMilliseconds)
-              .clamp(0.0, 1.0)
-        : 0.0;
 
     return ScaleTap(
       key: const Key("mini_player"),
@@ -111,11 +109,7 @@ class MiniPlayerBar extends ConsumerWidget {
                         ),
                         const SizedBox(height: 4),
                         // 进度线属于文字块：天然与歌名左对齐，无坐标换算
-                        AuroraProgressBar(
-                          value: progress,
-                          height: 2,
-                          showThumb: false,
-                        ),
+                        const _MiniProgress(),
                       ],
                     ),
                   ),
@@ -126,7 +120,7 @@ class MiniPlayerBar extends ConsumerWidget {
                     child: Padding(
                       padding: const EdgeInsets.all(6),
                       child: Icon(
-                        pb.playing ? Icons.pause : Icons.play_arrow,
+                        playing ? Icons.pause : Icons.play_arrow,
                         size: 26,
                         color: t.primary,
                       ),
@@ -139,5 +133,23 @@ class MiniPlayerBar extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+/// 进度线（高频 position/duration 元组订阅，只重建本行）
+class _MiniProgress extends ConsumerWidget {
+  const _MiniProgress();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final (positionMs, durationMs) = ref.watch(
+      playbackProvider.select(
+        (s) => (s.position.inMilliseconds, s.duration.inMilliseconds),
+      ),
+    );
+    final progress = durationMs > 0
+        ? (positionMs / durationMs).clamp(0.0, 1.0)
+        : 0.0;
+    return AuroraProgressBar(value: progress, height: 2, showThumb: false);
   }
 }

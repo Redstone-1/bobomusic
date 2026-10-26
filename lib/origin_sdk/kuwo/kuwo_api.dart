@@ -126,6 +126,7 @@ class KuwoApi implements OriginService {
       return MusicUrl(
         url: url,
         headers: {"Referer": "https://www.kuwo.cn/"},
+        contentType: "audio/mpeg",
       );
     } on KuwoApiError {
       rethrow;
