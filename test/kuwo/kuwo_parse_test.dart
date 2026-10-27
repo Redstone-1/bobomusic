@@ -68,6 +68,16 @@ void main() {
       expect(parseKuwoUrl({"url": "https://x/a.mp3"}), "https://x/a.mp3");
     });
 
+    test("旧接口字段残留 JS 转义：\\u0026 解为 &（歌手名实测泄漏点）", () {
+      const raw =
+          "{'abslist':[{'MUSICRID':'MUSIC_1','SONGNAME':'歌名','ARTIST':'A2O LITE\\\\u0026A2O','DURATION':'200'}]}";
+      final data = parseKuwoJson(raw) as Map;
+      final item = kuwoSongToSearchItem(
+        (data["abslist"] as List).first as Map,
+      );
+      expect(item!.author, "A2O LITE&A2O");
+    });
+
     test("新接口字段：id 前缀 + origin + 时长/封面", () {
       final item = kuwoSongToSearchItem({
         "rid": 123,
@@ -143,6 +153,26 @@ void main() {
       expect(titles, hasLength(2));
       expect(titles[0].name, "山风山风等等我");
       expect(titles[0].artist, "万海东");
+    });
+
+    test("SSR 可见文本残留 JS 转义：歌手 \\u0026 解为 &", () {
+      const html = '''
+        <p class="song_name" data-v>合作曲</p>
+        <p class="artist" data-v>歌手甲\\u0026歌手乙</p>
+      ''';
+      final titles = parseKuwoRankTitles(html);
+      expect(titles.single.artist, "歌手甲&歌手乙");
+    });
+
+    test("双重转义 \\\\\\u0026 解为 &，不残留反斜杠（真机实测形态）", () {
+      // 数据源存在 \\u0026（两道反斜杠）的过度转义，单解一层会残留 \
+      const html = '''
+        <p class="song_name" data-v>合作曲二</p>
+        <p class="artist" data-v>歌手甲\\\\u0026歌手乙</p>
+      ''';
+      final titles = parseKuwoRankTitles(html);
+      expect(titles.single.artist, "歌手甲&歌手乙");
+      expect(titles.single.artist, isNot(contains("\\")));
     });
 
     test("搜索结果匹配：拒绝错歌手，接受同歌手版本", () {

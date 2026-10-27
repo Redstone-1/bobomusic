@@ -312,13 +312,27 @@ SearchItem? kuwoSongToSearchItem(Map song) {
 }
 
 /// 旧接口文本清洗：HTML 实体、标签、首尾空白
-String decodeKuwoText(String value) => value
-    .replaceAll("&nbsp;", " ")
-    .replaceAll("&amp;", "&")
-    .replaceAll("&apos;", "'")
-    .replaceAll("&#39;", "'")
-    .replaceAll(RegExp(r"<[^>]*>"), "")
-    .trim();
+/// 文本清洗：先解 JS/Unicode 转义，再解 HTML 实体，最后去标签
+String decodeKuwoText(String value) {
+  final v = _decodeJsEscapes(value);
+  return v
+      .replaceAll("&nbsp;", " ")
+      .replaceAll("&amp;", "&")
+      .replaceAll("&apos;", "'")
+      .replaceAll("&#39;", "'")
+      .replaceAll(RegExp(r"<[^>]*>"), "")
+      .trim();
+}
+
+/// JS/Unicode 转义解码：\uXXXX → 字符、\/ → /。
+/// 反斜杠允许连续多个（酷我数据存在 \\u0026 双重转义，实测会残留 \ 在歌手名）
+String _decodeJsEscapes(String value) {
+  var v = value.replaceAllMapped(
+    RegExp(r"\\+u([0-9a-fA-F]{4})"),
+    (m) => String.fromCharCode(int.parse(m.group(1)!, radix: 16)),
+  );
+  return v.replaceAll(r"\/", "/");
+}
 
 /// 旧接口封面是相对路径（120/11/8/xxx.jpg），补全 Kuwo 图床前缀
 String kuwoCoverUrl(String raw) {
@@ -645,12 +659,7 @@ int? _intField(String object, String key) {
 }
 
 /// SSR 的 URL 常写成 `https:\u002F\u002F...`
-String _unescapeJsString(String value) => value
-    .replaceAll(r"\u002F", "/")
-    .replaceAll(r"\/", "/")
-    .replaceAll(r"\u0026", "&")
-    .replaceAll(r"\u003D", "=")
-    .replaceAll(r"\u003A", ":");
+String _unescapeJsString(String value) => _decodeJsEscapes(value);
 
 /// 搜索响应（OriginService 只要求 SearchResponse 抽象，提供具体实现）
 class KuwoSearchResponse extends SearchResponse {
