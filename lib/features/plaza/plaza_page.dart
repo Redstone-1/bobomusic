@@ -19,244 +19,189 @@ import "../player/player_card_page.dart";
 import "hot_songs_provider.dart";
 import "search_page.dart";
 
-/// 广场页：搜索入口 + 酷我官方热歌榜（标题/歌手来自榜单，点播时解析 rid）
-class PlazaPage extends ConsumerWidget {
+/// 广场页：搜索入口 + 榜单 TabBar + TabBarView 榜单列表
+/// 热歌榜 = 酷我 SSR 真榜；其余为主题卡（多榜单接口已封死，见 kuwo_api 注释）
+class PlazaPage extends ConsumerStatefulWidget {
   const PlazaPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final hotHitsAsync = ref.watch(kuwoHotHitsProvider);
-    final hotHits = hotHitsAsync.value ?? const <KuwoHotHit>[];
-    final currentTrackId = ref.watch(
-      playbackProvider.select((s) => s.track?.id),
-    );
+  ConsumerState<PlazaPage> createState() => _PlazaPageState();
+}
 
-    Future<void> refreshHot() async {
-      if (hotHitsAsync.isLoading) return;
-      // 刷新中反馈由 SectionHeader 的「刷新中…」承担，只 toast 一次结果
-      ref.invalidate(kuwoHotHitsProvider);
-      try {
-        final hits = await ref.read(kuwoHotHitsProvider.future);
-        if (!context.mounted) return;
-        AppToast.show(
-          context,
-          hits.isEmpty ? "暂无热歌数据" : "热歌榜已刷新",
-        );
-      } catch (_) {
-        if (context.mounted) AppToast.show(context, "刷新失败，请检查网络");
-      }
-    }
+class _PlazaPageState extends ConsumerState<PlazaPage>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tab = TabController(
+    length: plazaChartDefs.length,
+    vsync: this,
+  );
 
-    Future<void> playHit(KuwoHotHit hit) async {
-      // 已带 SSR 结果的条目直接播放；只有需要匹配 rid 时才显示 loading，避免遮住迷你条
-      final needsMatch = hit.item == null;
-      if (needsMatch) AppLoading.show(msg: "匹配酷我热歌…");
-      try {
-        final track = await resolveKuwoHotHit(hit);
-        if (!context.mounted) return;
-        if (track == null) {
-          AppToast.show(context, "未找到可播放的匹配版本");
-          return;
-        }
-        await TrackRepository().upsert(track);
-        if (!context.mounted) return;
-        PlayerCardPage.start(context, ref, track);
-      } finally {
-        if (needsMatch) AppLoading.dismiss();
-      }
-    }
+  @override
+  void dispose() {
+    _tab.dispose();
+    super.dispose();
+  }
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 150),
+  @override
+  Widget build(BuildContext context) {
+    final t = AuroraTokens.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const PageHeader(title: "音乐广场", subtitle: "酷我热歌 · 发现好歌"),
-        const SizedBox(height: 16),
-        _SearchEntry(
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const SearchPage()),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const PageHeader(title: "音乐广场", subtitle: "酷我榜单 · 发现好歌"),
+              const SizedBox(height: 16),
+              _SearchEntry(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SearchPage()),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // 榜单 Tab（family provider 各榜独立缓存，切换零等待）。
+              // 无指示条；labelPadding 收紧后四榜 390dp 内左对齐放得下，不出横向滚动
+              Theme(
+                data: Theme.of(context).copyWith(
+                  splashFactory: NoSplash.splashFactory,
+                ),
+                child: TabBar(
+                  controller: _tab,
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  indicator: const BoxDecoration(),
+                  labelColor: t.primary,
+                  unselectedLabelColor: t.fgMute,
+                  dividerColor: Colors.transparent,
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 14),
+                  labelStyle: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  unselectedLabelStyle: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  tabs: [
+                    for (final (_, name) in plazaChartDefs) Tab(text: name),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
-        // 酷我官方热歌榜：标题来自榜单页，点击时解析可播 rid
-        if (hotHitsAsync.isLoading && hotHits.isEmpty) ...[
-          const SectionHeader(title: "热门歌曲", trailing: "加载中"),
-          const SkeletonListView(rows: 3),
-        ] else if (hotHitsAsync.hasError && hotHits.isEmpty) ...[
-          const SectionHeader(title: "热门歌曲"),
-          EmptyState(
-            compact: true,
-            icon: Icons.cloud_off_outlined,
-            title: "热歌榜加载失败",
-            subtitle: "检查网络后重试",
-            action: GlassChip(
-              label: "重试",
-              onTap: refreshHot,
-            ),
+        Expanded(
+          child: TabBarView(
+            controller: _tab,
+            children: [
+              for (final (key, name) in plazaChartDefs)
+                _ChartListView(chartKey: key, chartName: name),
+            ],
           ),
-        ] else if (hotHits.isEmpty) ...[
-          // 接口正常但空数据：热榜是广场主体内容，不能静默消失
-          const SectionHeader(title: "热门歌曲"),
-          EmptyState(
-            compact: true,
-            icon: Icons.music_off_outlined,
-            title: "热歌榜暂时没有数据",
-            subtitle: "稍后再试试",
-            action: GlassChip(
-              label: "重试",
-              onTap: refreshHot,
-            ),
-          ),
-        ] else ...[
-          const SizedBox(height: 18),
-          _FeaturedSongCard(
-            hit: hotHits.first,
-            onTap: () => playHit(hotHits.first),
-          ),
-          SectionHeader(
-            title: "热门歌曲",
-            trailing: hotHitsAsync.isLoading ? "刷新中…" : "刷新",
-            onTrailingTap: hotHitsAsync.isLoading ? null : refreshHot,
-          ),
-          for (final (i, hit) in hotHits.take(8).indexed)
-            _HotSongRow(
-              hit: hit,
-              rank: i + 1,
-              playing: currentTrackId != null &&
-                  hit.item?.id == currentTrackId,
-              onTap: () => playHit(hit),
-            ),
-        ],
+        ),
       ],
     );
   }
 }
 
-/// 搜索入口（重设计后的主搜索条：玻璃底 + 发现提示）
-class _SearchEntry extends StatelessWidget {
-  final VoidCallback onTap;
+/// 单榜列表（TabBarView 子页）：整包操作 + 排名歌曲行；keepAlive 保滚动位置
+class _ChartListView extends ConsumerStatefulWidget {
+  final String chartKey;
+  final String chartName;
 
-  const _SearchEntry({required this.onTap});
+  const _ChartListView({
+    required this.chartKey,
+    required this.chartName,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    final t = AuroraTokens.of(context);
-    return ScaleTap(
-      onTap: onTap,
-      pressedScale: 0.985,
-      child: GlassCard(
-        frosted: true,
-        radius: t.radiusLg,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Icon(Icons.search, size: 20, color: t.primary),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                "搜索歌曲 / 歌手 / 合集",
-                style: TextStyle(fontSize: 14, color: t.fgDim),
-              ),
-            ),
-            Icon(Icons.tune, size: 18, color: t.fgMute),
-          ],
-        ),
-      ),
-    );
-  }
+  ConsumerState<_ChartListView> createState() => _ChartListViewState();
 }
 
-/// 官方热榜主卡：标题/歌手来自榜单，item 已解析时显示封面
-class _FeaturedSongCard extends StatelessWidget {
-  final KuwoHotHit hit;
-  final VoidCallback onTap;
-
-  const _FeaturedSongCard({required this.hit, required this.onTap});
+class _ChartListViewState extends ConsumerState<_ChartListView>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   Widget build(BuildContext context) {
-    final t = AuroraTokens.of(context);
-    return ScaleTap(
-      onTap: onTap,
-      pressedScale: 0.98,
-      child: GlassCard(
-        frosted: true,
-        padding: const EdgeInsets.all(18),
-        child: Row(
-          children: [
-            CoverPlaceholder(
-              cover: hit.item?.cover,
-              text: hit.name,
-              size: 92,
-              radius: 18,
+    super.build(context);
+    final chartAsync = ref.watch(kuwoChartProvider(widget.chartKey));
+    final currentTrackId = ref.watch(
+      playbackProvider.select((s) => s.track?.id),
+    );
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 150),
+      children: [
+        chartAsync.when(
+          loading: () => const SkeletonListView(rows: 8),
+          error: (e, _) => EmptyState(
+            compact: true,
+            emoji: "⚠️",
+            title: "榜单加载失败",
+            subtitle: "检查网络后重试",
+            action: GlassChip(
+              label: "重试",
+              onTap: () =>
+                  ref.invalidate(kuwoChartProvider(widget.chartKey)),
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "酷我热歌榜",
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.2,
-                      color: t.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    hit.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 19,
-                      height: 1.15,
-                      fontWeight: FontWeight.w800,
-                      color: t.fg,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    hit.artist,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: t.fgDim),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.play_circle_fill, size: 18, color: t.primary),
-                      const SizedBox(width: 5),
-                      Text(
-                        "立即播放",
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: t.primary,
-                        ),
+          ),
+          data: (chart) => chart.hits.isEmpty
+              ? const EmptyState(
+                  compact: true,
+                  emoji: "🎵",
+                  title: "榜单暂时没有数据",
+                  subtitle: "稍后再试试",
+                )
+              : Column(
+                  children: [
+                    for (final (i, hit) in chart.hits.indexed)
+                      _ChartSongRow(
+                        rank: i + 1,
+                        hit: hit,
+                        playing: currentTrackId != null &&
+                            hit.item?.id == currentTrackId,
+                        onTap: () => _playHit(hit),
                       ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
+                  ],
+                ),
         ),
-      ),
+      ],
     );
+  }
+
+  /// 单曲点播：解析 rid → 入库 → 开播（单曲会话，与旧热歌行一致）
+  Future<void> _playHit(KuwoHotHit hit) async {
+    final needsMatch = hit.item == null;
+    if (needsMatch) AppLoading.show(msg: "匹配歌曲…");
+    try {
+      final track = await resolveKuwoHotHit(hit);
+      if (!mounted) return;
+      if (track == null) {
+        AppToast.show(context, "未找到可播放的匹配版本");
+        return;
+      }
+      await TrackRepository().upsert(track);
+      if (!mounted) return;
+      PlayerCardPage.start(context, ref, track);
+    } finally {
+      if (needsMatch) AppLoading.dismiss();
+    }
   }
 }
 
-/// 热门歌曲榜单行：排名 + 封面 + 歌名/歌手 + 播放态
-class _HotSongRow extends StatelessWidget {
-  final KuwoHotHit hit;
+/// 榜单歌曲行：排名 + 封面 + 歌名/歌手 + 播放态（原热歌榜列表行样式）
+class _ChartSongRow extends StatelessWidget {
   final int rank;
+  final KuwoHotHit hit;
   final bool playing;
   final VoidCallback onTap;
 
-  const _HotSongRow({
-    required this.hit,
+  const _ChartSongRow({
     required this.rank,
+    required this.hit,
     required this.playing,
     required this.onTap,
   });
@@ -315,6 +260,40 @@ class _HotSongRow extends StatelessWidget {
               ),
             ),
             if (playing) const EqBars(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 搜索入口（玻璃底 + 发现提示）
+class _SearchEntry extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _SearchEntry({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AuroraTokens.of(context);
+    return ScaleTap(
+      onTap: onTap,
+      pressedScale: 0.985,
+      child: GlassCard(
+        frosted: true,
+        radius: t.radiusLg,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(Icons.search, size: 20, color: t.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                "搜索歌曲 / 歌手 / 合集",
+                style: TextStyle(fontSize: 14, color: t.fgDim),
+              ),
+            ),
+            Icon(Icons.tune, size: 18, color: t.fgMute),
           ],
         ),
       ),

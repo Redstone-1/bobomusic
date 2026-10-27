@@ -100,6 +100,20 @@ class KuwoHotHit {
   });
 }
 
+/// 广场榜单卡（热歌榜 = SSR 真榜；主题卡 = legacy search 按关键词取歌，如实命名）
+class KuwoChart {
+  /// 卡片标识："hot" / "theme:<关键词>"（family provider 参数）
+  final String key;
+  final String name;
+  final List<KuwoHotHit> hits;
+
+  const KuwoChart({
+    required this.key,
+    required this.name,
+    required this.hits,
+  });
+}
+
 class UgcSeason {
   final int mid;
   final int seasonId;

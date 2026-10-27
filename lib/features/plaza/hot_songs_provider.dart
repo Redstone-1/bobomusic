@@ -6,28 +6,60 @@ import "../../data/origin_service.dart";
 import "../../origin_sdk/kuwo/kuwo_api.dart";
 import "../../origin_sdk/origin_types.dart";
 
-/// 酷我官方热榜：标题来自榜单页；item 可能为空，点播时再解析 rid
-final kuwoHotHitsProvider = FutureProvider<List<KuwoHotHit>>((ref) async {
+/// 广场榜单卡定义（key, 展示名）：热歌榜 = 唯一 SSR 真榜；其余为主题卡
+/// （酷我多榜单接口已封死，实测结论见 kuwo_api.hotChart 注释）
+const plazaChartDefs = <(String, String)>[
+  ("hot", "热歌榜"),
+  ("theme:经典老歌", "经典老歌"),
+  ("theme:网络热歌", "网络热歌"),
+  ("theme:伤感情歌", "伤感情歌"),
+];
+
+/// 单张榜单卡数据（keepAlive：进详情页/回广场不重拉；单卡失败只降级该卡）
+final kuwoChartProvider = FutureProvider.family<KuwoChart, String>((ref, key) async {
   final api = kuwoApi;
-  if (api is KuwoApi) return api.hotHits();
-  // 测试/其它 OriginService 兜底：优先用其 hotSongs，再退回搜索
-  final items = await api.hotSongs();
-  if (items.isNotEmpty) {
-    return [
-      for (final item in items)
-        KuwoHotHit(name: item.name, artist: item.author, item: item),
-    ];
+  if (key == "hot") {
+    if (api is KuwoApi) return api.hotChart();
+    // 测试/其它 OriginService 兜底：hotSongs → search
+    final items = await api.hotSongs();
+    if (items.isNotEmpty) {
+      return KuwoChart(
+        key: key,
+        name: "热歌榜",
+        hits: [
+          for (final item in items)
+            KuwoHotHit(name: item.name, artist: item.author, item: item),
+        ],
+      );
+    }
+    final resp = await api.search(
+      const SearchParams(keyword: "热门歌曲", page: 1, pageSize: 10),
+    );
+    return KuwoChart(
+      key: key,
+      name: "热歌榜",
+      hits: [
+        for (final item in resp.data)
+          KuwoHotHit(name: item.name, artist: item.author, item: item),
+      ],
+    );
   }
+  final keyword = key.substring("theme:".length);
+  if (api is KuwoApi) return api.themeChart(keyword);
   final resp = await api.search(
-    const SearchParams(keyword: "热门歌曲", page: 1, pageSize: 10),
+    SearchParams(keyword: keyword, page: 1, pageSize: 30),
   );
-  return [
-    for (final item in resp.data)
-      KuwoHotHit(name: item.name, artist: item.author, item: item),
-  ];
+  return KuwoChart(
+    key: key,
+    name: keyword,
+    hits: [
+      for (final item in resp.data)
+        KuwoHotHit(name: item.name, artist: item.author, item: item),
+    ],
+  );
 });
 
-/// 点播热榜条目：SSR 已带 item 直接用；否则按标题+歌手搜索并做匹配筛选
+/// 点播榜单条目：SSR 已带 item 直接用；否则按标题+歌手搜索并做匹配筛选
 Future<Track?> resolveKuwoHotHit(KuwoHotHit hit) async {
   if (hit.item != null) return hit.item!.toTrack();
   try {

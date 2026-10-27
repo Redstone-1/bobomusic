@@ -160,6 +160,13 @@ class KuwoApi implements OriginService {
     return _mapSongs(list);
   }
 
+  /// 官方热歌榜（唯一可用的 SSR 真榜；/rankList/{其它id} 服务端忽略 id，
+  /// www bang API 被风控——实测结论，勿再按候选 id 猜测）
+  Future<KuwoChart> hotChart() async {
+    final hits = await hotHits();
+    return KuwoChart(key: "hot", name: "热歌榜", hits: hits);
+  }
+
   /// 官方榜单页可见标题：SSR 被裁剪时仍可展示真实热榜，点播时再解析 rid
   Future<List<KuwoHotHit>> hotHits() async {
     String html = "";
@@ -205,6 +212,20 @@ class KuwoApi implements OriginService {
     } catch (_) {
       return const [];
     }
+  }
+
+  /// 主题歌单卡（legacy search 按关键词取歌）：搜索结果非官方榜单，
+  /// 卡片名称如实为主题关键词（经典老歌/网络热歌等），不冒充官方榜
+  Future<KuwoChart> themeChart(String keyword) async {
+    final items = await _searchLegacy(keyword, size: 30);
+    return KuwoChart(
+      key: "theme:$keyword",
+      name: keyword,
+      hits: [
+        for (final item in items)
+          KuwoHotHit(name: item.name, artist: item.author, item: item),
+      ],
+    );
   }
 
   @override

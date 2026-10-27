@@ -72,19 +72,19 @@ void main() {
     expect(find.text("下载中 0"), findsOneWidget);
   });
 
-  testWidgets("点热歌只开播（迷你条在场），点迷你条才弹播放卡", (WidgetTester tester) async {
+  testWidgets("广场榜单列表点行开播（迷你条在场），点迷你条才弹播放卡", (WidgetTester tester) async {
     await tester.pumpWidget(await buildTestApp());
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500)); // 酷我热歌加载
     final container = ProviderScope.containerOf(
       tester.element(find.byType(App)),
     );
 
-    // 广场 → 酷我热歌榜主卡 → 只开播
+    // 广场 → 热歌榜列表（默认选中）→ 点行开播
     await tester.tap(find.text("广场"));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    await tester.tap(find.text("立即播放"));
+    await tester.pump(const Duration(milliseconds: 500)); // 榜单加载
+    expect(find.text("热歌榜"), findsOneWidget); // Tab
+    await tester.tap(find.text("酷我热歌").first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
 
@@ -120,7 +120,7 @@ void main() {
     expect(container.read(playbackProvider).playing, isTrue);
   });
 
-  testWidgets("窄视口（390dp）切广场：热歌区无溢出（回归）", (WidgetTester tester) async {
+  testWidgets("窄视口（390dp）切广场：榜单 chips 与列表无溢出（回归）", (WidgetTester tester) async {
     // 真机宽度才暴露的溢出（测试默认视口 800 宽不会触发）
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1.0;
@@ -131,20 +131,42 @@ void main() {
 
     await tester.tap(find.text("广场"));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.text("热门歌曲"), findsOneWidget);
+    expect(find.text("热歌榜"), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets("广场热歌未播放：不显示波浪动效", (WidgetTester tester) async {
+  testWidgets("广场榜单 Tab：四榜可切换，切主题榜列表换内容", (WidgetTester tester) async {
     await tester.pumpWidget(await buildTestApp());
     await tester.pump();
     await tester.tap(find.text("广场"));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
-    // 未播放时热门歌曲行不能因为 item/current 都是 null 而误判为播放中
+    // 四个榜单 Tab（FakeKuwoApi 搜索返回「酷我夜曲」）
+    expect(find.text("热歌榜"), findsOneWidget);
+    expect(find.text("经典老歌"), findsOneWidget);
+    expect(find.text("网络热歌"), findsOneWidget);
+    expect(find.text("伤感情歌"), findsOneWidget);
+
+    // 切到主题榜：列表换为搜索结果（Tab 动画 + provider 重建需多帧）
+    await tester.tap(find.text("经典老歌"));
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text("经典老歌"), findsOneWidget); // Tab
+    expect(find.text("酷我夜曲"), findsWidgets);
+  });
+
+  testWidgets("广场榜单未播放：不显示波浪动效", (WidgetTester tester) async {
+    await tester.pumpWidget(await buildTestApp());
+    await tester.pump();
+    await tester.tap(find.text("广场"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // 未播放时榜单行不能因为 item/current 都是 null 而误判为播放中
     expect(find.byType(EqBars), findsNothing);
   });
 
@@ -282,11 +304,11 @@ void main() {
     await tester.pumpWidget(await buildTestApp());
     await tester.pump();
 
-    // 广场 → 酷我热歌主卡开播 → 迷你条 → 播放卡
+    // 广场 → 榜单列表点行开播 → 迷你条 → 播放卡
     await tester.tap(find.text("广场"));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-    await tester.tap(find.text("立即播放"));
+    await tester.tap(find.text("酷我热歌").first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
     await tester.tap(find.byKey(const Key("mini_player")));
