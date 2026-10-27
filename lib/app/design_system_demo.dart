@@ -243,7 +243,7 @@ class _DesignSystemDemoState extends ConsumerState<DesignSystemDemo> {
                 child: SizedBox(
                   height: 200,
                   child: EmptyState(
-                    emoji: "🎵",
+                    asset: "assets/illustrations/empty_music.svg",
                     title: "还没有本地音乐",
                     subtitle: "点击右上角 + 扫描手机里的音频文件",
                   ),
@@ -257,7 +257,7 @@ class _DesignSystemDemoState extends ConsumerState<DesignSystemDemo> {
                   height: 190,
                   child: EmptyState(
                     compact: true,
-                    emoji: "📂",
+                    asset: "assets/illustrations/empty_collection.svg",
                     title: "还没有歌单",
                     subtitle: "点右上角 + 创建第一个歌单",
                   ),
@@ -270,7 +270,7 @@ class _DesignSystemDemoState extends ConsumerState<DesignSystemDemo> {
                   height: 190,
                   child: EmptyState(
                     compact: true,
-                    emoji: "📻",
+                    asset: "assets/illustrations/empty_collection.svg",
                     title: "还没有收藏合集",
                     subtitle: "在搜索中收藏喜欢的合集",
                     action: GlassChip(
@@ -288,7 +288,7 @@ class _DesignSystemDemoState extends ConsumerState<DesignSystemDemo> {
                   height: 190,
                   child: EmptyState(
                     compact: true,
-                    emoji: "💿",
+                    asset: "assets/illustrations/empty_music.svg",
                     title: "还没有播放记录",
                     subtitle: "播放的歌曲会出现在这里",
                   ),

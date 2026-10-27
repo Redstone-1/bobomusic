@@ -1,16 +1,19 @@
 import "package:flutter/material.dart";
+import "package:flutter_svg/flutter_svg.dart";
 
 import "../theme/aurora_tokens.dart";
 
-/// 空状态（原型 .empty：插画/emoji/线性图标 + 标题 + 引导文案）
-/// [illustration] 优先于 [icon]/[emoji]：自绘主题色插画（empty_illustration.dart）
-/// [icon] 优先于 [emoji]：需要统一风格时使用主题色线性图标
+/// 空状态（原型 .empty：插画图/emoji/线性图标 + 标题 + 引导文案）
+/// [asset] 优先级最高：平面矢量插画（酷狗风，酷我系内容空态统一用图）；
+/// [icon] 优先于 [emoji]：错误态等场景的主题色线性图标
 /// [compact] = 分区内嵌矮版（字号小一档）；间距全组件统一，不再分档
 /// [action]  = 可选行动引导（如「去搜索」chip）
 class EmptyState extends StatelessWidget {
   final String emoji;
   final IconData? icon;
-  final Widget? illustration;
+
+  /// 平面矢量插画资源路径（assets/illustrations/，undraw 开放许可）
+  final String? asset;
   final String title;
   final String? subtitle;
   final bool compact;
@@ -20,7 +23,7 @@ class EmptyState extends StatelessWidget {
     super.key,
     this.emoji = "",
     this.icon,
-    this.illustration,
+    this.asset,
     required this.title,
     this.subtitle,
     this.compact = false,
@@ -35,8 +38,15 @@ class EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (illustration != null)
-            illustration!
+          if (asset != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: SvgPicture.asset(
+                asset!,
+                width: compact ? 87 : 110,
+                fit: BoxFit.contain,
+              ),
+            )
           else if (icon != null)
             Container(
               width: compact ? 54 : 72,

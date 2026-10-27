@@ -7,7 +7,6 @@ import "../../core/overlays/app_toast.dart";
 import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/app_buttons.dart";
 import "../../core/widgets/cover_placeholder.dart";
-import "../../core/widgets/empty_illustration.dart";
 import "../../core/widgets/empty_state.dart";
 import "../../core/widgets/page_header.dart";
 import "../../core/widgets/scale_tap.dart";
@@ -20,7 +19,6 @@ import "../../data/repositories/queue_repository.dart";
 import "../../data/repositories/track_repository.dart";
 import "../download/download_actions.dart";
 import "../download/downloads_page.dart";
-import "../home/home_tab.dart";
 import "../player/playback_provider.dart";
 import "../player/player_card_page.dart";
 import "add_to_playlist_sheet.dart";
@@ -130,7 +128,7 @@ class PlaylistPage extends ConsumerWidget {
           data: (playlists) => playlists.isEmpty
               ? const EmptyState(
                   compact: true,
-                  emoji: "📂",
+                  asset: "assets/illustrations/empty_collection.svg",
                   title: "还没有歌单",
                   subtitle: "点右上角 + 创建第一个歌单",
                 )
@@ -165,18 +163,11 @@ class PlaylistPage extends ConsumerWidget {
             ),
           ),
           data: (recent) => recent.isEmpty
-              ? EmptyState(
+              ? const EmptyState(
                   compact: true,
-                  illustration: const RecentEmptyIllustration(),
+                  asset: "assets/illustrations/empty_music.svg",
                   title: "还没有播放记录",
                   subtitle: "播放过的歌曲会出现在这里",
-                  // 行动引导：空态直接把用户送去有歌的地方，闭环不中断
-                  action: GlassChip(
-                    label: "去广场听歌",
-                    onTap: () => ref
-                        .read(homeTabControllerProvider.notifier)
-                        .select(HomeTab.plaza),
-                  ),
                 )
               : Column(
                   children: [

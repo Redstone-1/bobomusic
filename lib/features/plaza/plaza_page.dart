@@ -151,7 +151,7 @@ class _ChartListViewState extends ConsumerState<_ChartListView>
           data: (chart) => chart.hits.isEmpty
               ? const EmptyState(
                   compact: true,
-                  emoji: "🎵",
+                  asset: "assets/illustrations/empty_music.svg",
                   title: "榜单暂时没有数据",
                   subtitle: "稍后再试试",
                 )

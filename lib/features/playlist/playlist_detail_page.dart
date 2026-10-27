@@ -340,7 +340,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                       Positioned.fill(
                         child: _isLocal
                             ? EmptyState(
-                                emoji: "🎧",
+                                asset: "assets/illustrations/empty_local_music.svg",
                                 title: "本地音乐是空的",
                                 subtitle: "扫描设备存储或从文件导入音频",
                                 action: Row(
@@ -359,7 +359,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                 ),
                               )
                             : const EmptyState(
-                                emoji: "🎵",
+                                asset: "assets/illustrations/empty_collection.svg",
                                 title: "歌单还是空的",
                                 subtitle: "从广场搜索或本地扫描添加歌曲",
                               ),

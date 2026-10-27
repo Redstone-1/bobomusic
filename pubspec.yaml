@@ -94,3 +94,4 @@ flutter:
   assets:
     - assets/
     - assets/markdown/
+    - assets/illustrations/ # 空态插画（undraw 提取，主色已换主题青绿）

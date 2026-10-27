@@ -755,7 +755,7 @@ class _LyricViewState extends ConsumerState<_LyricView> {
                 )
               : lyric.lines.isEmpty
                   ? EmptyState(
-                      emoji: "🎵",
+                      asset: "assets/illustrations/empty_music.svg",
                       title: "暂无歌词",
                       subtitle: lyric.error ?? "可搜索并应用歌词",
                       action: GlassChip(

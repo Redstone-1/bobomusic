@@ -603,7 +603,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 if (queryEmpty && !showHistory)
                   const Positioned.fill(
                     child: EmptyState(
-                      emoji: "🔍",
+                      asset: "assets/illustrations/empty_search.svg",
                       title: "输入关键词开始搜索",
                       subtitle: "支持 B 站 / 酷我音源",
                     ),
@@ -621,7 +621,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                             ),
                           )
                         : EmptyState(
-                            emoji: "🎵",
+                            asset: "assets/illustrations/empty_search.svg",
                             title: "没有找到与“$_query”相关的内容",
                             subtitle: "换个关键词试试",
                           ),

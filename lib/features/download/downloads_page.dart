@@ -12,7 +12,6 @@ import "../../core/widgets/aurora_background.dart";
 import "../../core/widgets/aurora_progress_bar.dart";
 import "../../core/widgets/back_link.dart";
 import "../../core/widgets/cover_placeholder.dart";
-import "../../core/widgets/empty_illustration.dart";
 import "../../core/widgets/empty_state.dart";
 import "../../core/widgets/glass_card.dart";
 import "../../core/widgets/page_header.dart";
@@ -116,7 +115,7 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
                           child: Padding(
                             padding: const EdgeInsets.only(bottom: 90),
                             child: const EmptyState(
-                              illustration: DownloadEmptyIllustration(),
+                              asset: "assets/illustrations/empty_download.svg",
                               title: "还没有下载",
                               subtitle: "在歌曲菜单中选择「下载」，离线也能听",
                             ),
@@ -127,7 +126,7 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
                           child: Padding(
                             padding: const EdgeInsets.only(bottom: 90),
                             child: const EmptyState(
-                              illustration: DownloadEmptyIllustration(),
+                              asset: "assets/illustrations/empty_download.svg",
                               title: "没有正在下载的任务",
                               subtitle: "下载完成后会出现在「已下载」",
                             ),
