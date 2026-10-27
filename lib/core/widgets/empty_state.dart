@@ -2,13 +2,15 @@ import "package:flutter/material.dart";
 
 import "../theme/aurora_tokens.dart";
 
-/// 空状态（原型 .empty：emoji 或线性图标 + 标题 + 引导文案）
+/// 空状态（原型 .empty：插画/emoji/线性图标 + 标题 + 引导文案）
+/// [illustration] 优先于 [icon]/[emoji]：自绘主题色插画（empty_illustration.dart）
 /// [icon] 优先于 [emoji]：需要统一风格时使用主题色线性图标
 /// [compact] = 分区内嵌矮版（字号小一档）；间距全组件统一，不再分档
 /// [action]  = 可选行动引导（如「去搜索」chip）
 class EmptyState extends StatelessWidget {
   final String emoji;
   final IconData? icon;
+  final Widget? illustration;
   final String title;
   final String? subtitle;
   final bool compact;
@@ -18,6 +20,7 @@ class EmptyState extends StatelessWidget {
     super.key,
     this.emoji = "",
     this.icon,
+    this.illustration,
     required this.title,
     this.subtitle,
     this.compact = false,
@@ -32,7 +35,9 @@ class EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (icon != null)
+          if (illustration != null)
+            illustration!
+          else if (icon != null)
             Container(
               width: compact ? 54 : 72,
               height: compact ? 54 : 72,

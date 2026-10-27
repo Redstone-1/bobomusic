@@ -33,7 +33,7 @@ class PlazaPage extends ConsumerWidget {
 
     Future<void> refreshHot() async {
       if (hotHitsAsync.isLoading) return;
-      AppToast.show(context, "正在刷新热歌榜…");
+      // 刷新中反馈由 SectionHeader 的「刷新中…」承担，只 toast 一次结果
       ref.invalidate(kuwoHotHitsProvider);
       try {
         final hits = await ref.read(kuwoHotHitsProvider.future);
@@ -92,7 +92,20 @@ class PlazaPage extends ConsumerWidget {
               onTap: refreshHot,
             ),
           ),
-        ] else if (hotHits.isNotEmpty) ...[
+        ] else if (hotHits.isEmpty) ...[
+          // 接口正常但空数据：热榜是广场主体内容，不能静默消失
+          const SectionHeader(title: "热门歌曲"),
+          EmptyState(
+            compact: true,
+            icon: Icons.music_off_outlined,
+            title: "热歌榜暂时没有数据",
+            subtitle: "稍后再试试",
+            action: GlassChip(
+              label: "重试",
+              onTap: refreshHot,
+            ),
+          ),
+        ] else ...[
           const SizedBox(height: 18),
           _FeaturedSongCard(
             hit: hotHits.first,

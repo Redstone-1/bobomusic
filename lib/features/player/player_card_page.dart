@@ -430,6 +430,7 @@ class _ActionsRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = AuroraTokens.of(context);
+    // 尺寸为光学校正值：下载/加号为细线条字形，同字号视觉偏小，放大补齐（所有者反馈）
     final actions = [
       (
         liked ? Icons.favorite : Icons.favorite_border,
@@ -446,7 +447,7 @@ class _ActionsRow extends ConsumerWidget {
           final track = ref.read(playbackProvider).track;
           if (track != null) downloadTrack(context, track);
         },
-        20.0,
+        23.0,
       ),
       (
         Icons.add_rounded,
@@ -460,7 +461,7 @@ class _ActionsRow extends ConsumerWidget {
           ref.invalidate(queueTracksProvider);
           AppToast.show(context, "已加入播放队列");
         },
-        22.0,
+        24.0,
       ),
     ];
 

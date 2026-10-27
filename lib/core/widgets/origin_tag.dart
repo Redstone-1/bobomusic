@@ -3,15 +3,19 @@ import "package:flutter/material.dart";
 import "../../data/models/track.dart";
 import "../theme/aurora_tokens.dart";
 
+/// 音源显示名（D11）：列表标签与通知栏第二行共用
+String originLabel(OriginType o) => switch (o) {
+      OriginType.bili => "B 站",
+      OriginType.kuwo => "酷我",
+      OriginType.local => "本地",
+    };
+
 /// 音源标签（D11：歌曲条目与播放页显示 B 站 / 酷我 / 本地）
 /// 视觉沿用原型封面角标（黑透玻璃胶囊）
 class OriginTag extends StatelessWidget {
   final OriginType origin;
 
   const OriginTag({super.key, required this.origin});
-
-  static String _label(OriginType o) =>
-      switch (o) { OriginType.bili => "B 站", OriginType.kuwo => "酷我", OriginType.local => "本地" };
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +27,7 @@ class OriginTag extends StatelessWidget {
         color: t.coverBadgeBg,
       ),
       child: Text(
-        _label(origin),
+        originLabel(origin),
         // height 1.0：CJK 字体默认行盒上下留白不对称，会让小字号在胶囊里视觉偏上
         style: TextStyle(
           fontSize: 10,

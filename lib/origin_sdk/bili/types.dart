@@ -116,6 +116,13 @@ class BiliSearchItem extends SearchItem {
         id = musicList[0].id;
       }
     }
+    // UGC 合集（season 聚合条目）：无 videos/pages 字段，同样按歌单处理——
+    // 点击进列表（曲目经 searchSeason 拉取），绝不能当单曲直接播放
+    if (type == null &&
+        ((json["is_season_display"] ?? false) == true ||
+            json["ugc_season"] != null)) {
+      type = SearchType.orderName;
+    }
 
     return BiliSearchItem(
       id: id,

@@ -12,6 +12,7 @@ import "../../core/widgets/aurora_background.dart";
 import "../../core/widgets/aurora_progress_bar.dart";
 import "../../core/widgets/back_link.dart";
 import "../../core/widgets/cover_placeholder.dart";
+import "../../core/widgets/empty_illustration.dart";
 import "../../core/widgets/empty_state.dart";
 import "../../core/widgets/glass_card.dart";
 import "../../core/widgets/page_header.dart";
@@ -28,6 +29,8 @@ import "download_tasks.dart";
 enum _DownloadTab { done, active }
 
 /// 下载管理：已完成（tracks.downloaded_at）+ 下载中（内存任务）
+/// 空态走覆盖层（Stack + Positioned.fill 居中于列表可视区，透明区点击穿透），
+/// 加载/错误留在列表流内——与歌单详情/搜索页同一套空态规范
 class DownloadsPage extends ConsumerStatefulWidget {
   const DownloadsPage({super.key});
 
@@ -40,7 +43,6 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final t = AuroraTokens.of(context);
     final doneAsync = ref.watch(downloadedTracksProvider);
     final tasks = ref.watch(downloadTasksProvider);
     final active = [
@@ -48,46 +50,92 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
         if (task.status != DownloadTaskStatus.completed) task,
     ];
     final downloading = active.where((task) => task.active).length;
+    final currentTrackId = ref.watch(
+      playbackProvider.select((s) => s.track?.id),
+    );
+    // 仅「加载完成且无错且为空」才显示覆盖空态（加载/错误走列表流内）
+    final doneEmpty = !doneAsync.isLoading &&
+        !doneAsync.hasError &&
+        (doneAsync.value?.isEmpty ?? false);
 
     return Scaffold(
       body: AuroraBackground(
         child: MiniBarPage(
           child: SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const BackLink(),
-                PageHeader(
-                  title: "下载管理",
-                  subtitle:
-                      "已完成 ${doneAsync.value?.length ?? 0} 首 · 下载中 $downloading 首",
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const BackLink(),
+                      PageHeader(
+                        title: "下载管理",
+                        subtitle:
+                            "已完成 ${doneAsync.value?.length ?? 0} 首 · 下载中 $downloading 首",
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          GlassChip(
+                            label: "已下载 ${doneAsync.value?.length ?? 0}",
+                            selected: _tab == _DownloadTab.done,
+                            onTap: () =>
+                                setState(() => _tab = _DownloadTab.done),
+                          ),
+                          const SizedBox(width: 10),
+                          GlassChip(
+                            label: "下载中 ${active.length}",
+                            selected: _tab == _DownloadTab.active,
+                            onTap: () =>
+                                setState(() => _tab = _DownloadTab.active),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 14),
-                Row(
-                  children: [
-                    GlassChip(
-                      label: "已下载 ${doneAsync.value?.length ?? 0}",
-                      selected: _tab == _DownloadTab.done,
-                      onTap: () => setState(() => _tab = _DownloadTab.done),
-                    ),
-                    const SizedBox(width: 10),
-                    GlassChip(
-                      label: "下载中 ${active.length}",
-                      selected: _tab == _DownloadTab.active,
-                      onTap: () => setState(() => _tab = _DownloadTab.active),
-                    ),
-                  ],
+                Expanded(
+                  child: Stack(
+                    children: [
+                      ListView(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
+                        children: [
+                          if (_tab == _DownloadTab.done)
+                            _buildDone(doneAsync, currentTrackId)
+                          else
+                            _buildActive(active),
+                        ],
+                      ),
+                      if (_tab == _DownloadTab.done && doneEmpty)
+                        // 底部垫高让空态视觉居中于整屏而非剩余区域（所有者反馈偏下）
+                        Positioned.fill(
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 90),
+                            child: const EmptyState(
+                              illustration: DownloadEmptyIllustration(),
+                              title: "还没有下载",
+                              subtitle: "在歌曲菜单中选择「下载」，离线也能听",
+                            ),
+                          ),
+                        ),
+                      if (_tab == _DownloadTab.active && active.isEmpty)
+                        Positioned.fill(
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 90),
+                            child: const EmptyState(
+                              illustration: DownloadEmptyIllustration(),
+                              title: "没有正在下载的任务",
+                              subtitle: "下载完成后会出现在「已下载」",
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 14),
-                if (_tab == _DownloadTab.done)
-                  _buildDone(
-                    doneAsync,
-                    // watch 留在 build 内：方法层只消费参数，防止日后挪用出错
-                    ref.watch(playbackProvider.select((s) => s.track?.id)),
-                  )
-                else
-                  _buildActive(active),
-                SizedBox(height: t.radiusLg),
               ],
             ),
           ),
@@ -109,50 +157,30 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
           onTap: () => ref.invalidate(downloadedTracksProvider),
         ),
       ),
-      data: (tracks) {
-        if (tracks.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.only(top: 72),
-            child: EmptyState(
-              compact: true,
-              icon: Icons.download_for_offline_outlined,
-              title: "还没有下载",
-              subtitle: "在歌曲菜单中选择「下载」，离线也能听",
+      // 空数据由覆盖层空态负责，列表流保持空占位
+      data: (tracks) => tracks.isEmpty
+          ? const SizedBox.shrink()
+          : Column(
+              children: [
+                for (final track in tracks)
+                  SongListTile(
+                    track: track,
+                    playing: track.id == currentTrackId,
+                    onTap: () => PlayerCardPage.start(
+                      context,
+                      ref,
+                      track,
+                      queue: tracks,
+                    ),
+                    onMorePressed: () => _showDoneActions(track),
+                  ),
+              ],
             ),
-          );
-        }
-        return Column(
-          children: [
-            for (final track in tracks)
-              SongListTile(
-                track: track,
-                playing: track.id == currentTrackId,
-                onTap: () => PlayerCardPage.start(
-                  context,
-                  ref,
-                  track,
-                  queue: tracks,
-                ),
-                onMorePressed: () => _showDoneActions(track),
-              ),
-          ],
-        );
-      },
     );
   }
 
   Widget _buildActive(List<DownloadTask> tasks) {
-    if (tasks.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 72),
-        child: EmptyState(
-          compact: true,
-          icon: Icons.hourglass_empty_rounded,
-          title: "没有正在下载的任务",
-          subtitle: "下载完成后会出现在「已下载」",
-        ),
-      );
-    }
+    if (tasks.isEmpty) return const SizedBox.shrink();
     return Column(
       children: [
         for (final task in tasks) ...[

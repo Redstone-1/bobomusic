@@ -155,7 +155,11 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       await toggle();
       return;
     }
-    if (!state.playing) await _resolveEngine().play();
+    if (!state.playing) {
+      await _resolveEngine().play();
+      // 乐观写（同 toggle）：通知栏恢复播放时引擎可能已在播，无流事件回填
+      state = state.copyWith(playing: true);
+    }
   }
 
   @override
@@ -226,12 +230,18 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       await _resolveEngine().pause();
     } else {
       await _resolveEngine().play();
+      // 乐观写 playing：引擎已处于播放态时 play() 是 no-op、playingStream
+      // 不再发事件，不写会让迷你条/播放卡卡在播放三角（真机反馈）
+      state = state.copyWith(playing: true);
+      _syncSystem();
     }
   }
 
   Future<void> pause() async {
     if (!state.playing) return;
     await _resolveEngine().pause();
+    // 同 toggle：引擎已暂停时 pause() 无事件，命令侧直接落定状态
+    state = state.copyWith(playing: false);
     _persistNow();
   }
 
@@ -377,6 +387,9 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     Duration? initialPosition,
   }) async {
     final track = queue[index];
+    // 记住旧会话：装载失败时整态回退（曲目/队列/进度），
+    // 不能让"点了但没播出来"的曲占住播放条/播放卡（真机反馈的严重问题）
+    final prev = state;
     // 先记录历史再切 state：歌单页监听 track 变化后立即查询也能拿到最新记录；
     // 记下旧时间戳，装载失败时回滚，失败播放不留「最近播放」
     final history = await _recordHistory(track);
@@ -400,8 +413,12 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       if (autoplay) await _resolveEngine().play();
       if (!ref.mounted) return;
       // 同一引擎切源时 playingStream 不一定会再次发 true（自动下一曲常见），
-      // 只等 playing 事件清 buffering 会让 position 流被永久丢弃，进度条/歌词停在旧位置
-      state = state.copyWith(buffering: false);
+      // 只等 playing 事件清 buffering 会让 position 流被永久丢弃，进度条/歌词停在旧位置；
+      // playing 同步乐观写，防止 UI 停在旧值
+      state = state.copyWith(
+        buffering: false,
+        playing: autoplay ? true : state.playing,
+      );
       // 切歌后立即写新曲与队列快照：与 queue 表 takeFirst 的删除时序对齐，
       // 避免播放器启动后、下个去抖周期前被杀导致“已出队但快照仍是旧曲”
       _persistNow();
@@ -421,7 +438,9 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       final friendly = e is BiliApiRejectError && e.code == -404
           ? "原视频可能已丢失（被删除或下架），换首试试吧"
           : "$e";
-      state = state.copyWith(buffering: false, playing: false, error: friendly);
+      // 整态回退到旧会话（旧曲/队列/进度/播放态），错误挂上去 toast；
+      // 引擎侧旧源未被替换（装载抛错），旧曲仍在播，UI 与听感一致
+      state = prev.copyWith(buffering: false, error: friendly);
       _snapshot();
       _persistNow();
       _syncSystem(force: true);

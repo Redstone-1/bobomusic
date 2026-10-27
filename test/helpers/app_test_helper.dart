@@ -75,9 +75,18 @@ class FakeBiliApi implements sdk.OriginService {
   @override
   Future<List<sdk.SearchItem>> hotSongs() async => const [];
 
+  /// 单曲点击先拉详情分流（对齐 2.7.0）：测试固定返回真单曲（非合集）
   @override
-  Future<sdk.SearchItem> searchDetail(String id) async =>
-      throw UnimplementedError();
+  Future<sdk.SearchItem> searchDetail(String id) async => bili.BiliSearchItem(
+        id: id,
+        cover: "",
+        name: "夜航西飞",
+        duration: 252,
+        author: "陈鸿宇",
+        origin: sdk.OriginType.bili,
+        isSeasonDisplay: false,
+        ugcSeason: null,
+      );
 
   @override
   Future<sdk.MusicUrl> getMusicUrl(String id) async =>

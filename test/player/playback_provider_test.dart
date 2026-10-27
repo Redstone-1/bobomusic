@@ -175,7 +175,27 @@ void main() {
     expect(st().error, contains("解析失败"));
     expect(st().playing, isFalse);
     expect(st().buffering, isFalse);
+    expect(st().track, isNull); // 无旧会话：整态回退后不残留失败曲
     expect(engine.loads, isEmpty);
+  });
+
+  test("装载失败：整态回退旧曲，播放条/列表不再显示没播成的新歌", () async {
+    // 先正常播 A
+    await pb().play(t("a", "曲A"), queue: queue());
+    await flush();
+    expect(st().playing, isTrue);
+    // 换成抛错的源解析再点 B
+    playbackDepsTestOverride = PlaybackDeps(
+      engine: engine,
+      resolveSource: (t) async => throw Exception("取流失败"),
+    );
+    await pb().play(t("b", "曲B"), queue: queue());
+    await flush();
+    expect(st().track?.id, "a"); // 回退显示旧曲
+    expect(st().queue.map((e) => e.id), ["a", "b", "c"]); // 队列一并回退
+    expect(st().playing, isTrue); // 旧曲仍在播（引擎旧源未被替换）
+    expect(st().error, contains("取流失败"));
+    expect(appPrefs.getString("playback_track_id"), "a"); // 断点也回到旧曲
   });
 
   test("装载失败：乐观写入的播放历史被回滚，不留「最近播放」", () async {

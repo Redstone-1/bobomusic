@@ -52,10 +52,17 @@ class PlaylistDetailPage extends ConsumerStatefulWidget {
   ConsumerState<PlaylistDetailPage> createState() => _PlaylistDetailPageState();
 }
 
-class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
+class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
+    with SingleTickerProviderStateMixin {
   late Future<List<Track>> _future;
   int _reloadSeq = 0;
   bool _scanning = false;
+
+  /// 重扫/导入中刷新按钮的持续旋转（点击即刻可见反馈，不再"无响应数秒"）
+  late final AnimationController _spin = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
 
   /// 我喜欢列表的心形本地覆盖（trackId → 当前显示态）：
   /// 取消收藏写库但不刷新列表，心形即时变化，下次进入页面重读库
@@ -69,6 +76,12 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
   void initState() {
     super.initState();
     _future = _load();
+  }
+
+  @override
+  void dispose() {
+    _spin.dispose();
+    super.dispose();
   }
 
   Future<List<Track>> _load() async {
@@ -163,9 +176,18 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
               builder: (context, snap) {
                 final loading =
                     snap.connectionState != ConnectionState.done || _scanning;
-                // 已有列表刷新时保留列表，仅用头部按钮禁用/局部状态提示；
-                // 骨架只用于「首次加载且尚无数据」，避免骨架与列表同时存在
-                final showSkeleton = loading && !snap.hasData;
+                // 扫描/加载中一律骨架（列表清空进 loading，所有者 2026-10-27 定）：
+                // 点击刷新即刻有反馈，替代旧版"按钮禁用数秒无响应再弹 toast"
+                if (_scanning) {
+                  _spin.repeat();
+                } else {
+                  _spin.stop();
+                }
+                final showSkeleton = loading;
+                // 骨架行数按视口算满（行高 60：封面 42 + 上下 padding 18），
+                // 固定 6 行在高屏上只占一半，观感差（所有者反馈）
+                final skRows =
+                    ((MediaQuery.sizeOf(context).height - 170) / 60).ceil();
                 final tracks = snap.data;
                 final empty = !loading && !snap.hasError && tracks != null && tracks.isEmpty;
                 return Stack(
@@ -193,7 +215,11 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
                                     ),
                                     const SizedBox(width: 8),
                                     GlassIconButton(
-                                      icon: const Icon(Icons.refresh),
+                                      // 扫描中图标持续旋转（即时反馈）
+                                      icon: RotationTransition(
+                                        turns: _spin,
+                                        child: const Icon(Icons.refresh),
+                                      ),
                                       onTap: _scanning ? null : _scan,
                                     ),
                                   ],
@@ -215,7 +241,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage> {
                         ),
                         const SizedBox(height: 14),
                         if (showSkeleton)
-                          const SkeletonListView(rows: 6)
+                          SkeletonListView(rows: skRows < 6 ? 6 : skRows)
                         else if (snap.hasError)
                           EmptyState(
                             compact: true,
