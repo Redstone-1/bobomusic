@@ -302,6 +302,8 @@ class _ScrollingLyricTextState extends State<_ScrollingLyricText>
           text: TextSpan(text: widget.text, style: widget.style),
           maxLines: 1,
           textDirection: TextDirection.ltr,
+          // 与 Text 同缩放：系统字号非 1.0 时测量不偏小
+          textScaler: MediaQuery.textScalerOf(context),
         )..layout();
         final maxWidth = constraints.maxWidth;
         if (!maxWidth.isFinite || painter.width <= maxWidth - _trailingPad) {
@@ -332,14 +334,26 @@ class _ScrollingLyricTextState extends State<_ScrollingLyricText>
               offset: Offset(-_distance * anim.value, 0),
               child: child,
             ),
-            // 宽度含尾距：滚到终点时尾字完整落在可视区内
-            child: SizedBox(
-              width: painter.width + _trailingPad,
-              child: Text(
-                widget.text,
-                maxLines: 1,
-                softWrap: false,
-                style: widget.style,
+            // OverflowBox 解除子盒宽度约束：SizedBox 声明的全宽会被视口松约束
+            // enforce 钳到视口宽，Text 就在布局期被裁掉尾巴——滚到头也出不来
+            //（所有者 2026-10-29 反馈）。不用 UnconstrainedBox：它会把"子盒超父盒"
+            // 当溢出上报，debug 画黄黑条纹跟字滚动；OverflowBox 正是为故意溢出
+            // 设计，自身保持视口宽，ClipRect 仍负责裁剪。topLeft 锚定起始位置
+            child: OverflowBox(
+              alignment: Alignment.topLeft,
+              minWidth: 0,
+              maxWidth: double.infinity,
+              minHeight: 0,
+              maxHeight: double.infinity,
+              // 宽度含尾距：滚到终点时尾字完整落在可视区内
+              child: SizedBox(
+                width: painter.width + _trailingPad,
+                child: Text(
+                  widget.text,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: widget.style,
+                ),
               ),
             ),
           ),
