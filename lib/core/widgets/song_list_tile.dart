@@ -90,11 +90,16 @@ class SongListTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            // 尾部操作固定顺序：喜欢（仅喜欢列表）→ 播放波浪 → 更多。
-            // 更多按钮始终保留；用它做固定宽度锚点，避免喜欢/波浪互相挤压。
+            // 尾部操作固定顺序：播放波浪 → 喜欢 → 更多（播放中波浪在心形左侧，
+            // 所有者 2026-10-27 定）。更多按钮始终保留；用它做固定宽度锚点，
+            // 避免喜欢/波浪互相挤压。
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (playing) ...[
+                  const EqBars(),
+                  const SizedBox(width: 8),
+                ],
                 if (likedHeart != null) ...[
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
@@ -107,10 +112,6 @@ class SongListTile extends StatelessWidget {
                       color: likedHeart! ? t.primary : t.fgMute,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                ],
-                if (playing) ...[
-                  const EqBars(),
                   const SizedBox(width: 8),
                 ],
                 IconButton(

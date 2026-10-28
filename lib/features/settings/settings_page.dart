@@ -94,17 +94,6 @@ class SettingsPage extends ConsumerWidget {
           child: Column(
             children: [
               _SettingRow(
-                icon: Icons.update_outlined,
-                title: "检查更新",
-                subtitle: "当前版本 $version",
-                trailing: Icon(Icons.chevron_right, size: 20, color: t.fgMute),
-                onTap: () => _checkUpdate(context, ref),
-                // Gallery 隐藏入口（S1.5）：长按版本行进入组件演示页
-                onLongPress: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const DesignSystemDemo()),
-                ),
-              ),
-              _SettingRow(
                 icon: Icons.download_outlined,
                 title: "下载管理",
                 subtitle: "已下载与下载中的任务",
@@ -130,6 +119,17 @@ class SettingsPage extends ConsumerWidget {
                 ),
                 trailing: Icon(Icons.chevron_right, size: 20, color: t.fgMute),
                 onTap: () => _clearCache(context, ref),
+              ),
+              _SettingRow(
+                icon: Icons.update_outlined,
+                title: "检查更新",
+                subtitle: "当前版本 $version",
+                trailing: Icon(Icons.chevron_right, size: 20, color: t.fgMute),
+                onTap: () => _checkUpdate(context, ref),
+                // Gallery 隐藏入口（S1.5）：长按版本行进入组件演示页
+                onLongPress: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const DesignSystemDemo()),
+                ),
               ),
             ],
           ),

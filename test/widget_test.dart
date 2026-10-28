@@ -42,6 +42,19 @@ void main() {
 
     await tester.tap(find.text("设置"));
     await tester.pump();
+    // 检查更新已移到卡片最后一项，默认视口内不可见，需先滚到它
+    // （scrollable 必须限定设置页自身——IndexedStack 保活其它 Tab 的滚动器）
+    await tester.scrollUntilVisible(
+      find.text("检查更新"),
+      200,
+      scrollable: find
+          .ancestor(
+            of: find.text("主题 · 外观 · 关于"),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pump();
     await tester.longPress(find.text("检查更新"));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));

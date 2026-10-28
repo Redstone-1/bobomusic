@@ -7,7 +7,7 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 void main() {
-  testWidgets("喜欢列表播放中：心形 → 波浪 → 更多，顺序不冲突", (tester) async {
+  testWidgets("列表行播放中：波浪 → 心形 → 更多（波浪在心形左侧）", (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildAppTheme(AppThemeColor.natureGreen, Brightness.dark),
@@ -32,7 +32,7 @@ void main() {
     final waveX = tester.getCenter(find.byType(EqBars)).dx;
     final moreX = tester.getCenter(find.byIcon(Icons.more_vert)).dx;
 
-    expect(heartX, lessThan(waveX));
-    expect(waveX, lessThan(moreX));
+    expect(waveX, lessThan(heartX));
+    expect(heartX, lessThan(moreX));
   });
 }

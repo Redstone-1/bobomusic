@@ -5,10 +5,10 @@ import "package:flutter/painting.dart";
 import "aurora_tokens.dart";
 
 /// 8 种主题色（视觉定稿见 prototype/style-a-aurora，COLORS/COLOR_NAMES）
-/// 深空黑置首（仅色板顺序；默认主题色为青绿色，所有者 2026-10-27 修订）
+/// 青绿置首 = 默认主题色（所有者 2026-10-27 修订）
 enum AppThemeColor {
-  deepSpaceBlack(0xFF141414, "深空黑"),
   natureGreen(0xFF2EC4B6, "青绿色"),
+  deepSpaceBlack(0xFF141414, "深空黑"),
   sunsetRed(0xFFFF3B6B, "晚霞红"),
   autumnOrange(0xFFFF8A3D, "秋日橙"),
   lemonYellow(0xFFFFD23F, "柠檬黄"),
