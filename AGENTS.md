@@ -69,4 +69,4 @@ lib/
 | 下钻记忆 | `memories/` | 改某模块前：引用关系图、易踩坑、易腐字段 |
 | 角色技能 | `.agents/skills/` | 架构分析（tech-lead-architect）、写码（senior-frontend-engineer）、测试（senior-qa-engineer）、评审（code-reviewer）、沉淀（dev_memory） |
 | UI 原型 | `prototype/` | 六套风格稿；**已选定 A · 沉浸极光玻璃 + 玻璃拟态（2026-10-24）**，视觉基线 `style-a-aurora/`，落地方式见 `重构计划.md` §7 与 §9-S1 |
-| 重写路线 | `重构计划.md` | 重写决策 D1~D13 与开发计划 S1~S5 全定稿；**执行进度以该文件进度区为准**（本文不记动态状态） |
+| 重写路线 | `重构计划.md` | 重写决策 D1~D13 与开发计划 S1~S5 全定稿；**执行进度以该文件进度区为准**（本文不记动态状态）。新会话续接三步：读 `重构计划.md` 顶部进度 → `git log` 确认 v3 分支位置 → 读本文件硬规则。**可替换全局**（appPrefs/appDb/biliApi/hotSingersTestOverride）是 v3 核心测试模式，改数据层前先看 `test/helpers/app_test_helper.dart` |
