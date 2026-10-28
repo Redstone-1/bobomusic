@@ -13,7 +13,6 @@ import "../../core/widgets/aurora_background.dart";
 import "../../core/widgets/back_link.dart";
 import "../../core/widgets/cover_placeholder.dart";
 import "../../core/widgets/empty_state.dart";
-import "../../core/widgets/skeleton.dart";
 import "../../core/widgets/song_list_tile.dart";
 import "../../data/models/track.dart" hide OriginType;
 import "../../data/mappers.dart";
@@ -113,7 +112,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   }
 
   void _persistHistory(List<String> history) {
-    _history = history;
+    // 必须 setState：清空/单条删除/搜索记入都靠它刷新历史面板（否则点了没反应）
+    if (mounted) setState(() => _history = history);
     appPrefs.setStringList(_kSearchHistory, history);
   }
 
@@ -546,8 +546,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                           ),
                         ),
                     ],
-                    // 刷新时保留旧结果，只用细进度线提示；仅首次加载展示骨架，
-                    // 避免骨架屏与已有列表同时占位（所有者 2026-10-27 反馈）
+                    // 刷新/首搜统一用细进度线提示（所有者 2026-10-27 定：删骨架屏）
                     if (_controller.text.trim().isNotEmpty && _loading)
                       Padding(
                         padding: const EdgeInsets.only(top: 10),
@@ -559,13 +558,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                             backgroundColor: t.surface2,
                           ),
                         ),
-                      ),
-                    if (_controller.text.trim().isNotEmpty &&
-                        _loading &&
-                        _results.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 16),
-                        child: SkeletonListView(rows: 5),
                       ),
                     for (final item in _results)
                       // 合集（type=orderName 或多P）→ 歌单行进详情，绝不直接播放；

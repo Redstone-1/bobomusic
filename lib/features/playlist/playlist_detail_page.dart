@@ -26,7 +26,6 @@ import "../player/playback_provider.dart";
 import "../player/player_card_page.dart";
 import "playlists_provider.dart"
     show
-        likedCountProvider,
         localCountProvider,
         playlistDetailTracksProvider,
         queueTracksProvider;
@@ -227,11 +226,11 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                               : _isLiked
                                   ? GlassIconButton(
                                       icon: const Icon(Icons.refresh),
+                                      // 喜欢列表走局部 Future（非 family provider），
+                                      // 必须重读 Future 才有刷新效果；顺带清心形本地覆盖
                                       onTap: () {
-                                        ref.invalidate(
-                                          playlistDetailTracksProvider,
-                                        );
-                                        ref.invalidate(likedCountProvider);
+                                        _likedOverrides.clear();
+                                        _retry();
                                       },
                                     )
                                   : GlassIconButton(
