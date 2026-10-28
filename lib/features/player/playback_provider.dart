@@ -11,6 +11,7 @@ import "../../data/repositories/history_repository.dart";
 import "../../data/repositories/queue_repository.dart";
 import "../../data/repositories/track_repository.dart";
 import "../../origin_sdk/bili/bili_api_error.dart";
+import "../playlist/playlists_provider.dart" show queueTracksProvider;
 import "audio_engine.dart";
 import "just_audio_engine.dart";
 import "play_mode.dart";
@@ -221,7 +222,10 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     if (state.track == null) {
       // 无当前曲时从播放队列取第一首开播（插队队列优先，§3.4-5）
       final queued = await _takeQueuedTrack();
-      if (queued != null) await _load([queued], 0, autoplay: true);
+      if (queued != null) {
+        ref.invalidate(queueTracksProvider);
+        await _load([queued], 0, autoplay: true);
+      }
       return;
     }
     if (state.playing) {
@@ -358,6 +362,8 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
         final session = [...state.queue];
         final insertAt = state.queueIndex < 0 ? 0 : state.queueIndex + 1;
         session.insert(insertAt, queued);
+        // 队列表已消费一条，待播放分区（播放队列 sheet）即时刷新
+        ref.invalidate(queueTracksProvider);
         await _load(session, insertAt, autoplay: true);
         return;
       }

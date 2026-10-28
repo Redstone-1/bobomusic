@@ -105,12 +105,17 @@ class AppSheet {
                             ),
                           ),
                           const SizedBox(width: 14),
-                          Text(
-                            action.label,
-                            style: TextStyle(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w600,
-                              color: action.danger ? scheme.error : t.fg,
+                          // Expanded + 省略：长文案（如「标题 · 歌手」）不得撑爆面板
+                          Expanded(
+                            child: Text(
+                              action.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w600,
+                                color: action.danger ? scheme.error : t.fg,
+                              ),
                             ),
                           ),
                         ],

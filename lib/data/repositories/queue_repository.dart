@@ -110,6 +110,23 @@ class QueueRepository {
     });
   }
 
+  /// 移除某曲目的全部排队记录（待播放区点播/删除曲目时用），
+  /// 删后重排 position 保持连续（takeFirst/move 依赖连续位）
+  Future<void> removeByTrackId(String trackId) async {
+    await db.transaction((txn) async {
+      await txn.delete("queue", where: "track_id = ?", whereArgs: [trackId]);
+      final rows = await txn.query("queue", columns: ["id"], orderBy: "position");
+      for (final (i, row) in rows.indexed) {
+        await txn.update(
+          "queue",
+          {"position": i},
+          where: "id = ?",
+          whereArgs: [row["id"] as int],
+        );
+      }
+    });
+  }
+
   /// 调序：把 from 位移动到 to 位，区间顺移
   Future<void> move(int from, int to) async {
     if (from == to) return;

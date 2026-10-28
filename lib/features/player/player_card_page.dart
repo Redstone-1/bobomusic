@@ -19,7 +19,8 @@ import "../../data/repositories/track_repository.dart";
 import "../../origin_sdk/lyric/lrc.dart";
 import "../../origin_sdk/lyric/lyric_types.dart";
 import "../download/download_actions.dart";
-import "../playlist/playlists_provider.dart" show likedCountProvider, queueTracksProvider;
+import "../playlist/playlists_provider.dart"
+    show likedCountProvider, queueTracksProvider;
 import "lyric_provider.dart";
 import "open_bilibili.dart";
 import "play_mode.dart";
@@ -60,8 +61,9 @@ class PlayerCardPage extends ConsumerStatefulWidget {
             const PlayerCardPage(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) =>
             SlideTransition(
-          position: Tween(begin: const Offset(0, 1), end: Offset.zero)
-              .animate(CurvedAnimation(parent: animation, curve: t.motionCurveEmphasized)),
+          position: Tween(begin: const Offset(0, 1), end: Offset.zero).animate(
+              CurvedAnimation(
+                  parent: animation, curve: t.motionCurveEmphasized)),
           child: child,
         ),
       ),
@@ -118,9 +120,8 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
       return const SizedBox.shrink();
     }
     // 引擎真时长优先，未就绪回退曲目元数据（避免除零）
-    final durationSec = duration.inSeconds > 0
-        ? duration.inSeconds
-        : track.duration ?? 240;
+    final durationSec =
+        duration.inSeconds > 0 ? duration.inSeconds : track.duration ?? 240;
 
     return Scaffold(
       // 背景与主壳一致（极光光球，所有者 2026-10-27 指定：不再单独设封面色背景）
@@ -140,7 +141,9 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
                 liked: _likedOverride ?? track.liked,
                 onToggleLike: () => _toggleLike(track),
               ),
-              const SizedBox(height: 10),
+              // 进度块（条+时间）上下留白对称：上 14 / 下 14（_ControlsRow 顶部
+              // padding），条与时间间距 8——整块节奏一致（所有者 2026-10-28 定）
+              const SizedBox(height: 14),
               _SeekRow(durationSec: durationSec),
               _ControlsRow(),
               const SizedBox(height: 16),
@@ -176,7 +179,8 @@ class _TopBar extends ConsumerWidget {
               children: [
                 Text(
                   "正在播放",
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: t.fg),
+                  style: TextStyle(
+                      fontSize: 17, fontWeight: FontWeight.w700, color: t.fg),
                 ),
                 const SizedBox(height: 3),
                 Text(
@@ -245,7 +249,8 @@ class _MetaRow extends StatelessWidget {
                   track.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: t.fg),
+                  style: TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.w700, color: t.fg),
                 ),
                 const SizedBox(height: 3),
                 Row(
@@ -271,7 +276,9 @@ class _MetaRow extends StatelessWidget {
   }
 }
 
-/// 时间 + seek 条（高频进度只重建本行；seek 按真时长换算秒）
+/// 进度条 + 下方时间（高频进度只重建本行；seek 按真时长换算秒）
+/// 所有者 2026-10-28 定：时间移到条下方两侧，条独占整行且粗细 4→3——
+/// 数字不再与条挤占宽度（此前的行内槽位方案曾把数字挤到换行）
 class _SeekRow extends ConsumerWidget {
   final int durationSec;
 
@@ -290,29 +297,33 @@ class _SeekRow extends ConsumerWidget {
     );
     final progress =
         durationMs > 0 ? (positionMs / durationMs).clamp(0.0, 1.0) : 0.0;
+    final labelStyle = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+      color: t.fgDim,
+    );
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 26),
-      child: Row(
+      // 34 = 控制行左右 26 + IconButton 视觉内边 8：进度块与按钮区等宽对齐
+      // （26 全宽曾被所有者指"超出按钮区不少，不和谐"）
+      padding: const EdgeInsets.symmetric(horizontal: 34),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            _fmt((durationSec * progress).round()),
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: t.fgDim),
+          AuroraProgressBar(
+            value: progress,
+            height: 3,
+            onChanged: (fraction) => ref
+                .read(playbackProvider.notifier)
+                .seek(Duration(seconds: (durationSec * fraction).round())),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: AuroraProgressBar(
-              value: progress,
-              height: 4,
-              onChanged: (fraction) => ref
-                  .read(playbackProvider.notifier)
-                  .seek(Duration(seconds: (durationSec * fraction).round())),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            _fmt(durationSec),
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: t.fgDim),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(_fmt((durationSec * progress).round()), style: labelStyle),
+              Text(_fmt(durationSec), style: labelStyle),
+            ],
           ),
         ],
       ),
@@ -339,7 +350,7 @@ class _ControlsRow extends ConsumerWidget {
     final notifier = ref.read(playbackProvider.notifier);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(26, 20, 26, 8),
+      padding: const EdgeInsets.fromLTRB(26, 14, 26, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -362,6 +373,9 @@ class _ControlsRow extends ConsumerWidget {
           ),
           PrimaryIconButton(
             key: const Key("player_play"),
+            size: 64,
+            // 三角放大（默认 0.32 在 64 径里偏小，所有者 2026-10-29 反馈）
+            iconScale: 0.44,
             icon: Icon(playing ? Icons.pause : Icons.play_arrow),
             onTap: notifier.toggle,
           ),
@@ -384,20 +398,44 @@ class _ControlsRow extends ConsumerWidget {
     );
   }
 
-  // 播放队列 sheet（§3.4-5：插队/追加语义在队列引擎批次接数据操作）
+  // 播放队列 sheet：上「待播放」（queue 表，各处稍后/下一首播放/加入待播放的落点，
+  // 当前曲播完后依次播出）、下「播放队列」（当前会话队列）
   void _openQueue(BuildContext context, WidgetRef ref) {
     AppSheet.show(
       context,
       title: "播放队列 · ${ref.read(playbackProvider).queue.length} 首",
       child: SizedBox(
-        height: 380,
+        height: 420,
         child: Consumer(
           builder: (context, sheetRef, _) {
             final pbState = sheetRef.watch(playbackProvider);
             final current = pbState.track;
+            final queued = sheetRef.watch(queueTracksProvider).value;
             return ListView(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               children: [
+                if (queued != null && queued.isNotEmpty) ...[
+                  const _QueueSectionHeader("待播放 · 当前曲播完后依次播出"),
+                  for (final track in queued)
+                    SongListTile(
+                      track: track,
+                      playing: track.id == current?.id,
+                      onTap: () {
+                        // 立即播放同时出队，否则播完会被 takeFirst 再消费一遍
+                        sheetRef
+                            .read(playbackProvider.notifier)
+                            .play(track, queue: pbState.queue);
+                        QueueRepository().removeByTrackId(track.id);
+                        sheetRef.invalidate(queueTracksProvider);
+                        if (context.mounted) Navigator.of(context).pop();
+                      },
+                      onMorePressed: () {
+                        QueueRepository().removeByTrackId(track.id);
+                        sheetRef.invalidate(queueTracksProvider);
+                      },
+                    ),
+                ],
+                _QueueSectionHeader("播放队列 · ${pbState.queue.length} 首"),
                 for (final track in pbState.queue)
                   SongListTile(
                     track: track,
@@ -415,6 +453,26 @@ class _ControlsRow extends ConsumerWidget {
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+/// 队列 sheet 分区头
+class _QueueSectionHeader extends StatelessWidget {
+  final String label;
+
+  const _QueueSectionHeader(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AuroraTokens.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 12, 10, 4),
+      child: Text(
+        label,
+        style: TextStyle(
+            fontSize: 12, fontWeight: FontWeight.w600, color: t.fgDim),
       ),
     );
   }
@@ -457,9 +515,10 @@ class _ActionsRow extends ConsumerWidget {
           final track = ref.read(playbackProvider).track;
           if (track == null) return;
           TrackRepository().upsert(track);
-          QueueRepository().append(track.id);
+          // 稍后 = 插到待播放队首（所有者 2026-10-28 定）：当前曲播完即播它
+          QueueRepository().insertNext(track.id);
           ref.invalidate(queueTracksProvider);
-          AppToast.show(context, "已加入播放队列");
+          AppToast.show(context, "已稍后播放 · 当前歌曲结束后播出");
         },
         24.0,
       ),

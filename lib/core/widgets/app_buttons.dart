@@ -44,11 +44,15 @@ class PrimaryIconButton extends StatelessWidget {
   final VoidCallback? onTap;
   final double size;
 
+  /// 前景图标占按钮直径的比例（原型 0.32；播放卡播放三角放大用 0.44）
+  final double iconScale;
+
   const PrimaryIconButton({
     super.key,
     required this.icon,
     this.onTap,
     this.size = 74,
+    this.iconScale = 0.32,
   });
 
   @override
@@ -74,7 +78,7 @@ class PrimaryIconButton extends StatelessWidget {
           ],
         ),
         child: IconTheme(
-          data: IconThemeData(color: t.primaryInk, size: size * 0.32),
+          data: IconThemeData(color: t.primaryInk, size: size * iconScale),
           child: icon,
         ),
       ),
