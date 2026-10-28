@@ -1,6 +1,9 @@
+import "dart:io";
+
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../core/overlays/app_dialog.dart";
 import "../../core/overlays/app_sheet.dart";
 import "../../core/overlays/app_toast.dart";
 import "../../core/permissions/audio_permission.dart";
@@ -9,6 +12,7 @@ import "../../core/widgets/app_buttons.dart";
 import "../../core/widgets/aurora_background.dart";
 import "../../core/widgets/back_link.dart";
 import "../../core/widgets/empty_state.dart";
+import "../../core/widgets/glass_card.dart";
 import "../../core/widgets/page_header.dart";
 import "../../core/widgets/skeleton.dart";
 import "../../core/widgets/song_list_tile.dart";
@@ -57,6 +61,10 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
   int _reloadSeq = 0;
   bool _scanning = false;
 
+  /// 本地音乐搜索（实时过滤歌名/歌手，仅本地页展示输入框）
+  final _searchController = TextEditingController();
+  String _query = "";
+
   /// 重扫/导入中刷新按钮的持续旋转（点击即刻可见反馈，不再"无响应数秒"）
   late final AnimationController _spin = AnimationController(
     vsync: this,
@@ -80,6 +88,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
   @override
   void dispose() {
     _spin.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -151,6 +160,79 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
     }
   }
 
+  /// 删除本地曲目：默认仅移出曲库（外键级联清队列/歌单引用），
+  /// 复选框勾选时连源文件一起删；文件删除失败只提示，不回滚曲库移除
+  Future<void> _deleteLocalTrack(Track track) async {
+    final t = AuroraTokens.of(context);
+    final deleteFile = ValueNotifier<bool>(false);
+    final ok = await AppDialog.show<bool>(
+      context,
+      title: "删除歌曲",
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "将从本地音乐移除「${track.name}」。",
+            style: TextStyle(fontSize: 13.5, height: 1.5, color: t.fgDim),
+          ),
+          ValueListenableBuilder<bool>(
+            valueListenable: deleteFile,
+            builder: (_, checked, __) => CheckboxListTile(
+              value: checked,
+              onChanged: (v) => deleteFile.value = v ?? false,
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                "同时删除源文件",
+                style: TextStyle(fontSize: 14, color: t.fg),
+              ),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: Text("取消", style: TextStyle(color: t.fgDim)),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: Text(
+            "删除",
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.error,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await TrackRepository().delete(track.id);
+      var fileGone = true;
+      final path = track.localPath;
+      if (deleteFile.value && path != null && path.isNotEmpty) {
+        try {
+          final file = File(path);
+          if (await file.exists()) await file.delete();
+        } catch (e) {
+          print("删除本地源文件失败：$e");
+          fileGone = false;
+        }
+      }
+      ref.invalidate(playlistDetailTracksProvider);
+      ref.invalidate(localCountProvider);
+      ref.invalidate(queueTracksProvider);
+      if (!mounted) return;
+      AppToast.show(context, fileGone ? "已删除" : "已移出曲库 · 源文件删除失败");
+    } catch (e) {
+      print("删除本地曲目失败：$e");
+      if (mounted) AppToast.show(context, "删除失败，请重试");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = AuroraTokens.of(context);
@@ -187,8 +269,21 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                 // 固定 6 行在高屏上只占一半，观感差（所有者反馈）
                 final skRows =
                     ((MediaQuery.sizeOf(context).height - 170) / 60).ceil();
-                final tracks = snap.data;
-                final empty = !loading && !snap.hasError && tracks != null && tracks.isEmpty;
+                final raw = snap.data;
+                // 本地页搜索过滤（歌名/歌手，忽略大小写）；其余模式原样展示。
+                // 空库覆盖层与「没有找到」空态都以 raw 为准，过滤只影响列表行
+                final query = _query.trim().toLowerCase();
+                final tracks = (_isLocal && query.isNotEmpty && raw != null)
+                    ? raw
+                          .where(
+                            (t) =>
+                                t.name.toLowerCase().contains(query) ||
+                                t.author.toLowerCase().contains(query),
+                          )
+                          .toList()
+                    : raw;
+                final empty =
+                    !loading && !snap.hasError && raw != null && raw.isEmpty;
                 return Stack(
                   children: [
                     ListView(
@@ -238,6 +333,13 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                       onTap: () {},
                                     ),
                         ),
+                        if (_isLocal) ...[
+                          const SizedBox(height: 12),
+                          _LocalSearchField(
+                            controller: _searchController,
+                            onChanged: (v) => setState(() => _query = v),
+                          ),
+                        ],
                         const SizedBox(height: 14),
                         if (showSkeleton)
                           SkeletonListView(rows: skRows < 6 ? 6 : skRows)
@@ -249,7 +351,24 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                             subtitle: "点击重试",
                             action: GlassChip(label: "重试", onTap: _retry),
                           )
-                        else if (tracks!.isNotEmpty)
+                        else if (query.isNotEmpty &&
+                            raw != null &&
+                            raw.isNotEmpty &&
+                            tracks!.isEmpty)
+                          EmptyState(
+                            compact: true,
+                            emoji: "🔍",
+                            title: "没有找到「${_query.trim()}」",
+                            subtitle: "换个关键词试试",
+                            action: GlassChip(
+                              label: "清除搜索",
+                              onTap: () {
+                                _searchController.clear();
+                                setState(() => _query = "");
+                              },
+                            ),
+                          )
+                        else if (tracks != null && tracks.isNotEmpty)
                           Column(
                             children: [
                               for (final track in tracks)
@@ -327,6 +446,13 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                           onTap: () =>
                                               downloadTrack(context, track),
                                         ),
+                                      if (_isLocal)
+                                        AppSheetAction(
+                                          icon: Icons.delete_outline,
+                                          label: "删除",
+                                          danger: true,
+                                          onTap: () => _deleteLocalTrack(track),
+                                        ),
                                     ],
                                   ),
                                 ),
@@ -369,6 +495,57 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// 本地音乐搜索框（玻璃底对齐广场搜索入口；实时过滤，清除钮只在有字时出现）
+class _LocalSearchField extends StatelessWidget {
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
+  const _LocalSearchField({required this.controller, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AuroraTokens.of(context);
+    return GlassCard(
+      frosted: true,
+      radius: t.radiusMd,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
+        children: [
+          Icon(Icons.search, size: 20, color: t.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              onChanged: onChanged,
+              style: TextStyle(fontSize: 14, color: t.fg),
+              decoration: InputDecoration(
+                hintText: "搜索本地歌曲 / 歌手",
+                hintStyle: TextStyle(fontSize: 14, color: t.fgMute),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
+          ),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder: (_, value, __) => value.text.isEmpty
+                ? const SizedBox.shrink()
+                : IconButton(
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(Icons.cancel, size: 18, color: t.fgMute),
+                    onPressed: () {
+                      controller.clear();
+                      onChanged("");
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }
