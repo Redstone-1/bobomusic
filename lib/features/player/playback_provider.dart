@@ -528,6 +528,36 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
         contentType: musicUrl.contentType,
       );
     }
+    if (track.origin == OriginType.netease) {
+      final musicUrl = await neteaseApi.getMusicUrl(track.id);
+      return PlaySource(
+        key: track.id,
+        url: musicUrl.url,
+        backupUrl: musicUrl.backupUrl,
+        headers: musicUrl.headers,
+        contentType: musicUrl.contentType,
+      );
+    }
+    if (track.origin == OriginType.qq) {
+      final musicUrl = await qqApi.getMusicUrl(track.id);
+      return PlaySource(
+        key: track.id,
+        url: musicUrl.url,
+        backupUrl: musicUrl.backupUrl,
+        headers: musicUrl.headers,
+        contentType: musicUrl.contentType,
+      );
+    }
+    if (track.origin == OriginType.qianqian) {
+      final musicUrl = await qianqianApi.getMusicUrl(track.id);
+      return PlaySource(
+        key: track.id,
+        url: musicUrl.url,
+        backupUrl: musicUrl.backupUrl,
+        headers: musicUrl.headers,
+        contentType: musicUrl.contentType,
+      );
+    }
     final musicUrl = await biliApi.getMusicUrl(track.id);
     return PlaySource(
       key: track.id,

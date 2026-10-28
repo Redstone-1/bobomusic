@@ -96,7 +96,7 @@ void main() {
     await tester.tap(find.text("广场"));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500)); // 榜单加载
-    expect(find.text("热歌榜"), findsOneWidget); // Tab
+    expect(find.text("酷我热歌榜"), findsOneWidget); // Tab
     await tester.tap(find.text("酷我热歌").first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
@@ -146,30 +146,31 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.text("热歌榜"), findsOneWidget);
+    expect(find.text("酷我热歌榜"), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets("广场榜单 Tab：四榜可切换，切主题榜列表换内容", (WidgetTester tester) async {
+  testWidgets("广场榜单 Tab：多源榜单可切换，切网易榜列表换内容", (WidgetTester tester) async {
     await tester.pumpWidget(await buildTestApp());
     await tester.pump();
     await tester.tap(find.text("广场"));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
-    // 四个榜单 Tab（FakeKuwoApi 搜索返回「酷我夜曲」）
-    expect(find.text("热歌榜"), findsOneWidget);
-    expect(find.text("经典老歌"), findsOneWidget);
-    expect(find.text("网络热歌"), findsOneWidget);
-    expect(find.text("伤感情歌"), findsOneWidget);
+    // 五张榜单 Tab（酷我 x2 + 网易 x2 + 千千 x1；B 站音乐榜已下线，QQ 榜未上）
+    expect(find.text("酷我热歌榜"), findsOneWidget);
+    expect(find.text("酷我飙升榜"), findsOneWidget);
+    expect(find.text("网易云热歌榜"), findsOneWidget);
+    expect(find.text("网易云飙升榜"), findsOneWidget);
+    expect(find.text("千千新歌榜"), findsOneWidget);
 
-    // 切到主题榜：列表换为搜索结果（Tab 动画 + provider 重建需多帧）
-    await tester.tap(find.text("经典老歌"));
+    // 切到网易热歌榜：列表换为网易 Fake 数据（Tab 动画 + provider 重建需多帧）
+    await tester.tap(find.text("网易云热歌榜"));
     for (var i = 0; i < 8; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
-    expect(find.text("经典老歌"), findsOneWidget); // Tab
-    expect(find.text("酷我夜曲"), findsWidgets);
+    expect(find.text("网易云热歌榜"), findsOneWidget); // Tab
+    expect(find.text("网易热歌"), findsWidgets);
   });
 
   testWidgets("广场榜单未播放：不显示波浪动效", (WidgetTester tester) async {

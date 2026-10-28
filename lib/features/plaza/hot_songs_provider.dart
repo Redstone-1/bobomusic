@@ -1,67 +1,79 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../data/mappers.dart";
-import "../../data/models/track.dart";
+// UI/SDK 各有一套 OriginType，本文件与 SDK 条目的 origin 比较一律用 SDK 侧
+import "../../data/models/track.dart" hide OriginType;
 import "../../data/origin_service.dart";
 import "../../origin_sdk/kuwo/kuwo_api.dart";
+import "../../origin_sdk/netease/netease_api.dart";
 import "../../origin_sdk/origin_types.dart";
+import "../../origin_sdk/qianqian/qianqian_api.dart";
+import "../../origin_sdk/qq/qq_api.dart";
 
-/// 广场榜单卡定义（key, 展示名）：热歌榜 = 唯一 SSR 真榜；其余为主题卡
-/// （酷我多榜单接口已封死，实测结论见 kuwo_api.hotChart 注释）
+/// 广场榜单卡定义（key = "<源 value>:<源内榜单id>"，展示名带源前缀；Tab 顺序即展示顺序）
+/// 酷我：官方 bang 榜（bang/list 族接口 2026-10 实测复活）；
+/// 网易：官方 playlist 榜（免加密接口）；千千：官方新歌榜（bdid 硬编码）；
+/// B 站音乐榜已按用户决定下线（请求不稳定）；QQ 榜单未上（免费条目少）
 const plazaChartDefs = <(String, String)>[
-  ("hot", "热歌榜"),
-  ("theme:经典老歌", "经典老歌"),
-  ("theme:网络热歌", "网络热歌"),
-  ("theme:伤感情歌", "伤感情歌"),
+  ("kuwo:16", "酷我热歌榜"),
+  ("kuwo:93", "酷我飙升榜"),
+  ("${NeteaseApi.chartKeyPrefix}${NeteaseApi.hotChartId}", "网易云热歌榜"),
+  ("${NeteaseApi.chartKeyPrefix}${NeteaseApi.surgeChartId}", "网易云飙升榜"),
+  ("${QianqianApi.chartKeyPrefix}${QianqianApi.newSongChartBdid}", "千千新歌榜"),
 ];
 
+/// 榜单 key 前缀 → 所属 SDK 源（拉取与点播解析按此分发；后续新源接入时在此登记）
+OriginType originForChartKey(String key) {
+  if (key.startsWith(KuwoApi.chartKeyPrefix)) return OriginType.kuwo;
+  if (key.startsWith(NeteaseApi.chartKeyPrefix)) return OriginType.netease;
+  if (key.startsWith(QianqianApi.chartKeyPrefix)) return OriginType.qianqian;
+  if (key.startsWith(QqApi.chartKeyPrefix)) return OriginType.qq;
+  return OriginType.bili;
+}
+
+OriginService _apiForChartKey(String key) {
+  if (key.startsWith(KuwoApi.chartKeyPrefix)) return kuwoApi;
+  if (key.startsWith(NeteaseApi.chartKeyPrefix)) return neteaseApi;
+  if (key.startsWith(QianqianApi.chartKeyPrefix)) return qianqianApi;
+  if (key.startsWith(QqApi.chartKeyPrefix)) return qqApi;
+  return biliApi;
+}
+
 /// 单张榜单卡数据（keepAlive：进详情页/回广场不重拉；单卡失败只降级该卡）
-final kuwoChartProvider = FutureProvider.family<KuwoChart, String>((ref, key) async {
-  final api = kuwoApi;
-  if (key == "hot") {
-    if (api is KuwoApi) return api.hotChart();
-    // 测试/其它 OriginService 兜底：hotSongs → search
-    final items = await api.hotSongs();
-    if (items.isNotEmpty) {
-      return KuwoChart(
-        key: key,
-        name: "热歌榜",
-        hits: [
-          for (final item in items)
-            KuwoHotHit(name: item.name, artist: item.author, item: item),
-        ],
-      );
-    }
-    final resp = await api.search(
-      const SearchParams(keyword: "热门歌曲", page: 1, pageSize: 10),
+final plazaChartProvider = FutureProvider.family<OriginChart, String>((ref, key) async {
+  final api = _apiForChartKey(key);
+  try {
+    final hits = await api.getChartHits(key);
+    final def = plazaChartDefs.firstWhere(
+      (d) => d.$1 == key,
+      orElse: () => (key, key),
     );
-    return KuwoChart(
-      key: key,
-      name: "热歌榜",
-      hits: [
-        for (final item in resp.data)
-          KuwoHotHit(name: item.name, artist: item.author, item: item),
-      ],
-    );
+    return OriginChart(key: key, name: def.$2, hits: hits ?? const []);
+  } catch (e) {
+    // 单卡失败只降级该卡；真实原因打控制台（逆向接口漂移/风控都靠这行定位）
+    print("[plaza] 榜单拉取失败 [$key]：$e");
+    rethrow;
   }
-  final keyword = key.substring("theme:".length);
-  if (api is KuwoApi) return api.themeChart(keyword);
-  final resp = await api.search(
-    SearchParams(keyword: keyword, page: 1, pageSize: 30),
-  );
-  return KuwoChart(
-    key: key,
-    name: keyword,
-    hits: [
-      for (final item in resp.data)
-        KuwoHotHit(name: item.name, artist: item.author, item: item),
-    ],
-  );
 });
 
-/// 点播榜单条目：SSR 已带 item 直接用；否则按标题+歌手搜索并做匹配筛选
-Future<Track?> resolveKuwoHotHit(KuwoHotHit hit) async {
-  if (hit.item != null) return hit.item!.toTrack();
+/// 点播榜单条目：榜单已给出可播条目直接用；B 站条目缺 cid 时经 searchDetail 补齐
+/// （多 P/合集取可播首条）；无条目的兜底行（SSR 链可能缺 rid）按标题+歌手在本源搜索解析
+Future<Track?> resolveChartHit(ChartHit hit, OriginType origin) async {
+  final item = hit.item;
+  if (item != null) {
+    if (item.origin == OriginType.bili && item.id.split("_").length < 3) {
+      try {
+        final detail = await biliApi.searchDetail(item.id);
+        return detail.toTrack(); // musicList 首项优先（mappers），多 P 取第一 P
+      } catch (e) {
+        print("B 站榜单条目详情失败 [${item.id}]：$e");
+        return null;
+      }
+    }
+    return item.toTrack();
+  }
+  if (origin != OriginType.kuwo) return null;
+  // 酷我 SSR 兜底行解析：标题+歌手搜索匹配 → 纯歌名重试 → 同名首条，避免热榜条目点不动
   try {
     var candidates = await kuwoApi.search(
       SearchParams(
@@ -75,8 +87,7 @@ Future<Track?> resolveKuwoHotHit(KuwoHotHit hit) async {
       KuwoRankTitle(name: hit.name, artist: hit.artist),
     );
     if (best == null) {
-      // 歌手拼写差异时，再用纯歌名搜一次；仍匹配不到则取同名结果第一首，
-      // 避免热榜条目点不动（部分榜单标题没有完全一致的原唱版本）
+      // 歌手拼写差异时，再用纯歌名搜一次；仍匹配不到则取同名结果第一首
       candidates = await kuwoApi.search(
         SearchParams(keyword: hit.name, page: 1, pageSize: 10),
       );

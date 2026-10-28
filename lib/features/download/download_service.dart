@@ -170,9 +170,13 @@ class DownloadService {
       onProgress?.call(1);
       return;
     }
-    final musicUrl = track.origin == OriginType.kuwo
-        ? await kuwoApi.getMusicUrl(track.id)
-        : await biliApi.getMusicUrl(track.id);
+    final musicUrl = switch (track.origin) {
+      OriginType.kuwo => await kuwoApi.getMusicUrl(track.id),
+      OriginType.netease => await neteaseApi.getMusicUrl(track.id),
+      OriginType.qq => await qqApi.getMusicUrl(track.id),
+      OriginType.qianqian => await qianqianApi.getMusicUrl(track.id),
+      _ => await biliApi.getMusicUrl(track.id),
+    };
     await _dio.download(
       musicUrl.url,
       target.path,
@@ -205,7 +209,7 @@ class DownloadService {
 }
 
 /// 文件名清洗（纯函数）：去掉路径非法字符、压缩空白、限制长度
-/// 在线曲按音源扩展名（B 站 dash=.m4a / 酷我 mp3=.mp3），本地曲沿用原扩展名
+/// 在线曲按音源扩展名（B 站 dash=.m4a / 酷我·网易 mp3=.mp3），本地曲沿用原扩展名
 String downloadFileName(Track track) {
   final raw = "${track.name} - ${track.author}".trim();
   var safe = raw
@@ -216,5 +220,6 @@ String downloadFileName(Track track) {
   if (safe.length > 80) safe = safe.substring(0, 80);
   final localExt = track.localPath == null ? "" : p.extension(track.localPath!);
   if (localExt.isNotEmpty) return "$safe$localExt";
-  return "$safe${track.origin == OriginType.kuwo ? ".mp3" : ".m4a"}";
+  // B 站 dash 为 m4a，其余在线源均为 mp3
+  return "$safe${track.origin == OriginType.bili ? ".m4a" : ".mp3"}";
 }

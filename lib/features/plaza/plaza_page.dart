@@ -20,7 +20,7 @@ import "hot_songs_provider.dart";
 import "search_page.dart";
 
 /// 广场页：搜索入口 + 榜单 TabBar + TabBarView 榜单列表
-/// 热歌榜 = 酷我 SSR 真榜；其余为主题卡（多榜单接口已封死，见 kuwo_api 注释）
+/// 多源官方榜：酷我 bang 真榜 + B 站音乐区排行榜（榜单定义见 hot_songs_provider）
 class PlazaPage extends ConsumerStatefulWidget {
   const PlazaPage({super.key});
 
@@ -52,7 +52,7 @@ class _PlazaPageState extends ConsumerState<PlazaPage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const PageHeader(title: "音乐广场", subtitle: "酷我榜单 · 发现好歌"),
+              const PageHeader(title: "音乐广场", subtitle: "多源榜单 · 发现好歌"),
               const SizedBox(height: 16),
               _SearchEntry(
                 onTap: () => Navigator.of(context).push(
@@ -61,7 +61,7 @@ class _PlazaPageState extends ConsumerState<PlazaPage>
               ),
               const SizedBox(height: 10),
               // 榜单 Tab（family provider 各榜独立缓存，切换零等待）。
-              // 无指示条；labelPadding 收紧后四榜 390dp 内左对齐放得下，不出横向滚动
+              // 无指示条；榜单随源扩展，超宽自动出横向滚动
               Theme(
                 data: Theme.of(context).copyWith(
                   splashFactory: NoSplash.splashFactory,
@@ -127,7 +127,7 @@ class _ChartListViewState extends ConsumerState<_ChartListView>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final chartAsync = ref.watch(kuwoChartProvider(widget.chartKey));
+    final chartAsync = ref.watch(plazaChartProvider(widget.chartKey));
     final currentTrackId = ref.watch(
       playbackProvider.select((s) => s.track?.id),
     );
@@ -145,7 +145,7 @@ class _ChartListViewState extends ConsumerState<_ChartListView>
             action: GlassChip(
               label: "重试",
               onTap: () =>
-                  ref.invalidate(kuwoChartProvider(widget.chartKey)),
+                  ref.invalidate(plazaChartProvider(widget.chartKey)),
             ),
           ),
           data: (chart) => chart.hits.isEmpty
@@ -172,12 +172,15 @@ class _ChartListViewState extends ConsumerState<_ChartListView>
     );
   }
 
-  /// 单曲点播：解析 rid → 入库 → 开播（单曲会话，与旧热歌行一致）
-  Future<void> _playHit(KuwoHotHit hit) async {
+  /// 单曲点播：按榜单所属源解析 → 入库 → 开播（单曲会话，与旧热歌行一致）
+  Future<void> _playHit(ChartHit hit) async {
     final needsMatch = hit.item == null;
     if (needsMatch) AppLoading.show(msg: "匹配歌曲…");
     try {
-      final track = await resolveKuwoHotHit(hit);
+      final track = await resolveChartHit(
+        hit,
+        originForChartKey(widget.chartKey),
+      );
       if (!mounted) return;
       if (track == null) {
         AppToast.show(context, "未找到可播放的匹配版本");
@@ -195,7 +198,7 @@ class _ChartListViewState extends ConsumerState<_ChartListView>
 /// 榜单歌曲行：排名 + 封面 + 歌名/歌手 + 播放态（原热歌榜列表行样式）
 class _ChartSongRow extends StatelessWidget {
   final int rank;
-  final KuwoHotHit hit;
+  final ChartHit hit;
   final bool playing;
   final VoidCallback onTap;
 
