@@ -75,6 +75,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   List<SearchItem> _results = [];
   _SearchSource _source = _SearchSource.bili;
 
+  /// 翻页加载：当前已取页 / 是否还有下一页 / 翻页中 / 请求序号（新搜索作废在途翻页）
+  int _page = 1;
+  bool _hasMore = true;
+  bool _loadingMore = false;
+  int _seq = 0;
+
   /// 搜索历史（SharedPreferences 持久；聚焦且无关键词时展示，最多 10 条）
   List<String> _history = [];
 
@@ -146,27 +152,69 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   }
 
   Future<void> _search(String q) async {
+    final seq = ++_seq;
     setState(() {
       _loading = true;
       _error = null;
+      _results = [];
+      _page = 1;
+      _hasMore = true;
     });
     try {
       // 本页音源选择（默认 B 站）；B 站/酷我共用 OriginService 契约
       final api = _source == _SearchSource.kuwo ? kuwoApi : biliApi;
       final resp = await api.search(SearchParams(keyword: q, page: 1));
-      if (!mounted) return;
+      if (!mounted || seq != _seq) return;
       setState(() {
         _results = resp.data;
         _loading = false;
+        _hasMore = _evalHasMore(resp);
       });
       // 搜索成功后记入历史（失败不记，避免污染）
       _persistHistory(updateSearchHistory(_history, q));
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || seq != _seq) return;
       setState(() {
         _loading = false;
         _error = e;
       });
+    }
+  }
+
+  /// 由响应判断是否还有下一页：有总数按页推算；无总数先乐观认为有，
+  /// 由 _loadMore 的空页/去重兜底
+  bool _evalHasMore(SearchResponse resp) {
+    if (resp.data.isEmpty) return false;
+    if (resp.total <= 0) return true;
+    return resp.current * resp.pageSize < resp.total;
+  }
+
+  /// 触底加载下一页：按 id 去重追加（音源若忽略页码重复返回，也能正确判到底）
+  Future<void> _loadMore() async {
+    if (_loading || _loadingMore || !_hasMore || _query.isEmpty) return;
+    final seq = _seq;
+    final api = _source == _SearchSource.kuwo ? kuwoApi : biliApi;
+    setState(() => _loadingMore = true);
+    try {
+      final resp = await api.search(
+        SearchParams(keyword: _query, page: _page + 1),
+      );
+      if (!mounted || seq != _seq) return;
+      setState(() {
+        _loadingMore = false;
+        final seen = {for (final r in _results) r.id};
+        final fresh = <SearchItem>[];
+        for (final r in resp.data) {
+          if (seen.add(r.id)) fresh.add(r);
+        }
+        _results = [..._results, ...fresh];
+        _page += 1;
+        _hasMore = fresh.isNotEmpty && _evalHasMore(resp);
+      });
+    } catch (e) {
+      if (!mounted || seq != _seq) return;
+      setState(() => _loadingMore = false);
+      AppToast.show(context, "加载失败，上滑重试");
     }
   }
 
@@ -254,8 +302,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final season = item.ugcSeason;
     if (season != null && biliApi is BiliApi) {
       // searchSeason 是 B 站特有接口，不在 OriginService 抽象上
-      final detail = await (biliApi as BiliApi)
-          .searchSeason(season.mid, season.seasonId);
+      final detail =
+          await (biliApi as BiliApi).searchSeason(season.mid, season.seasonId);
       return musicItemsToTracks(detail?.musicList ?? const []);
     }
     final view = await biliApi.searchDetail(item.id);
@@ -423,173 +471,210 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             // 空态走覆盖层（Stack + Positioned.fill）：居中于可视区且不占列表流
             child: Stack(
               children: [
-                ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 110),
-                  children: [
-                    const Align(
-                      alignment: Alignment.centerLeft,
-                      child: BackLink(),
-                    ),
-                    const SizedBox(height: 4),
-                    TextField(
-                      controller: _controller,
-                      focusNode: _focus,
-                      autofocus: true,
-                      onChanged: (_) => _onChanged(),
-                      style: TextStyle(fontSize: 14.5, color: t.fg),
-                      decoration: InputDecoration(
-                        hintText: "搜索歌曲 / 歌手 / 合集",
-                        hintStyle: TextStyle(fontSize: 14, color: t.fgMute),
-                        prefixIcon: Icon(Icons.search, size: 20, color: t.fgDim),
-                        filled: true,
-                        fillColor: t.surface,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide(color: t.hairline),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide(color: t.hairline),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide(color: t.primary),
+                NotificationListener<ScrollNotification>(
+                  onNotification: (n) {
+                    // 触底前 400px 预取下一页（仅纵向列表）
+                    if (n.metrics.axis == Axis.vertical &&
+                        n.metrics.pixels >= n.metrics.maxScrollExtent - 400) {
+                      _loadMore();
+                    }
+                    return false;
+                  },
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 110),
+                    children: [
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: BackLink(),
+                      ),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: _controller,
+                        focusNode: _focus,
+                        autofocus: true,
+                        onChanged: (_) => _onChanged(),
+                        style: TextStyle(fontSize: 14.5, color: t.fg),
+                        decoration: InputDecoration(
+                          hintText: "搜索歌曲 / 歌手 / 合集",
+                          hintStyle: TextStyle(fontSize: 14, color: t.fgMute),
+                          prefixIcon:
+                              Icon(Icons.search, size: 20, color: t.fgDim),
+                          filled: true,
+                          fillColor: t.surface,
+                          contentPadding:
+                              const EdgeInsets.symmetric(vertical: 12),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(color: t.hairline),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(color: t.hairline),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(color: t.primary),
+                          ),
                         ),
                       ),
-                    ),
-                    // 音源选择（默认 B 站；本页切换，不写全局设置）
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Text(
-                          "音源",
-                          style: TextStyle(fontSize: 12, color: t.fgDim),
-                        ),
-                        const SizedBox(width: 10),
-                        for (final source in _SearchSource.values) ...[
-                          GlassChip(
-                            label: source.label,
-                            selected: _source == source,
-                            onTap: () => _setSource(source),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                      ],
-                    ),
-                    // 搜索历史：聚焦且无关键词时展示（点击即搜，可单条删/清空）
-                    if (showHistory) ...[
-                      const SizedBox(height: 14),
+                      // 音源选择（默认 B 站；本页切换，不写全局设置）
+                      const SizedBox(height: 10),
                       Row(
                         children: [
-                          Expanded(
-                            child: Text(
-                              "搜索历史",
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: t.fg,
+                          Text(
+                            "音源",
+                            style: TextStyle(fontSize: 12, color: t.fgDim),
+                          ),
+                          const SizedBox(width: 10),
+                          for (final source in _SearchSource.values) ...[
+                            GlassChip(
+                              label: source.label,
+                              selected: _source == source,
+                              onTap: () => _setSource(source),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                        ],
+                      ),
+                      // 搜索历史：聚焦且无关键词时展示（点击即搜，可单条删/清空）
+                      if (showHistory) ...[
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                "搜索历史",
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: t.fg,
+                                ),
+                              ),
+                            ),
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => _persistHistory(const []),
+                              child: Text(
+                                "清空",
+                                style: TextStyle(fontSize: 12, color: t.fgDim),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        for (final (i, keyword) in _history.indexed)
+                          InkWell(
+                            borderRadius: BorderRadius.circular(t.radiusMd),
+                            onTap: () => _controller.text = keyword,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 7),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.history,
+                                    size: 17,
+                                    color: t.fgMute,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      keyword,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 13.5,
+                                        color: t.fgDim,
+                                      ),
+                                    ),
+                                  ),
+                                  // 单条删除（不触发搜索）
+                                  GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () => _persistHistory([
+                                      for (final (j, h) in _history.indexed)
+                                        if (j != i) h,
+                                    ]),
+                                    child: Icon(
+                                      Icons.close,
+                                      size: 16,
+                                      color: t.fgMute,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                          GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => _persistHistory(const []),
-                            child: Text(
-                              "清空",
-                              style: TextStyle(fontSize: 12, color: t.fgDim),
+                      ],
+                      // 刷新/首搜统一用细进度线提示（所有者 2026-10-27 定：删骨架屏）
+                      if (_controller.text.trim().isNotEmpty && _loading)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(2),
+                            child: LinearProgressIndicator(
+                              minHeight: 2,
+                              color: t.primary,
+                              backgroundColor: t.surface2,
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      for (final (i, keyword) in _history.indexed)
-                        InkWell(
-                          borderRadius: BorderRadius.circular(t.radiusMd),
-                          onTap: () => _controller.text = keyword,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 7),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.history,
-                                  size: 17,
-                                  color: t.fgMute,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    keyword,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 13.5,
-                                      color: t.fgDim,
-                                    ),
-                                  ),
-                                ),
-                                // 单条删除（不触发搜索）
-                                GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () => _persistHistory([
-                                    for (final (j, h) in _history.indexed)
-                                      if (j != i) h,
-                                  ]),
-                                  child: Icon(
-                                    Icons.close,
-                                    size: 16,
-                                    color: t.fgMute,
-                                  ),
-                                ),
-                              ],
+                        ),
+                      for (final item in _results)
+                        // 合集（type=orderName 或多P）→ 歌单行进详情，绝不直接播放；
+                        // 单曲 → 歌曲行（musicList 首条带播放 id）
+                        if (item.type == SearchType.orderName ||
+                            (item.musicList?.length ?? 0) > 1)
+                          _OrderResultTile(
+                            item: item,
+                            onTap: () => _openCollection(item),
+                            onCollect: () => _collectOrder(item),
+                            onMorePressed: () => _showCollectionActions(item),
+                          )
+                        else
+                          Builder(
+                            builder: (context) {
+                              final track = item.toTrack();
+                              return SongListTile(
+                                track: track,
+                                playing: track.id == currentTrackId,
+                                // 波浪左侧快速收藏心形（真机反馈要求）：
+                                // 初始态取库内喜欢集合，点击后本地覆盖即时变化
+                                likedHeart: _likedOverrides[track.id] ??
+                                    _likedIds.contains(track.id),
+                                onHeartTap: (liked) =>
+                                    _toggleLike(track, liked),
+                                // 对齐 2.7.0：点击先拉详情分流（多P/合集进列表，单曲才播）
+                                onTap: () => _playWithResolve(item),
+                                onMorePressed: () => _showTrackActions(track),
+                              );
+                            },
+                          ),
+                      // 翻页尾态：取页中转圈；没有更多结果时提示到底
+                      if (_loadingMore)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          child: Center(
+                            child: SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: t.primary,
+                              ),
+                            ),
+                          ),
+                        )
+                      else if (_results.isNotEmpty && !_hasMore && !_loading)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Center(
+                            child: Text(
+                              "到底了",
+                              style: TextStyle(fontSize: 12, color: t.fgMute),
                             ),
                           ),
                         ),
                     ],
-                    // 刷新/首搜统一用细进度线提示（所有者 2026-10-27 定：删骨架屏）
-                    if (_controller.text.trim().isNotEmpty && _loading)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 10),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(2),
-                          child: LinearProgressIndicator(
-                            minHeight: 2,
-                            color: t.primary,
-                            backgroundColor: t.surface2,
-                          ),
-                        ),
-                      ),
-                    for (final item in _results)
-                      // 合集（type=orderName 或多P）→ 歌单行进详情，绝不直接播放；
-                      // 单曲 → 歌曲行（musicList 首条带播放 id）
-                      if (item.type == SearchType.orderName ||
-                          (item.musicList?.length ?? 0) > 1)
-                        _OrderResultTile(
-                          item: item,
-                          onTap: () => _openCollection(item),
-                          onCollect: () => _collectOrder(item),
-                          onMorePressed: () => _showCollectionActions(item),
-                        )
-                      else
-                        Builder(
-                          builder: (context) {
-                            final track = item.toTrack();
-                            return SongListTile(
-                              track: track,
-                              playing: track.id == currentTrackId,
-                              // 波浪左侧快速收藏心形（真机反馈要求）：
-                              // 初始态取库内喜欢集合，点击后本地覆盖即时变化
-                              likedHeart: _likedOverrides[track.id] ??
-                                  _likedIds.contains(track.id),
-                              onHeartTap: (liked) =>
-                                  _toggleLike(track, liked),
-                              // 对齐 2.7.0：点击先拉详情分流（多P/合集进列表，单曲才播）
-                              onTap: () => _playWithResolve(item),
-                              onMorePressed: () => _showTrackActions(track),
-                            );
-                          },
-                        ),
-                  ],
+                  ),
                 ),
                 // 空态覆盖：初始引导 / 搜索失败 / 无结果（历史面板在场时让位）
                 if (queryEmpty && !showHistory)
@@ -604,7 +689,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   Positioned.fill(
                     child: _error != null
                         ? EmptyState(
-                            emoji: "⚠️",
+                            asset: "assets/illustrations/empty_alert.svg",
                             title: "搜索失败",
                             subtitle: "检查网络后重试",
                             action: GlassChip(
