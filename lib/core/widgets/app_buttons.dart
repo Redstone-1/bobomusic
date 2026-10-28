@@ -92,11 +92,15 @@ class GlassChip extends StatelessWidget {
   final bool selected;
   final VoidCallback? onTap;
 
+  /// 等分拉伸场景（音源选择器）可传紧凑 padding，默认内容自适应
+  final EdgeInsetsGeometry? padding;
+
   const GlassChip({
     super.key,
     required this.label,
     this.selected = false,
     this.onTap,
+    this.padding,
   });
 
   @override
@@ -106,7 +110,11 @@ class GlassChip extends StatelessWidget {
       onTap: onTap,
       pressedScale: 0.95,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        // 文字居中：胶囊被 Expanded 等分拉伸时（音源选择器）保持居中；
+        // 内容自适应宽度的常规用法下无视觉差异
+        alignment: Alignment.center,
+        padding: padding ??
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(999),
           color: selected ? t.primary : t.surface,
@@ -114,6 +122,9 @@ class GlassChip extends StatelessWidget {
         ),
         child: Text(
           label,
+          // 胶囊标签单行是硬约束：等分拉伸下宽度不足时也不折行
+          maxLines: 1,
+          softWrap: false,
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,

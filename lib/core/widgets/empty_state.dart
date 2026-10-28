@@ -99,9 +99,16 @@ class EmptyState extends StatelessWidget {
         if (!constraints.maxHeight.isFinite) {
           return Center(child: content);
         }
+        // 高度不足（键盘压缩等场景）时等比缩小而不是溢出绘制盖住相邻内容；
+        // FittedBox 在内容放得下时几何与命中行为与 Center 完全一致
+        //（透明区域点击穿透到下层头部按钮，歌单详情页依赖此契约）
         return SizedBox(
           height: constraints.maxHeight,
-          child: Center(child: content),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.center,
+            child: content,
+          ),
         );
       },
     );
