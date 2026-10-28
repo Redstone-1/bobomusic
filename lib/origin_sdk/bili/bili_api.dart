@@ -17,13 +17,16 @@ const _referer = "https://www.bilibili.com/";
 /// - 单一 Dio 实例（S2.2：消灭 getBNut 每次 new Dio）
 /// - 对外只抛 [BiliApiError] 子类；playurl 结果走内存 LRU 短缓存（S2.2）
 class BiliApi implements OriginService {
-  final Dio _dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 10)));
+  final Dio _dio;
   final BiliAuth auth;
 
   /// playurl LRU 短缓存：B 站直链自身有时效（~数小时），5 分钟足够消灭冷播重复 RTT
   final _playurlCache = TtlLruCache<MusicUrl>(maxEntries: 8, ttl: const Duration(minutes: 5));
 
-  BiliApi({BiliAuth? authOverride}) : auth = authOverride ?? BiliAuth() {
+  BiliApi({BiliAuth? authOverride, Dio? dioOverride})
+      : _dio = dioOverride ??
+            Dio(BaseOptions(connectTimeout: const Duration(seconds: 10))),
+        auth = authOverride ?? BiliAuth() {
     _dio.options.headers["User-Agent"] = _userAgent;
     _dio.options.headers["Referer"] = _referer;
     _dio.interceptors.add(
@@ -136,6 +139,10 @@ class BiliApi implements OriginService {
   @override
   Future<List<SearchItem>> hotSongs() async => const [];
 
+  // B 站音乐榜已按用户决定下线（请求不稳定）：返回 null = 本源不支持榜单 key
+  @override
+  Future<List<ChartHit>?> getChartHits(String chartKey) async => null;
+
   @override
   Future<MusicUrl> getMusicUrl(String id) async {
     // LRU 命中直接秒回（冷播省一次签名+RTT）
@@ -143,13 +150,23 @@ class BiliApi implements OriginService {
     if (cached != null) return cached;
 
     final biliid = BiliId.unicode(id);
-    if (biliid.cid == null || biliid.cid == "") {
-      throw BiliInvalidIdError("歌曲 ID 不正确：缺少 CID（$id）");
+    var cid = biliid.cid;
+    if (cid == null || cid.isEmpty) {
+      // 搜索响应不带 pages，搜索/队列/旧库曲目可能无 cid（接口漂移实证 2026-10）：
+      // 先走 view 补默认分 P 的 cid 再取流；view 也给不出才判 ID 非法
+      final detail = await searchDetail(id);
+      final healedId = (detail.musicList?.isNotEmpty ?? false)
+          ? detail.musicList!.first.id
+          : detail.id;
+      cid = BiliId.unicode(healedId).cid;
+      if (cid == null || cid.isEmpty) {
+        throw BiliInvalidIdError("歌曲 ID 不正确：无法补齐 CID（$id）");
+      }
     }
     final query = await _signedQuery({
       "avid": biliid.aid,
       "bvid": biliid.bvid,
-      "cid": biliid.cid!,
+      "cid": cid,
       "fnval": "16",
     });
     final uri = Uri.parse(

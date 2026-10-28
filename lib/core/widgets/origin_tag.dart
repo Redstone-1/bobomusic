@@ -7,6 +7,9 @@ import "../theme/aurora_tokens.dart";
 String originLabel(OriginType o) => switch (o) {
       OriginType.bili => "B 站",
       OriginType.kuwo => "酷我",
+      OriginType.netease => "网易",
+      OriginType.qq => "QQ",
+      OriginType.qianqian => "千千",
       OriginType.local => "本地",
     };
 

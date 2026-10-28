@@ -75,6 +75,10 @@ class FakeBiliApi implements sdk.OriginService {
   @override
   Future<List<sdk.SearchItem>> hotSongs() async => const [];
 
+  // B 站音乐榜已按用户决定下线（请求不稳定）：榜单能力返回 null = 本源不支持
+  @override
+  Future<List<sdk.ChartHit>?> getChartHits(String chartKey) async => null;
+
   /// 单曲点击先拉详情分流（对齐 2.7.0）：测试固定返回真单曲（非合集）
   @override
   Future<sdk.SearchItem> searchDetail(String id) async => bili.BiliSearchItem(
@@ -138,9 +142,205 @@ class FakeKuwoApi implements sdk.OriginService {
   Future<sdk.SearchItem> searchDetail(String id) async =>
       throw UnimplementedError();
 
+  /// 广场酷我榜单卡：热歌/飙升共用同一 Fake 曲（点播链路断言 id kuwo:hot_1）
+  @override
+  Future<List<sdk.ChartHit>?> getChartHits(String chartKey) async {
+    if (chartKey == "kuwo:16" || chartKey == "kuwo:93") {
+      return const [
+        sdk.ChartHit(
+          name: "酷我热歌",
+          artist: "酷我歌手",
+          item: sdk.SearchItem(
+            id: "kuwo:hot_1",
+            cover: "",
+            name: "酷我热歌",
+            duration: 200,
+            author: "酷我歌手",
+            origin: sdk.OriginType.kuwo,
+            isSeasonDisplay: false,
+            type: sdk.SearchType.music,
+          ),
+        ),
+      ];
+    }
+    return null;
+  }
+
   @override
   Future<sdk.MusicUrl> getMusicUrl(String id) async =>
       sdk.MusicUrl(url: "https://kuwo.example/999.mp3");
+}
+
+/// 测试用网易源：搜索固定返回「网易夜曲」，榜单卡返回「网易热歌」
+class FakeNeteaseApi implements sdk.OriginService {
+  @override
+  Future<sdk.SearchResponse> search(sdk.SearchParams params) async {
+    return bili.BiliSearchResponse(
+      current: 1,
+      total: 1,
+      pageSize: 20,
+      data: [
+        bili.BiliSearchItem(
+          id: "netease:888",
+          cover: "",
+          name: "网易夜曲",
+          duration: 210,
+          author: "网易歌手",
+          origin: sdk.OriginType.netease,
+          isSeasonDisplay: false,
+          ugcSeason: null,
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<List<sdk.SearchSuggestItem>> searchSuggest(String keyword) async =>
+      const [];
+
+  @override
+  Future<List<sdk.SearchItem>> hotSongs() async => const [];
+
+  @override
+  Future<sdk.SearchItem> searchDetail(String id) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<List<sdk.ChartHit>?> getChartHits(String chartKey) async {
+    if (chartKey.startsWith("netease:")) {
+      return const [
+        sdk.ChartHit(
+          name: "网易热歌",
+          artist: "网易歌手",
+          item: sdk.SearchItem(
+            id: "netease:chart_1",
+            cover: "",
+            name: "网易热歌",
+            duration: 205,
+            author: "网易歌手",
+            origin: sdk.OriginType.netease,
+            isSeasonDisplay: false,
+            type: sdk.SearchType.music,
+          ),
+        ),
+      ];
+    }
+    return null;
+  }
+
+  @override
+  Future<sdk.MusicUrl> getMusicUrl(String id) async => const sdk.MusicUrl(
+        url: "https://netease.example/888.mp3",
+        contentType: "audio/mpeg",
+      );
+}
+
+/// 测试用 QQ 源：搜索固定返回「QQ 夜曲」；榜单未上线返回 null
+class FakeQqApi implements sdk.OriginService {
+  @override
+  Future<sdk.SearchResponse> search(sdk.SearchParams params) async {
+    return bili.BiliSearchResponse(
+      current: 1,
+      total: 1,
+      pageSize: 20,
+      data: [
+        bili.BiliSearchItem(
+          id: "qq:777",
+          cover: "",
+          name: "QQ夜曲",
+          duration: 220,
+          author: "QQ歌手",
+          origin: sdk.OriginType.qq,
+          isSeasonDisplay: false,
+          ugcSeason: null,
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<List<sdk.SearchSuggestItem>> searchSuggest(String keyword) async =>
+      const [];
+
+  @override
+  Future<List<sdk.SearchItem>> hotSongs() async => const [];
+
+  @override
+  Future<List<sdk.ChartHit>?> getChartHits(String chartKey) async => null;
+
+  @override
+  Future<sdk.SearchItem> searchDetail(String id) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<sdk.MusicUrl> getMusicUrl(String id) async => const sdk.MusicUrl(
+        url: "https://qq.example/777.mp3",
+        contentType: "audio/mpeg",
+      );
+}
+
+/// 测试用千千源：搜索固定返回「千千夜曲」，榜单卡返回「千千热歌」
+class FakeQianqianApi implements sdk.OriginService {
+  @override
+  Future<sdk.SearchResponse> search(sdk.SearchParams params) async {
+    return bili.BiliSearchResponse(
+      current: 1,
+      total: 1,
+      pageSize: 20,
+      data: [
+        bili.BiliSearchItem(
+          id: "qianqian:T666",
+          cover: "",
+          name: "千千夜曲",
+          duration: 230,
+          author: "千千歌手",
+          origin: sdk.OriginType.qianqian,
+          isSeasonDisplay: false,
+          ugcSeason: null,
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<List<sdk.SearchSuggestItem>> searchSuggest(String keyword) async =>
+      const [];
+
+  @override
+  Future<List<sdk.SearchItem>> hotSongs() async => const [];
+
+  @override
+  Future<sdk.SearchItem> searchDetail(String id) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<List<sdk.ChartHit>?> getChartHits(String chartKey) async {
+    if (chartKey.startsWith("qianqian:")) {
+      return const [
+        sdk.ChartHit(
+          name: "千千热歌",
+          artist: "千千歌手",
+          item: sdk.SearchItem(
+            id: "qianqian:chart_9",
+            cover: "",
+            name: "千千热歌",
+            duration: 240,
+            author: "千千歌手",
+            origin: sdk.OriginType.qianqian,
+            isSeasonDisplay: false,
+            type: sdk.SearchType.music,
+          ),
+        ),
+      ];
+    }
+    return null;
+  }
+
+  @override
+  Future<sdk.MusicUrl> getMusicUrl(String id) async => const sdk.MusicUrl(
+        url: "https://qianqian.example/T666.mp3",
+        contentType: "audio/mpeg",
+      );
 }
 
 /// 测试用歌词服务：返回固定 LRC，避免真实网络；保留播放卡歌词视图断言用行
@@ -185,6 +385,9 @@ Future<Widget> buildTestApp({
   await initAppDatabase(path: inMemoryDatabasePath);
   biliApi = FakeBiliApi();
   kuwoApi = FakeKuwoApi();
+  neteaseApi = FakeNeteaseApi();
+  qqApi = FakeQqApi();
+  qianqianApi = FakeQianqianApi();
   lyricService = FakeLyricService();
   fakePlaybackEngine = FakeEngine();
   playbackDepsTestOverride = PlaybackDeps(

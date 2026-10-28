@@ -13,7 +13,7 @@ class KuwoApiError implements Exception {
   String toString() => message;
 }
 
-/// 酷我第二音源（D11）：免签名搜索 + anti.s 取流
+/// 酷我第二音源（D11）：免签名搜索 + anti.s 取流 + 官方 bang 榜单卡（getChartHits）
 /// 搜索优先新接口，失败/空结果回退 web_2013 老接口（两套响应结构都兼容）
 class KuwoApi implements OriginService {
   final Dio _dio = Dio(
@@ -160,15 +160,51 @@ class KuwoApi implements OriginService {
     return _mapSongs(list);
   }
 
-  /// 官方热歌榜（唯一可用的 SSR 真榜；/rankList/{其它id} 服务端忽略 id，
-  /// www bang API 被风控——实测结论，勿再按候选 id 猜测）
-  Future<KuwoChart> hotChart() async {
-    final hits = await hotHits();
-    return KuwoChart(key: "hot", name: "热歌榜", hits: hits);
+  /// 榜单卡 key 前缀（广场定义表与 OriginService.getChartHits 共用约定）
+  static const chartKeyPrefix = "kuwo:";
+
+  /// 官方 bang 榜单卡：wapi bang/list 族接口 2026-10 实测复活（此前"已封死"结论过时），
+  /// kbangserver ksong.s 按 bang id 拉条目，条目自带 rid 直接走 anti.s 取流。
+  /// 热歌榜(16)失败时回退 SSR 页解析链（hotHits，唯一有页面兜底的榜）
+  @override
+  Future<List<ChartHit>?> getChartHits(String chartKey) async {
+    if (!chartKey.startsWith(chartKeyPrefix)) return null;
+    final bangId = chartKey.substring(chartKeyPrefix.length);
+    if (bangId.isEmpty) return null;
+    try {
+      final response = await _dio.get(
+        "http://kbangserver.kuwo.cn/ksong.s",
+        queryParameters: {
+          "from": "pc",
+          "fmt": "json",
+          "pn": "0",
+          "rn": "30",
+          "type": "bang",
+          "data": "content",
+          "id": bangId,
+          "show_copyright_off": "0",
+          "pcmp4": "1",
+          "isbang": "1",
+          "userid": "0",
+          "httpStatus": "1",
+        },
+      );
+      final hits = parseKuwoBangSongs(_json(response.data));
+      if (hits.isNotEmpty) return hits;
+      print("酷我榜单接口返回空 [$chartKey]");
+    } catch (e) {
+      print("酷我榜单接口失败 [$chartKey]：$e");
+    }
+    if (bangId == "16") {
+      final hits = await hotHits();
+      if (hits.isNotEmpty) return hits;
+    }
+    throw KuwoApiError("酷我榜单拉取失败（$chartKey）");
   }
 
-  /// 官方榜单页可见标题：SSR 被裁剪时仍可展示真实热榜，点播时再解析 rid
-  Future<List<KuwoHotHit>> hotHits() async {
+  /// 热歌榜 SSR 兜底（getChartHits "kuwo:16" 回退用）：官方榜单页可见标题为
+  /// 真实热榜来源，SSR 被风控裁剪时用可见标题/歌手走旧搜索解析 rid
+  Future<List<ChartHit>> hotHits() async {
     String html = "";
     try {
       final response = await _dio.get<String>(
@@ -181,7 +217,7 @@ class KuwoApi implements OriginService {
       if (titles.isNotEmpty) {
         return [
           for (var i = 0; i < titles.length; i++)
-            KuwoHotHit(
+            ChartHit(
               name: titles[i].name,
               artist: titles[i].artist,
               item: i < direct.length ? direct[i] : null,
@@ -191,7 +227,7 @@ class KuwoApi implements OriginService {
       if (direct.isNotEmpty) {
         return [
           for (final item in direct)
-            KuwoHotHit(
+            ChartHit(
               name: item.name,
               artist: item.author,
               item: item,
@@ -207,25 +243,11 @@ class KuwoApi implements OriginService {
       final items = await _searchLegacy("热门歌曲", size: 10);
       return [
         for (final item in items)
-          KuwoHotHit(name: item.name, artist: item.author, item: item),
+          ChartHit(name: item.name, artist: item.author, item: item),
       ];
     } catch (_) {
       return const [];
     }
-  }
-
-  /// 主题歌单卡（legacy search 按关键词取歌）：搜索结果非官方榜单，
-  /// 卡片名称如实为主题关键词（经典老歌/网络热歌等），不冒充官方榜
-  Future<KuwoChart> themeChart(String keyword) async {
-    final items = await _searchLegacy(keyword, size: 30);
-    return KuwoChart(
-      key: "theme:$keyword",
-      name: keyword,
-      hits: [
-        for (final item in items)
-          KuwoHotHit(name: item.name, artist: item.author, item: item),
-      ],
-    );
   }
 
   @override
@@ -309,6 +331,21 @@ SearchItem? kuwoSongToSearchItem(Map song) {
     isSeasonDisplay: false,
     type: SearchType.music,
   );
+}
+
+/// ksong.s 榜单响应 → 跨源榜单条目（纯函数，特征测试锁定）
+/// 条目复用 kuwoSongToSearchItem（id/name/artist/duration 字段同构，无封面字段）
+List<ChartHit> parseKuwoBangSongs(Map data) {
+  final list = data["musiclist"] as List? ?? const [];
+  final hits = <ChartHit>[];
+  for (final song in list) {
+    if (song is! Map) continue;
+    final item = kuwoSongToSearchItem(song);
+    if (item == null) continue;
+    hits.add(ChartHit(name: item.name, artist: item.author, item: item));
+    if (hits.length >= 30) break;
+  }
+  return hits;
 }
 
 /// 旧接口文本清洗：HTML 实体、标签、首尾空白

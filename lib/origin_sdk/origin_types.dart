@@ -19,6 +19,9 @@ enum SearchType {
 enum OriginType {
   bili(value: "bili", name: "哔哩哔哩"),
   kuwo(value: "kuwo", name: "酷我"),
+  netease(value: "netease", name: "网易云"),
+  qq(value: "qq", name: "QQ 音乐"),
+  qianqian(value: "qianqian", name: "千千"),
   youTube(value: "youTube", name: "YouTube"),
   local(value: "local", name: "本地");
 
@@ -87,27 +90,28 @@ class SearchItem {
   });
 }
 
-/// 酷我官方热榜条目：标题/歌手来自榜单页，item 为 SSR 或兜底搜索解析出的可播条目
-class KuwoHotHit {
+/// 跨源榜单条目：榜单接口直接给出可播条目时 item 非空；
+/// 否则保留标题/歌手，点播时按所属源搜索解析（各源 SSR/详情兜底链）
+class ChartHit {
   final String name;
   final String artist;
   final SearchItem? item;
 
-  const KuwoHotHit({
+  const ChartHit({
     required this.name,
     required this.artist,
     this.item,
   });
 }
 
-/// 广场榜单卡（热歌榜 = SSR 真榜；主题卡 = legacy search 按关键词取歌，如实命名）
-class KuwoChart {
-  /// 卡片标识："hot" / "theme:<关键词>"（family provider 参数）
+/// 广场榜单卡（跨源）：key 约定 "<源 value>:<源内榜单标识>"（如 kuwo:16 / bili:music），
+/// 作为 family provider 参数；展示名由广场定义表提供（带源前缀，如「酷我热歌榜」）
+class OriginChart {
   final String key;
   final String name;
-  final List<KuwoHotHit> hits;
+  final List<ChartHit> hits;
 
-  const KuwoChart({
+  const OriginChart({
     required this.key,
     required this.name,
     required this.hits,
@@ -303,4 +307,8 @@ abstract class OriginService {
 
   /// 热门歌曲（可选能力；默认无数据，酷我实现真实榜单）
   Future<List<SearchItem>> hotSongs() async => const [];
+
+  /// 跨源榜单卡条目（可选能力；key 约定 "<源 value>:<源内榜单标识>"，见广场定义表）。
+  /// null = 本源不支持该 key；拉取失败抛类型化错误，由调用方按单卡降级
+  Future<List<ChartHit>?> getChartHits(String chartKey) async => null;
 }

@@ -621,6 +621,9 @@ class _FakeKuwoApi implements sdk.OriginService {
   Future<List<sdk.SearchItem>> hotSongs() async => const [];
 
   @override
+  Future<List<sdk.ChartHit>?> getChartHits(String chartKey) async => null;
+
+  @override
   Future<sdk.SearchItem> searchDetail(String id) async =>
       throw UnimplementedError();
 

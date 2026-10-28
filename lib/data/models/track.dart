@@ -1,5 +1,5 @@
 /// 音源类型（D11：歌曲条目与播放页显示音源标签）
-enum OriginType { bili, kuwo, local }
+enum OriginType { bili, kuwo, netease, qq, qianqian, local }
 
 /// 曲目实体（mock 形状 = 重构计划 §3.1 tracks 表）
 /// S3 起由 Repository 从真数据映射
