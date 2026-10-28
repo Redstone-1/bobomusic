@@ -117,7 +117,7 @@ class PlaylistPage extends ConsumerWidget {
           loading: () => const SkeletonListView(rows: 3),
           error: (e, _) => EmptyState(
             compact: true,
-            emoji: "⚠️",
+            asset: "assets/illustrations/empty_alert.svg",
             title: "歌单加载失败",
             subtitle: "点击重试",
             action: GlassChip(
@@ -154,7 +154,7 @@ class PlaylistPage extends ConsumerWidget {
           loading: () => const SkeletonListView(rows: 3),
           error: (e, _) => EmptyState(
             compact: true,
-            emoji: "⚠️",
+            asset: "assets/illustrations/empty_alert.svg",
             title: "最近播放加载失败",
             subtitle: "点击重试",
             action: GlassChip(

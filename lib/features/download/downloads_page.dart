@@ -148,7 +148,7 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
       loading: () => const SkeletonListView(rows: 4),
       error: (e, _) => EmptyState(
         compact: true,
-        emoji: "⚠️",
+        asset: "assets/illustrations/empty_alert.svg",
         title: "下载列表加载失败",
         subtitle: "点击重试",
         action: GlassChip(

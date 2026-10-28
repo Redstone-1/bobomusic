@@ -139,7 +139,7 @@ class _ChartListViewState extends ConsumerState<_ChartListView>
           loading: () => const SkeletonListView(rows: 8),
           error: (e, _) => EmptyState(
             compact: true,
-            emoji: "⚠️",
+            asset: "assets/illustrations/empty_alert.svg",
             title: "榜单加载失败",
             subtitle: "检查网络后重试",
             action: GlassChip(

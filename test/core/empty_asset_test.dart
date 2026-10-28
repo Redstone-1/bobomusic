@@ -14,6 +14,7 @@ void main() {
     "assets/illustrations/empty_collection.svg",
     "assets/illustrations/empty_search.svg",
     "assets/illustrations/empty_download.svg",
+    "assets/illustrations/empty_alert.svg",
   ];
 
   for (final asset in assets) {
