@@ -127,6 +127,10 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
   Timer? _persistDebounce;
   Timer? _sleepTimer;
   bool _restored = false;
+
+  /// 引擎当前已装载的曲目 id（null = 引擎无源：冷启动恢复后/装载失败后）。
+  /// 播放键据此决定裸 play 还是完整装载（裸 play 在无源引擎上无声无进度）
+  String? _loadedKey;
   DateTime _lastSystemSync = DateTime.fromMillisecondsSinceEpoch(0);
 
   /// 惰性创建并订阅事件流（首次使用时；dispose 统一取消）
@@ -151,15 +155,9 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
 
   @override
   Future<void> systemPlay() async {
-    if (state.track == null) {
-      await toggle();
-      return;
-    }
-    if (!state.playing) {
-      await _resolveEngine().play();
-      // 乐观写（同 toggle）：通知栏恢复播放时引擎可能已在播，无流事件回填
-      state = state.copyWith(playing: true);
-    }
+    // 通知栏恢复播放与迷你条同链路（引擎无源时 toggle 会走完整装载续播）；
+    // 仅在暂停态行动作，避免与 pause 语义打架
+    if (!state.playing) await toggle();
   }
 
   @override
@@ -227,22 +225,50 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       return;
     }
     if (state.playing) {
-      await _resolveEngine().pause();
-    } else {
-      await _resolveEngine().play();
-      // 乐观写 playing：引擎已处于播放态时 play() 是 no-op、playingStream
-      // 不再发事件，不写会让迷你条/播放卡卡在播放三角（真机反馈）
-      state = state.copyWith(playing: true);
+      // 乐观落定先行：暂停键必须即时响应（引擎异常/事件缺失也不能卡死）；
+      // 引擎若实际未暂停，playingStream 会把状态校正回来
+      state = state.copyWith(playing: false);
+      _snapshot();
+      _persistNow();
       _syncSystem();
+      try {
+        await _resolveEngine().pause();
+      } catch (e) {
+        print("暂停引擎失败：$e");
+      }
+      return;
+    }
+    // 引擎里没有当前曲（冷启动恢复不装载引擎/装载失败回退后）：裸 play()
+    // 无声无进度、按钮永久卡死（真机反馈），必须走完整装载从展示进度续播
+    if (_loadedKey != state.track!.id) {
+      final queue = state.queue.isEmpty ? [state.track!] : state.queue;
+      final index = state.queueIndex >= 0 ? state.queueIndex : 0;
+      await _load(queue, index, autoplay: true, initialPosition: state.position);
+      return;
+    }
+    // 乐观落定先行（同暂停）：引擎 no-op 无事件时 UI 也必须翻到暂停图标
+    state = state.copyWith(playing: true);
+    _syncSystem();
+    try {
+      await _resolveEngine().play();
+    } catch (e) {
+      print("恢复播放失败：$e");
+      state = state.copyWith(playing: false);
     }
   }
 
   Future<void> pause() async {
     if (!state.playing) return;
-    await _resolveEngine().pause();
-    // 同 toggle：引擎已暂停时 pause() 无事件，命令侧直接落定状态
+    // 乐观落定先行（同 toggle 暂停分支）
     state = state.copyWith(playing: false);
+    _snapshot();
     _persistNow();
+    _syncSystem();
+    try {
+      await _resolveEngine().pause();
+    } catch (e) {
+      print("暂停引擎失败：$e");
+    }
   }
 
   Future<void> seek(Duration position) async {
@@ -405,9 +431,13 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     );
     _snapshot();
     _syncSystem(force: true);
+    // resolveSource 失败时引擎未被动过，旧曲仍在播；一旦进入 load 阶段，
+    // just_audio 会先停掉旧源——失败后引擎已哑，回退不能宣称仍在播
+    var reachedEngine = false;
     try {
       final source = await _resolveSource(track);
       if (!ref.mounted) return;
+      reachedEngine = true;
       await _resolveEngine().load(source, initialPosition: initialPosition);
       if (!ref.mounted) return;
       if (autoplay) await _resolveEngine().play();
@@ -419,6 +449,7 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
         buffering: false,
         playing: autoplay ? true : state.playing,
       );
+      _loadedKey = track.id;
       // 切歌后立即写新曲与队列快照：与 queue 表 takeFirst 的删除时序对齐，
       // 避免播放器启动后、下个去抖周期前被杀导致“已出队但快照仍是旧曲”
       _persistNow();
@@ -431,6 +462,8 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
           print("回滚播放历史失败：$err");
         }
       }
+      // 引擎阶段失败 = 旧源已被打断，引擎无源；标记后下次播放走完整装载恢复
+      _loadedKey = null;
       if (!ref.mounted) return;
       // 装载失败：类型化错误上抛到 state（UI 提示），不静默挂死（§5.1-2）
       print("播放装载失败 [${track.id}] $e");
@@ -438,9 +471,14 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       final friendly = e is BiliApiRejectError && e.code == -404
           ? "原视频可能已丢失（被删除或下架），换首试试吧"
           : "$e";
-      // 整态回退到旧会话（旧曲/队列/进度/播放态），错误挂上去 toast；
-      // 引擎侧旧源未被替换（装载抛错），旧曲仍在播，UI 与听感一致
-      state = prev.copyWith(buffering: false, error: friendly);
+      // 整态回退到旧会话（旧曲/队列/进度），错误挂上去 toast；
+      // 引擎未被动过（源解析失败）→ 旧曲仍在播，保留播放态与听感一致；
+      // 引擎已被动过（load 阶段失败）→ 强制暂停态，播放键走完整装载恢复
+      state = prev.copyWith(
+        buffering: false,
+        error: friendly,
+        playing: reachedEngine ? false : prev.playing,
+      );
       _snapshot();
       _persistNow();
       _syncSystem(force: true);

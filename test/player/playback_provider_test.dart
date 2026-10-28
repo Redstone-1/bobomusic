@@ -214,6 +214,57 @@ void main() {
     expect((await HistoryRepository().recent()).map((e) => e.id), ["a"]);
   });
 
+  test("冷启动恢复后点播放：走完整装载并从恢复进度续播", () async {
+    // 模拟冷启动：恢复只回填 UI 不装载引擎（既有约定）
+    await TrackRepository().upsert(t("a", "曲A"));
+    SharedPreferences.setMockInitialValues(const {
+      "playback_track_id": "a",
+      "playback_position_ms": 30000,
+      "playback_mode": "listLoop",
+    });
+    await initAppPrefs();
+    final c2 = ProviderContainer();
+    addTearDown(c2.dispose);
+    c2.read(playbackProvider);
+    for (var i = 0; i < 200 && c2.read(playbackProvider).track == null; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 2));
+    }
+    expect(c2.read(playbackProvider).playing, isFalse);
+    expect(engine.loads, isEmpty);
+
+    // 点播放：引擎无源，裸 play 无声无进度（真机反馈），必须完整装载续播
+    await c2.read(playbackProvider.notifier).toggle();
+    await flush();
+    expect(engine.loads, hasLength(1));
+    expect(engine.loads.single.source.url, "https://fake.audio/a");
+    expect(engine.loads.single.initialPosition, const Duration(seconds: 30));
+    expect(c2.read(playbackProvider).playing, isTrue);
+  });
+
+  test("装载阶段失败：回退强制暂停态，点播放走完整装载恢复旧曲", () async {
+    await pb().play(t("a", "曲A"), queue: queue());
+    await flush();
+    expect(st().playing, isTrue);
+
+    // 同一引擎的下一次 load 抛错（模拟真机 load 中断旧源）
+    engine.failNextLoad = true;
+    await pb().play(t("b", "曲B"), queue: queue());
+    await flush();
+    // 引擎已被打断：回退不允许宣称仍在播（否则暂停键打到哑引擎上永久卡死）
+    expect(st().track?.id, "a");
+    expect(st().playing, isFalse);
+    expect(st().error, isNotNull);
+
+    // 点播放：引擎已无源 → 完整装载恢复旧曲（从展示进度续播）
+    final loadsBefore = engine.loads.length;
+    await pb().toggle();
+    await flush();
+    expect(engine.loads.length, loadsBefore + 1);
+    expect(engine.loads.last.source.url, "https://fake.audio/a");
+    expect(st().track?.id, "a");
+    expect(st().playing, isTrue);
+  });
+
   test("B 站 -404（视频失效）翻译成用户友好提示", () async {
     playbackDepsTestOverride = PlaybackDeps(
       engine: engine,

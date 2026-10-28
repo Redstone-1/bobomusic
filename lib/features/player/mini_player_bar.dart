@@ -236,7 +236,9 @@ class _MiniLyricLineState extends ConsumerState<_MiniLyricLine> {
   }
 }
 
-/// 超长歌词横向滚动；不溢出时静止显示。只在组件内部动画，不重建迷你条。
+/// 超长歌词横向滚动：起句短暂停顿 → 匀速滚到结尾（含尾距，不丢字）→
+/// 停在末尾等下一句换行（所有者反馈：旧版匀速循环且末字被裁）。
+/// 暂停即停、续播接着滚；只在组件内部动画，不重建迷你条。
 class _ScrollingLyricText extends StatefulWidget {
   final String text;
   final TextStyle style;
@@ -257,29 +259,39 @@ class _ScrollingLyricTextState extends State<_ScrollingLyricText>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(seconds: 8),
+    duration: const Duration(seconds: 6),
   );
 
-  @override
-  void initState() {
-    super.initState();
-    if (widget.playing) _controller.repeat();
-  }
+  /// 起句停 8%（给用户读开头），滚到 88% 停驻等下一句
+  static const _scrollCurve = Interval(0.08, 0.88, curve: Curves.linear);
+
+  /// 滚动结束后的尾距（尾字完整可见，不留死贴边）
+  static const _trailingPad = 24.0;
+
+  bool _overflow = false;
+  double _distance = 0;
 
   @override
   void didUpdateWidget(covariant _ScrollingLyricText oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.playing && !_controller.isAnimating) {
-      _controller.repeat();
-    } else if (!widget.playing && _controller.isAnimating) {
-      _controller.stop();
-    }
+    _syncPlaying();
   }
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  void _syncPlaying() {
+    if (!mounted || !_overflow) return;
+    if (widget.playing) {
+      if (!_controller.isAnimating) {
+        _controller.forward(from: _controller.value);
+      }
+    } else if (_controller.isAnimating) {
+      _controller.stop();
+    }
   }
 
   @override
@@ -292,7 +304,9 @@ class _ScrollingLyricTextState extends State<_ScrollingLyricText>
           textDirection: TextDirection.ltr,
         )..layout();
         final maxWidth = constraints.maxWidth;
-        if (!maxWidth.isFinite || painter.width <= maxWidth) {
+        if (!maxWidth.isFinite || painter.width <= maxWidth - _trailingPad) {
+          _overflow = false;
+          if (_controller.isAnimating) _controller.stop();
           return Text(
             widget.text,
             maxLines: 1,
@@ -300,19 +314,27 @@ class _ScrollingLyricTextState extends State<_ScrollingLyricText>
             style: widget.style,
           );
         }
-
-        final distance = painter.width - maxWidth + 8;
+        _overflow = true;
+        _distance = painter.width - maxWidth + _trailingPad;
+        // 滚动时长随距离线性（约 55px/s），限制 4~12s
+        _controller.duration = Duration(
+          milliseconds: (4000 + _distance * 18).clamp(4000, 12000).round(),
+        );
+        // build 内不动动画状态，帧末再启动/暂停（避免 build 期 setState）
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _syncPlaying();
+        });
+        final anim = CurvedAnimation(parent: _controller, curve: _scrollCurve);
         return ClipRect(
           child: AnimatedBuilder(
-            animation: _controller,
-            builder: (context, child) {
-              return Transform.translate(
-                offset: Offset(-distance * _controller.value, 0),
-                child: child,
-              );
-            },
+            animation: anim,
+            builder: (context, child) => Transform.translate(
+              offset: Offset(-_distance * anim.value, 0),
+              child: child,
+            ),
+            // 宽度含尾距：滚到终点时尾字完整落在可视区内
             child: SizedBox(
-              width: painter.width,
+              width: painter.width + _trailingPad,
               child: Text(
                 widget.text,
                 maxLines: 1,

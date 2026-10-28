@@ -24,6 +24,9 @@ class FakeEngine implements AudioEngine {
   /// 默认 play() 会发 playing=true；自动切源场景可关闭，模拟引擎不再重复发事件
   bool emitPlayingOnPlay = true;
 
+  /// 置 true 时下一次 load 抛错（模拟真机 load 中断旧源），然后自动复位
+  bool failNextLoad = false;
+
   @override
   Stream<Duration> get positionStream => _positionCtrl.stream;
 
@@ -42,6 +45,10 @@ class FakeEngine implements AudioEngine {
   @override
   Future<void> load(PlaySource source, {Duration? initialPosition}) async {
     loads.add((source: source, initialPosition: initialPosition));
+    if (failNextLoad) {
+      failNextLoad = false;
+      throw Exception("装载中断");
+    }
     position = initialPosition ?? Duration.zero;
     emitPosition(position);
     _durationCtrl.add(duration);
