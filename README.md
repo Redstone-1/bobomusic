@@ -46,17 +46,7 @@
 
 <br/>
 
-> **v2 重写进行中**：`v2` 分支正在重写 UI / 状态管理 / 数据层 / 播放内核（2.0.0 未发布，进度见 [`重构计划.md`](./重构计划.md)）；master 分支的 2.7.0 仍是当前发行版，以下内容对应旧版。
-
-<br/>
-
-# 预览
-
-<img src="./screenshot/preview-1.jpg" alt="bobomusic" />
-<img src="./screenshot/preview-2.jpg" alt="bobomusic" />
-<img src="./screenshot/preview-3.jpg" alt="bobomusic" />
-<img src="./screenshot/preview-4.jpg" alt="bobomusic" />
-<img src="./screenshot/preview-5.jpg" alt="bobomusic" />
+> **v3 已完成重构**：当前版本见 `pubspec.yaml`，开发与协作入口见 [AGENTS.md](./AGENTS.md)、[安卓开发指南](./安卓开发指南.md) 和 [模块记忆](./memories/README.md)。以下功能介绍与常见问题保留旧发行版背景。
 
 <br/>
 
@@ -82,7 +72,7 @@
 
 - JDK 17
 
-- Flutter 3.27.x
+- Flutter 3.47.7
 
 # 开发指南
 
