@@ -66,7 +66,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
   /// 流式扫描状态；非空时列表区域显示扫描舱
   LocalScanController? _scanController;
 
-  /// 本地音乐搜索（实时过滤歌名/歌手，仅本地页展示输入框）
+  /// 歌曲搜索（本地/喜欢列表：实时过滤歌名/歌手）
   final _searchController = TextEditingController();
   String _query = "";
 
@@ -293,10 +293,11 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                   _spin.stop();
                 }
                 final raw = snap.data;
-                // 本地页搜索过滤（歌名/歌手，忽略大小写）；其余模式原样展示。
+                // 本地/喜欢列表搜索过滤（歌名/歌手，忽略大小写）；其余模式原样展示。
                 // 空库覆盖层与「没有找到」空态都以 raw 为准，过滤只影响列表行
+                final searchable = _isLocal || _isLiked;
                 final query = _query.trim().toLowerCase();
-                final tracks = (_isLocal && query.isNotEmpty && raw != null)
+                final tracks = (searchable && query.isNotEmpty && raw != null)
                     ? raw
                           .where(
                             (t) =>
@@ -356,9 +357,11 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                       onTap: () {},
                                     ),
                         ),
-                        if (_isLocal) ...[
+                        // 喜欢列表有内容时同样提供搜索（空库交给空态引导）
+                        if (_isLocal ||
+                            (_isLiked && raw != null && raw.isNotEmpty)) ...[
                           const SizedBox(height: 12),
-                          _LocalSearchField(
+                          _TrackSearchField(
                             controller: _searchController,
                             onChanged: (v) => setState(() => _query = v),
                           ),
@@ -532,12 +535,13 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
   }
 }
 
-/// 本地音乐搜索框（玻璃底对齐广场搜索入口；实时过滤，清除钮只在有字时出现）
-class _LocalSearchField extends StatelessWidget {
+/// 歌曲搜索框（本地/喜欢列表共用；玻璃底对齐广场搜索入口，
+/// 实时过滤，清除钮只在有字时出现）
+class _TrackSearchField extends StatelessWidget {
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
 
-  const _LocalSearchField({required this.controller, required this.onChanged});
+  const _TrackSearchField({required this.controller, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -556,7 +560,7 @@ class _LocalSearchField extends StatelessWidget {
               onChanged: onChanged,
               style: TextStyle(fontSize: 14, color: t.fg),
               decoration: InputDecoration(
-                hintText: "搜索本地歌曲 / 歌手",
+                hintText: "搜索歌曲 / 歌手",
                 hintStyle: TextStyle(fontSize: 14, color: t.fgMute),
                 border: InputBorder.none,
                 isDense: true,
