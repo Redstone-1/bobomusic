@@ -4,7 +4,7 @@ import "package:flutter/painting.dart";
 
 import "aurora_tokens.dart";
 
-/// 8 种主题色（视觉定稿见 prototype/style-a-aurora，COLORS/COLOR_NAMES）
+/// 8 种主题色原色；实际强调色统一从 buildAuroraTokens 读取。
 /// 青绿置首 = 默认主题色（所有者 2026-10-27 修订）
 enum AppThemeColor {
   natureGreen(0xFF2EC4B6, "青绿色"),
@@ -21,7 +21,7 @@ enum AppThemeColor {
 
   const AppThemeColor(this.hex, this.label);
 
-  /// 色板原色（选中指示器用）
+  /// 色板原色；中性色预览使用当前明暗下的实际强调色。
   Color get color => Color(hex);
 }
 
@@ -52,8 +52,7 @@ enum AppThemeColor {
 Color _hsl(double h, int s, double l) =>
     HSLColor.fromAHSL(1, ((h % 360) + 360) % 360, s / 100, l).toColor();
 
-/// 按主题色 + 明暗派生全部风格 A token
-/// 亮度/不透明度数值均为原型 CSS 定稿值，不要随意调
+/// 按主题色 + 明暗派生极光主题 token；韵味紫强调色保持色板原色。
 AuroraTokens buildAuroraTokens(AppThemeColor seed, Brightness brightness) {
   final (h, sRaw) = hexToHsl(seed.hex);
   final h2 = h.toDouble();
@@ -80,7 +79,10 @@ AuroraTokens buildAuroraTokens(AppThemeColor seed, Brightness brightness) {
     hairlineStrong: dark
         ? const Color(0xFFFFFFFF).withValues(alpha: 0.22)
         : const Color(0xFF141420).withValues(alpha: 0.20),
-    primary: _hsl(h2, s, dark ? 0.66 : 0.48),
+    // 紫色以色板原色为准，避免明暗派生改变用户选中的紫色。
+    primary: seed == AppThemeColor.charmPurple
+        ? seed.color
+        : _hsl(h2, s, dark ? 0.66 : 0.48),
     primaryInk: dark ? const Color(0xFF0A0A10) : const Color(0xFFFFFFFF),
     glow: _hsl(h2, s, dark ? 0.60 : 0.62),
     shadow: dark

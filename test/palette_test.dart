@@ -20,18 +20,29 @@ void main() {
 
   group("buildAuroraTokens", () {
     test("深空黑派生保持纯中性（无色相偏移）", () {
-      final t = buildAuroraTokens(AppThemeColor.deepSpaceBlack, Brightness.dark);
+      final t =
+          buildAuroraTokens(AppThemeColor.deepSpaceBlack, Brightness.dark);
       expect(
         HSLColor.fromColor(t.primary).saturation * 100,
         0,
       );
     });
 
-    test("明暗两套表面与主题色亮度不同", () {
+    test("韵味紫在明暗主题中均使用色板原色", () {
+      for (final brightness in Brightness.values) {
+        final t = buildAuroraTokens(AppThemeColor.charmPurple, brightness);
+        expect(t.primary, const Color(0xFF7B5CFF));
+      }
+    });
+
+    test("明暗表面不同，其余主题色仍按亮度派生", () {
       for (final seed in AppThemeColor.values) {
         final dark = buildAuroraTokens(seed, Brightness.dark);
         final light = buildAuroraTokens(seed, Brightness.light);
-        expect(dark.primary, isNot(light.primary));
+        if (seed != AppThemeColor.charmPurple) {
+          expect(dark.primary, isNot(light.primary));
+        }
+        expect(dark.primaryInk, isNot(light.primaryInk));
         expect(dark.surface.a, lessThan(light.surface.a));
         expect(dark.bg, isNot(light.bg));
       }

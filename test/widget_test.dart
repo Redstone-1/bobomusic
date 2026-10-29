@@ -367,8 +367,8 @@ void main() {
     await tester.pump();
     expect(appPrefs.getString("theme_color"), "sunsetRed");
 
-    // 深色分段 → theme_mode 写回（默认已是亮色，选同值不写盘）
-    await tester.tap(find.text("深色"));
+    // 标题右侧图标切换明暗，仍写回原有偏好。
+    await tester.tap(find.byTooltip("切换为深色"));
     await tester.pump();
     expect(appPrefs.getString("theme_mode"), "dark");
   });

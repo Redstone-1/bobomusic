@@ -2,7 +2,7 @@ import "package:flutter/material.dart";
 
 import "../theme/app_palette.dart";
 
-/// 主题色选点（原型 .sw：40px 圆 + 选中白描边与 ✓）
+/// 主题色选点：40px 圆、选中描边与勾选标记。
 class ThemeSwatch extends StatelessWidget {
   final AppThemeColor color;
   final bool selected;
@@ -17,6 +17,10 @@ class ThemeSwatch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = buildAuroraTokens(color, Theme.of(context).brightness);
+    // 中性色随明暗显示实际强调色，避免深黑预览与灰色主题效果不符。
+    final preview =
+        color == AppThemeColor.deepSpaceBlack ? tokens.primary : color.color;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -24,7 +28,7 @@ class ThemeSwatch extends StatelessWidget {
         height: 40,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: color.color,
+          color: preview,
           border: Border.all(
             width: 2,
             color: selected
@@ -34,7 +38,7 @@ class ThemeSwatch extends StatelessWidget {
         ),
         alignment: Alignment.center,
         child: selected
-            ? const Icon(Icons.check, size: 15, color: Colors.white)
+            ? Icon(Icons.check, size: 15, color: tokens.primaryInk)
             : null,
       ),
     );

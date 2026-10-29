@@ -10,6 +10,7 @@ import "../../core/theme/app_palette.dart";
 import "../../core/theme/aurora_tokens.dart";
 import "../../core/theme/theme_mode_provider.dart";
 import "../../core/theme/theme_providers.dart";
+import "../../core/widgets/app_buttons.dart";
 import "../../core/widgets/glass_card.dart";
 import "../../core/widgets/page_header.dart";
 import "../../core/widgets/theme_swatch.dart";
@@ -22,7 +23,7 @@ import "info_pages.dart";
 import "settings_info.dart";
 import "update_checker.dart";
 
-/// 设置页（对齐原型 renderSetting）：主题真实驱动 + 关于组 + Gallery 隐藏入口
+/// 设置页：主题偏好、应用管理与说明入口。
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
@@ -39,48 +40,50 @@ class SettingsPage extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 150),
       children: [
-        const PageHeader(title: "设置", subtitle: "主题 · 外观 · 关于"),
+        PageHeader(
+          title: "设置",
+          subtitle: "主题 · 外观 · 关于",
+          trailing: Tooltip(
+            message: mode == ThemeMode.dark ? "切换为浅色" : "切换为深色",
+            child: Semantics(
+              button: true,
+              child: GlassIconButton(
+                size: 44,
+                icon: Icon(
+                  mode == ThemeMode.dark
+                      ? Icons.light_mode_outlined
+                      : Icons.dark_mode_outlined,
+                ),
+                onTap: () => ref.read(appThemeModeProvider.notifier).toggle(),
+              ),
+            ),
+          ),
+        ),
         const SizedBox(height: 16),
         // —— 主题组 ——
         GlassCard(
           frosted: true,
           padding: const EdgeInsets.all(6),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _SettingRow(
-                icon: mode == ThemeMode.dark
-                    ? Icons.dark_mode_outlined
-                    : Icons.light_mode_outlined,
-                title: "主题模式",
-                subtitle: "主题色驱动 · 明暗自动生成",
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
-                child: _ThemeSeg(
-                  current: mode,
-                  onSelect: (m) => ref.read(appThemeModeProvider.notifier).set(m),
-                ),
+              const _SettingRow(
+                icon: Icons.palette_outlined,
+                title: "主题色",
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
                   children: [
-                    Text("主题色", style: TextStyle(fontSize: 12, color: t.fgDim)),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: [
-                        for (final c in AppThemeColor.values)
-                          ThemeSwatch(
-                            color: c,
-                            selected: c == seed,
-                            onTap: () =>
-                                ref.read(appThemeSeedProvider.notifier).select(c),
-                          ),
-                      ],
-                    ),
+                    for (final c in AppThemeColor.values)
+                      ThemeSwatch(
+                        color: c,
+                        selected: c == seed,
+                        onTap: () =>
+                            ref.read(appThemeSeedProvider.notifier).select(c),
+                      ),
                   ],
                 ),
               ),
@@ -303,54 +306,6 @@ class _SettingRow extends StatelessWidget {
             if (trailing != null) trailing!,
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// 明暗分段选择（原型 .seg：surface-2 槽 + primary 活动块）
-class _ThemeSeg extends StatelessWidget {
-  final ThemeMode current;
-  final ValueChanged<ThemeMode> onSelect;
-
-  const _ThemeSeg({required this.current, required this.onSelect});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AuroraTokens.of(context);
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(13),
-        color: t.surface2,
-      ),
-      child: Row(
-        children: [
-          for (final (label, mode) in const [("浅色", ThemeMode.light), ("深色", ThemeMode.dark)])
-            Expanded(
-              child: GestureDetector(
-                onTap: () => onSelect(mode),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeOut,
-                  padding: const EdgeInsets.symmetric(vertical: 9),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    color: current == mode ? t.primary : Colors.transparent,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: current == mode ? t.primaryInk : t.fgDim,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }
