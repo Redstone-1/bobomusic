@@ -1,26 +1,30 @@
 # MEM-1 · B 站合集条目被当单曲直接播放
 
-## 现象
+> 当前约束核对：2026-10-29，`6d27559`。保留原缺陷背景；SDK 缺 cid 行为已随之后实现变化。
 
-B 站音源搜索结果点合集类条目：直接报「播放失败：取流失败/-404」，不进列表页；列表上也没有任何合集标识。
+## 历史现象与根因
 
-## 根因链
+搜索结果中的合集被当单曲直接播放，出现取流失败/-404，且不进入列表。
 
-1. `search_type=video` 返回的卡片 JSON **不携带合集标记**——多P 视频有 `videos/pages`（type=orderName 可判），UGC 合集只有 `is_season_display`/`ugc_season`，`BiliSearchItem.fromJson` 解析出的 `type` 为 null。
-2. 搜索页按 `type==orderName || musicList>1` 分流，null type 落进单曲分支 → `toTrack()` 拿合集 id（无 cid）走 playurl → 必然失败。
-3. 2.7.0 的正确做法（git master `lib/modules/music_plaza/search/search.dart`）：**列表行不判合集**，任何条目点击先 `searchDetail`（view 接口）拉详情，再用详情的 `type`/`isSeasonDisplay` 分流。
+1. search_type=video 的卡片不保证携带 UGC 合集信息，不能仅按卡片 type 或 musicList 长度判断。
+2. 当时单曲分支把无 cid 的合集 ID 交给 playurl，取流阶段无法补齐而失败。
+3. 搜索页需要先请求 view 详情，再按多 P、UGC 合集或真单曲分流；单靠 ID 可取流也不能表达合集导航语义。
 
-## 修复（a9efa1a）
+## 原修复与当前实现
 
-- 搜索页 `_playWithResolve`：点击 → searchDetail → `orderName` 多P / `isSeasonDisplay` → `searchSeason(mid, seasonId)` 拉成员 → 合集列表页；真单曲才播放；酷我短路直播（无合集概念）。
-- `types.dart`：season 条目仍解析为 orderName（兜底）。
-- 合集行整包操作（收藏/全部加入待播放/全部下载）共用 `_fetchCollectionTracks`。
-- 测试：`test/bili/search_item_type_test.dart` 锁四种条目形状。
+原修复提交 `a9efa1a`：
 
-## 为何容易复发
+- `lib/features/plaza/search_page.dart` 的 _playWithResolve：B 站点击先 searchDetail，多 P 进入列表，UGC 合集通过 searchSeason 拉成员，真单曲才播放。
+- 当前非 B 站的四个源按单曲直接播放，不调用 B 站特有详情/合集接口。
+- _fetchCollectionTracks 为打开、收藏、整包入队、整包下载复用成员解析。
+- `test/bili/search_item_type_test.dart` 验证响应条目类型，应用级行为见 `test/widget_test.dart`。
 
-列表阶段**无法**从卡片数据识别 UGC 合集（接口限制，2.7.0 同样如此）。任何"在列表行按 type 分流播放"的重构都会重新引入此缺陷。
+后续 `lib/origin_sdk/bili/bili_api.dart` 的 getMusicUrl 已增加缺 cid 自愈：请求详情，取首个可播 P 的 ID 补齐 cid；仍缺失才抛 BiliInvalidIdError。**“缺 cid 必然取流失败”已不是当前结论。**
+
+## 仍需保持的约束
+
+cid 自愈用于搜索旧 ID、队列和已存曲目的取流容错，不能替代合集分流。若只依赖自愈直接播放，可能只播第一 P 而跳过应有的合集列表。列表卡片数据不足时，仍须通过详情识别内容类型。
 
 ## 关联
 
-[[../plaza/00-模块地图]] · [[../origin_sdk/00-模块地图]]
+[广场地图](../plaza/00-模块地图.md) · [SDK 地图](../origin_sdk/00-模块地图.md)

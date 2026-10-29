@@ -2,10 +2,8 @@
 
 ## 覆盖范围
 
-`lib/origin_sdk/`：`origin_types.dart`（OriginService 抽象与数据类型）、`bili/`（bili_api / bili_auth / bili_api_error / sign / ticket / types，S2 拆分后结构）、`kuwo/kuwo_api.dart`（第二源 + 榜单解析）、`lyric/`（三顺位歌词链）。全局单例在 `lib/data/origin_service.dart`。旧 BiliClient 单体（client.dart）已拆分退役。
-
-## 索引
+`lib/origin_sdk/` 下的五个在线音源（bili、kuwo、netease、qq、qianqian）、公共 `origin_types.dart`、歌词链 `lyric/`。五源实例在 `lib/data/origin_service.dart`，歌词实例在 `lyric/lyric_service.dart`，均可替换供测试使用。
 
 | 文档 | 覆盖主题 | 什么时候读 |
 | --- | --- | --- |
-| [00-模块地图.md](./00-模块地图.md) | 双音源结构、鉴权生命周期、playurl/取流、榜单数据源实测结论、转义清洗约定 | 改搜索/取流/签名/票据/榜单/歌词接口前 |
+| [00-模块地图.md](./00-模块地图.md) | 五源能力与路由、B 站鉴权/cid 补齐、官方榜单与回退链、文本清洗、歌词链 | 改搜索/取流/签名/榜单/歌词接口前 |

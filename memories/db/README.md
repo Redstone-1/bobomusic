@@ -2,10 +2,8 @@
 
 ## 覆盖范围
 
-`lib/data/db/app_database.dart`（bobomusic3.db v3，四表 + play_history）、`desktop_database.dart`（ffi 引导）、`lib/data/repositories/`（Track/Playlist/Queue/History 四仓库）。旧版 `lib/db/db.dart`「表即歌单」模型与链表重建已退役。
-
-## 索引
+`lib/data/db/app_database.dart`（bobomusic3.db，schema version 3，五表）、`desktop_database.dart`（桌面 ffi）、`lib/data/repositories/`（Track/Playlist/Queue/History）、本地扫描与导入链。旧版“表即歌单”模型已退役。
 
 | 文档 | 覆盖主题 | 什么时候读 |
 | --- | --- | --- |
-| [00-模块地图.md](./00-模块地图.md) | 四表语义约束、upsert 保护字段、分批删除陷阱、播放历史回滚、迁移历史 | 改歌单/收藏/队列/历史存储、写任何 SQL 前 |
+| [00-模块地图.md](./00-模块地图.md) | 五表关系、upsert 保护字段、指纹同步与增量导入、队列、历史回滚和迁移边界 | 改歌单/收藏/队列/历史、本地扫描或 SQL 前 |

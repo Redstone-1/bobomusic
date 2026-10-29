@@ -23,4 +23,4 @@ undraw 镜像包源码是 **JSX** 格式，数值属性写作 `x1={221.48}`、`o
 
 ## 关联
 
-[[../plaza/00-模块地图]] · `lib/core/widgets/empty_state.dart`（asset 槽位）
+[广场地图](../plaza/00-模块地图.md) · `lib/core/widgets/empty_state.dart`（asset 槽位）
