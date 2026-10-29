@@ -186,10 +186,10 @@ ResponseBody _jsonBody(Map<String, dynamic> json) => ResponseBody.fromString(
       },
     );
 
-/// 预置鉴权三件套（字段公开可注入，ensure 直接就绪不再发请求）；
+/// 预置鉴权三件套并显式绕过网络，不依赖生产缓存有效期；
 /// wbi 密钥须各 32 位（getMixinKey 按 64 位混淆表取字符，短串会越界）
 BiliApi _stubAuthApi(Dio dio) {
-  final auth = BiliAuth();
+  final auth = _ReadyAuth();
   auth.signData = SignData(
     imgKey: "0123456789abcdef0123456789abcdef",
     subKey: "fedcba9876543210fedcba9876543210",
@@ -197,4 +197,10 @@ BiliApi _stubAuthApi(Dio dio) {
   auth.spiData = SpiData(b3: "b3", b4: "b4");
   auth.ticket = "tk";
   return BiliApi(authOverride: auth, dioOverride: dio);
+}
+
+// 解析测试隔离鉴权 I/O，缓存过期由独立回归测试覆盖。
+class _ReadyAuth extends BiliAuth {
+  @override
+  Future<void> ensure() async {}
 }

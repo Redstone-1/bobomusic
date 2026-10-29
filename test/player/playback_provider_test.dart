@@ -11,6 +11,7 @@ import "package:bobomusic/features/player/audio_engine.dart";
 import "package:bobomusic/features/player/play_mode.dart";
 import "package:bobomusic/features/player/playback_provider.dart";
 import "package:bobomusic/origin_sdk/bili/bili_api_error.dart";
+import "package:bobomusic/origin_sdk/bili/bili_api.dart";
 import "package:bobomusic/origin_sdk/origin_types.dart" as sdk;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -62,6 +63,26 @@ void main() {
       await Future<void>.delayed(Duration.zero);
     }
   }
+
+  test("运行时源错误提示已清除后，重试仍重新解析直链并装载", () async {
+    final original = data.biliApi;
+    final api = _RefreshingBili();
+    data.biliApi = api;
+    playbackDepsTestOverride = PlaybackDeps(engine: engine);
+    try {
+      await pb().play(t("123_BVfake_777", "歌"));
+      engine.emitError(StateError("CDN 已失效"));
+      await flush();
+      pb().clearError(); // 应用壳展示提示后立即清错。
+      await pb().toggle();
+      await flush();
+      expect(api.refreshFlags, [false, true]);
+      expect(engine.loads.length, 2);
+      expect(st().playing, isTrue);
+    } finally {
+      data.biliApi = original;
+    }
+  });
 
   test("点播单曲：默认队列为自身并开播", () async {
     await pb().play(t("a", "曲A"));
@@ -633,4 +654,14 @@ class _FakeKuwoApi implements sdk.OriginService {
         headers: const {"Referer": "https://www.kuwo.cn/"},
         contentType: "audio/mpeg",
       );
+}
+
+class _RefreshingBili extends BiliApi {
+  final refreshFlags = <bool>[];
+
+  @override
+  Future<sdk.MusicUrl> getMusicUrl(String id, {bool forceRefresh = false}) async {
+    refreshFlags.add(forceRefresh);
+    return const sdk.MusicUrl(url: "https://cdn.example/audio.m4s");
+  }
 }

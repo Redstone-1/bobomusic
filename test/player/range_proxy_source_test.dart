@@ -20,15 +20,18 @@ void main() {
   // 服务器行为开关
   var mode = "range206";
   var refererSeen = false;
+  String? requestedRange;
 
   setUp(() async {
     cacheDir = await Directory.systemTemp.createTemp("bobo_range_test");
     RangeProxySource.cacheDir = cacheDir;
     refererSeen = false;
+    requestedRange = null;
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((request) async {
       refererSeen = request.headers.value("Referer") != null;
       final range = request.headers.value(HttpHeaders.rangeHeader);
+      requestedRange = range;
       switch (mode) {
         case "reject403":
           request.response.statusCode = 403;
@@ -69,7 +72,8 @@ void main() {
   RangeProxySource buildSource({String? backup}) => RangeProxySource(
         key: "test_track",
         url: "http://127.0.0.1:${server.port}/audio.m4s",
-        backupUrl: backup == null ? null : "http://127.0.0.1:${server.port}/$backup",
+        backupUrl:
+            backup == null ? null : "http://127.0.0.1:${server.port}/$backup",
         headers: const {"Referer": "https://www.bilibili.com/"},
       );
 
@@ -121,7 +125,7 @@ void main() {
   test("中段 Range（模拟 seek）：字节区间正确", () async {
     mode = "range206";
     final source = buildSource();
-    final resp = await source.request(1000, 1999);
+    final resp = await source.request(1000, 2000);
     expect(resp.offset, 1000);
     expect(resp.contentLength, 1000);
     final data = await drain(resp.stream);
@@ -203,6 +207,71 @@ void main() {
     expect(await cached.exists(), isTrue);
   });
 
+  test("排尾边界：网络与缓存 request(0, 1) 都只读一个字节", () async {
+    final source = buildSource();
+    final response = await source.request(0, 1);
+    expect(requestedRange, "bytes=0-0");
+    expect(response.contentLength, 1);
+    expect(await drain(response.stream), content.sublist(0, 1));
+    await RangeProxySource.cacheFileFor("test_track").writeAsBytes(content);
+    final cached = await source.request(0, 1);
+    expect(await drain(cached.stream), content.sublist(0, 1));
+    final empty = await source.request(1, 1);
+    expect(empty.contentLength, 0);
+    expect(await drain(empty.stream), isEmpty);
+  });
+
+  test("200 忽略 Range 时裁掉前缀，seek 的总长与区间仍正确", () async {
+    mode = "plain200";
+    final response = await buildSource().request(1000, 2000);
+    expect(response.sourceLength, content.length);
+    expect(response.offset, 1000);
+    expect(response.contentLength, 1000);
+    expect(await drain(response.stream), content.sublist(1000, 2000));
+  });
+
+  test("响应头后主链中断：备用链从已收到位置续传，缓存仍完整", () async {
+    final broken = await truncatedServer(content);
+    try {
+      final source = RangeProxySource(
+        key: "resume",
+        url: "http://127.0.0.1:${broken.port}/main",
+        backupUrl: "http://127.0.0.1:${server.port}/backup",
+      );
+      final response = await source.request();
+      expect(await drain(response.stream), content);
+      expect(requestedRange, "bytes=3-");
+      expect(
+          await RangeProxySource.cacheFileFor("resume").readAsBytes(), content);
+    } finally {
+      await broken.close();
+    }
+  });
+
+  test("没有备用链的断流必须抛错，不能吞成成功或留下半首缓存", () async {
+    final broken = await truncatedServer(content);
+    try {
+      final source = RangeProxySource(
+        key: "broken",
+        url: "http://127.0.0.1:${broken.port}/main",
+      );
+      final response = await source.request();
+      await expectLater(drain(response.stream), throwsA(isA<StateError>()));
+      expect(await RangeProxySource.cacheFileFor("broken").exists(), isFalse);
+      expect(await cacheDir.list().toList(), isEmpty);
+    } finally {
+      await broken.close();
+    }
+  });
+
+  test("缓存目录无法写入不影响完整音频转发", () async {
+    final blocked = File("${cacheDir.path}/not-a-directory");
+    await blocked.writeAsString("block");
+    RangeProxySource.cacheDir = Directory(blocked.path);
+    final response = await buildSource().request();
+    expect(await drain(response.stream), content);
+  });
+
   test("parseContentRange 解析与容错", () {
     expect(parseContentRange("bytes 0-999/2000"), (999, 2000));
     expect(parseContentRange("bytes 100-199/2000"), (199, 2000));
@@ -210,4 +279,23 @@ void main() {
     expect(parseContentRange("garbage"), isNull);
     expect(parseContentRange("bytes */2000"), isNull);
   });
+}
+
+/// 模拟 CDN 声明整曲长度后只发送三个字节就断开，保留真实 HTTP 流错误。
+Future<ServerSocket> truncatedServer(Uint8List content) async {
+  final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+  server.listen((socket) {
+    var sent = false;
+    socket.listen((_) async {
+      if (sent) return;
+      sent = true;
+      socket.add(ascii.encode(
+        "HTTP/1.1 200 OK\r\nContent-Length: ${content.length}\r\nConnection: close\r\n\r\n",
+      ));
+      socket.add(content.sublist(0, 3));
+      await socket.flush();
+      socket.destroy();
+    });
+  });
+  return server;
 }

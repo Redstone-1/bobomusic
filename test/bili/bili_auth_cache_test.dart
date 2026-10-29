@@ -1,85 +1,119 @@
 import "package:bobomusic/origin_sdk/bili/bili_auth.dart";
 import "package:bobomusic/origin_sdk/bili/types.dart";
+import "package:dio/dio.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:shared_preferences/shared_preferences.dart";
 
-/// 鉴权缓存还原与 cookie 构造特征测试（S2.2/S2.3）
-/// 网络路径不在单测覆盖内（需真机实测，见硬规则 8）
+import "../helpers/http_adapter.dart";
+
+Map<String, Object> cached(DateTime now, {String version = "4"}) => {
+      "bili_cache_version": version,
+      "bili_catch_created_at": now.millisecondsSinceEpoch,
+      "bili_sign_img_key": "img123",
+      "bili_sign_sub_key": "sub456",
+      "bili_spi_b3": "old-b3",
+      "bili_spi_b4": "old-b4",
+      "bili_ticket": "old-ticket",
+      "bili_b_nut": "old-nut",
+      "bili_buvid3": "home-b3",
+      "bili_b_nut_created_at": now.millisecondsSinceEpoch,
+    };
+
+StubHttpAdapter bootstrap({bool rejectHome = false}) =>
+    StubHttpAdapter((options) {
+      switch (options.uri.path) {
+        case "/":
+          if (rejectHome) return jsonBody({}, status: 503);
+          return ResponseBody.fromString("", 200, headers: {
+            "set-cookie": [
+              "b_nut=new-nut; Path=/",
+              "buvid3=new-home-b3; Path=/"
+            ],
+          });
+        case "/x/web-interface/nav":
+          return jsonBody({
+            "code": -101,
+            "data": {
+              "wbi_img": {
+                "img_url":
+                    "https://example/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png",
+                "sub_url":
+                    "https://example/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png",
+              }
+            },
+          });
+        case "/x/frontend/finger/spi":
+          return jsonBody({
+            "code": 0,
+            "data": {"b_3": "new-spi-b3", "b_4": "new-b4"}
+          });
+        default:
+          return jsonBody({
+            "code": 0,
+            "data": {"ticket": "new-ticket"}
+          });
+      }
+    });
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  // restore 判定用 DateTime.now()，取当下时间保证"未过期"
-  final nowMs = DateTime.now().millisecondsSinceEpoch;
-
-  test("三件套缓存未过期且版本匹配 → 还原成功，不触网络", () async {
-    SharedPreferences.setMockInitialValues({
-      "bili_cache_version": "4",
-      "bili_catch_created_at": nowMs,
-      "bili_sign_img_key": "img123",
-      "bili_sign_sub_key": "sub456",
-      "bili_spi_b3": "b3value",
-      "bili_spi_b4": "b4value",
-      "bili_ticket": "ticket789",
-      "bili_b_nut": "nutvalue",
-      "bili_buvid3": "buvid3value",
-      "bili_b_nut_created_at": nowMs,
-    });
-
-    final auth = BiliAuth();
+  test("有效缓存还原不触网，会话达到 24 小时后重新获取材料", () async {
+    var now = DateTime(2026, 10, 29, 10);
+    SharedPreferences.setMockInitialValues(cached(now));
+    final adapter = bootstrap();
+    final dio = Dio()..httpClientAdapter = adapter;
+    final auth = BiliAuth(dio: dio, now: () => now);
     await auth.ensure();
-
-    expect(auth.signData?.imgKey, "img123");
-    expect(auth.signData?.subKey, "sub456");
-    expect(auth.spiData?.b3, "buvid3value"); // buvid3 以主页 Set-Cookie 为准
-    expect(auth.spiData?.b4, "b4value");
-    expect(auth.ticket, "ticket789");
-    expect(auth.bNut, "nutvalue");
+    expect(adapter.requests, isEmpty);
+    expect(auth.signData!.imgKey, "img123");
+    expect(auth.spiData!.b3, "home-b3");
+    now = now.add(const Duration(hours: 24));
+    await auth.ensure();
+    expect(adapter.requests.length, 4);
+    expect(auth.ticket, "new-ticket");
+    expect(auth.bNut, "new-nut");
+    expect(auth.spiData!.b3, "new-home-b3");
+    dio.close();
   });
 
-  test("cookieHeader：b_nut 为空不写入 cookie（纯契约，不走网络）", () {
+  test("并发重刷只取一组材料，跳过有效但已被风控拒绝的持久缓存", () async {
+    final now = DateTime(2026, 10, 29, 10);
+    SharedPreferences.setMockInitialValues(cached(now));
+    final adapter = bootstrap();
+    final dio = Dio()..httpClientAdapter = adapter;
+    final auth = BiliAuth(dio: dio, now: () => now);
+    await auth.ensure();
+    await Future.wait([auth.refresh(), auth.refresh(), auth.ensure()]);
+    expect(adapter.requests.length, 4);
+    expect(auth.ticket, "new-ticket");
+    expect(auth.cookieHeader(), contains("new-nut"));
+    dio.close();
+  });
+
+  test("缓存版本不匹配时重刷；主页失败仍可用 spi 完成鉴权", () async {
+    final now = DateTime(2026, 10, 29, 10);
+    SharedPreferences.setMockInitialValues(
+        cached(now, version: "3")..remove("bili_b_nut_created_at"));
+    final adapter = bootstrap(rejectHome: true);
+    final dio = Dio()..httpClientAdapter = adapter;
+    final auth = BiliAuth(dio: dio, now: () => now);
+    await auth.ensure();
+    expect(auth.ticket, "new-ticket");
+    expect(auth.spiData!.b3, "new-spi-b3");
+    expect(auth.cookieHeader(), isNot(contains("b_nut=")));
+    dio.close();
+  });
+
+  test("cookie 省略空值，非空值保持传递", () {
     final auth = BiliAuth()
       ..spiData = const SpiData(b3: "b3", b4: "b4")
       ..ticket = "tk"
       ..bNut = "";
-
-    final cookie = auth.cookieHeader();
-    expect(cookie, contains("buvid3=b3"));
-    expect(cookie, contains("buvid4=b4"));
-    expect(cookie, contains("bili_ticket=tk"));
-    expect(cookie, isNot(contains("b_nut")));
-  });
-
-  test("cookieHeader：b_nut 非空时写入", () {
-    final auth = BiliAuth()
-      ..spiData = const SpiData(b3: "b3", b4: "b4")
-      ..ticket = "tk"
-      ..bNut = "nut";
-
+    expect(auth.cookieHeader(), contains("buvid3=b3"));
+    expect(auth.cookieHeader(), contains("bili_ticket=tk"));
+    expect(auth.cookieHeader(), isNot(contains("b_nut=")));
+    auth.bNut = "nut";
     expect(auth.cookieHeader(), contains("b_nut=nut"));
-  });
-
-  test("缓存版本不匹配 → 不还原（触发重刷材料的机制保留）", () async {
-    SharedPreferences.setMockInitialValues({
-      "bili_cache_version": "3",
-      "bili_catch_created_at": nowMs,
-      "bili_sign_img_key": "img123",
-      "bili_sign_sub_key": "sub456",
-      "bili_spi_b3": "b3",
-      "bili_spi_b4": "b4",
-      "bili_ticket": "tk",
-    });
-
-    final auth = BiliAuth();
-    // 还原失败 → 走网络 → 单测环境网络不可控，这里只验证"未还原"状态
-    // （ensure 会抛 BiliAuthError 或成功拉取，均属正确行为，不做强断言）
-    try {
-      await auth.ensure();
-      // 网络可用时成功拉取也算通过；此时材料应就绪
-      expect(auth.ticket, isNotNull);
-    } catch (_) {
-      // 网络不可达时类型化失败
-      expect(true, isTrue);
-    }
-    expect(auth.signData?.imgKey, isNot("img123")); // 旧版本缓存未被采用
   });
 }
