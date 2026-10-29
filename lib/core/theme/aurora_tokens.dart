@@ -65,6 +65,9 @@ class AuroraTokens extends ThemeExtension<AuroraTokens> {
   /// 弹层遮罩（原型 .sheet .mask：rgba(0,0,0,.5)，明暗同值）
   final Color maskBg;
 
+  /// 扫描舱固定黑灰底（明暗同值，不随主题变化，突出黑客感）
+  final Color scanSurface;
+
   // ---- 圆角分级（原型 12/14/18~20/26 收敛） ----
   /// 小件：列表封面、小图（12）
   final double radiusSm;
@@ -122,6 +125,7 @@ class AuroraTokens extends ThemeExtension<AuroraTokens> {
     required this.toastBorder,
     required this.toastFg,
     required this.maskBg,
+    required this.scanSurface,
     this.radiusSm = 12,
     this.radiusMd = 14,
     this.radiusLg = 18,
@@ -161,6 +165,7 @@ class AuroraTokens extends ThemeExtension<AuroraTokens> {
     Color? toastBorder,
     Color? toastFg,
     Color? maskBg,
+    Color? scanSurface,
     double? radiusSm,
     double? radiusMd,
     double? radiusLg,
@@ -194,6 +199,7 @@ class AuroraTokens extends ThemeExtension<AuroraTokens> {
       toastBorder: toastBorder ?? this.toastBorder,
       toastFg: toastFg ?? this.toastFg,
       maskBg: maskBg ?? this.maskBg,
+      scanSurface: scanSurface ?? this.scanSurface,
       radiusSm: radiusSm ?? this.radiusSm,
       radiusMd: radiusMd ?? this.radiusMd,
       radiusLg: radiusLg ?? this.radiusLg,
@@ -234,6 +240,7 @@ class AuroraTokens extends ThemeExtension<AuroraTokens> {
       toastBorder: Color.lerp(toastBorder, other.toastBorder, t)!,
       toastFg: Color.lerp(toastFg, other.toastFg, t)!,
       maskBg: Color.lerp(maskBg, other.maskBg, t)!,
+      scanSurface: Color.lerp(scanSurface, other.scanSurface, t)!,
       radiusSm: _lerpDouble(radiusSm, other.radiusSm, t),
       radiusMd: _lerpDouble(radiusMd, other.radiusMd, t),
       radiusLg: _lerpDouble(radiusLg, other.radiusLg, t),

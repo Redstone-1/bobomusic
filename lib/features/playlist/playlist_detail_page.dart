@@ -17,7 +17,6 @@ import "../../core/widgets/page_header.dart";
 import "../../core/widgets/skeleton.dart";
 import "../../core/widgets/song_list_tile.dart";
 import "../../data/local_audio_importer.dart";
-import "../../data/local_audio_scanner.dart";
 import "../../data/models/playlist.dart";
 import "../../data/models/track.dart";
 import "../../data/repositories/playlist_repository.dart";
@@ -28,11 +27,14 @@ import "../playlist/add_to_playlist_sheet.dart";
 import "../player/mini_player_bar.dart";
 import "../player/playback_provider.dart";
 import "../player/player_card_page.dart";
+import "local_scan_controller.dart";
+import "local_scan_panel.dart";
 import "playlists_provider.dart"
     show
         localCountProvider,
         playlistDetailTracksProvider,
         queueEntriesProvider;
+import "scan_failures_dialog.dart";
 
 /// 歌单详情（对齐原型 renderSub/playlist）
 /// 两种数据模式：
@@ -61,6 +63,9 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
   int _reloadSeq = 0;
   bool _scanning = false;
 
+  /// 流式扫描状态；非空时列表区域显示扫描舱
+  LocalScanController? _scanController;
+
   /// 本地音乐搜索（实时过滤歌名/歌手，仅本地页展示输入框）
   final _searchController = TextEditingController();
   String _query = "";
@@ -87,6 +92,8 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
 
   @override
   void dispose() {
+    // 扫描中离开页面：停止 isolate；写库由 _scan 的 finally 收尾
+    _scanController?.cancel();
     _spin.dispose();
     _searchController.dispose();
     super.dispose();
@@ -110,31 +117,47 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
     });
   }
 
-  /// 本地扫描（C3）：权限 → 后台扫描 → 同步入库 → 失效相关 provider → toast
+  /// 本地扫描（C3）：权限 → 流式扫描/入库 → 失效 provider → 失败弹窗
   Future<void> _scan() async {
     final granted = await requestAudioPermission();
     if (!granted) {
       if (mounted) AppToast.show(context, "未获得音频读取权限");
       return;
     }
-    setState(() => _scanning = true);
+    final controller = LocalScanController();
+    setState(() {
+      _scanning = true;
+      _scanController = controller;
+    });
     try {
-      final result = await scanLocalLibrary();
-      await TrackRepository().syncLocalTracks(result.tracks);
+      await controller.start();
+      if (!mounted) return;
+      // 小库扫描极快时也让完成态停留一瞬，避免扫描舱一闪而过
+      if (controller.phase == LocalScanPhase.done) {
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+        if (!mounted) return;
+      }
       ref.invalidate(playlistDetailTracksProvider);
       ref.invalidate(localCountProvider);
-      if (!mounted) return;
-      AppToast.show(
-        context,
-        result.failed.isEmpty
-            ? "扫描完成 · 共 ${result.tracks.length} 首"
-            : "扫描完成 ${result.tracks.length} 首 · ${result.failed.length} 首读取失败",
-      );
+      if (controller.cancelled) return;
+      if (controller.phase == LocalScanPhase.failed) {
+        AppToast.show(context, "扫描失败，请重试");
+      } else if (controller.failures.isNotEmpty) {
+        await showScanFailuresDialog(context, controller.failures);
+      } else {
+        AppToast.show(context, "扫描完成 · 共 ${controller.indexed} 首");
+      }
     } catch (e) {
       print("本地扫描失败: $e");
       if (mounted) AppToast.show(context, "扫描失败，请重试");
     } finally {
-      if (mounted) setState(() => _scanning = false);
+      if (mounted) {
+        setState(() {
+          _scanController = null;
+          _scanning = false;
+        });
+      }
+      controller.dispose();
     }
   }
 
@@ -341,7 +364,18 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                           ),
                         ],
                         const SizedBox(height: 14),
-                        if (showSkeleton)
+                        if (_scanController != null)
+                          SizedBox(
+                            height:
+                                (MediaQuery.sizeOf(context).height - 310)
+                                    .clamp(300.0, 560.0)
+                                    .toDouble(),
+                            child: LocalScanPanel(
+                              controller: _scanController!,
+                              onCancel: () => _scanController?.cancel(),
+                            ),
+                          )
+                        else if (showSkeleton)
                           SkeletonListView(rows: skRows < 6 ? 6 : skRows)
                         else if (snap.hasError)
                           EmptyState(
@@ -465,7 +499,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                       Positioned.fill(
                         child: _isLocal
                             ? EmptyState(
-                                asset: "assets/illustrations/empty_local_music.svg",
+                                asset: "assets/illustrations/empty_search.svg",
                                 title: "本地音乐是空的",
                                 subtitle: "扫描设备存储或从文件导入音频",
                                 action: Row(

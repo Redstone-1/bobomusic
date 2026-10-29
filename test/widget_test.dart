@@ -261,6 +261,7 @@ void main() {
     await tester.tap(find.text("扫描本地音乐"));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 200));
     expect(find.text("漠河舞厅"), findsOneWidget);
     expect(find.text("夜曲"), findsOneWidget);
     expect(find.text("扫描完成 · 共 2 首"), findsOneWidget);
@@ -270,6 +271,35 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text("2 首"), findsOneWidget);
+  });
+
+  testWidgets("本地扫描：失败文件弹窗列出路径与原因", (WidgetTester tester) async {
+    localScanTestOverride = const LocalScanResult(
+      tracks: [],
+      failed: ["/music/bad.ogg"],
+      failures: [
+        ScanFailure(path: "/music/bad.ogg", reason: "读取失败：解析失败"),
+      ],
+    );
+    addTearDown(() => localScanTestOverride = null);
+
+    await tester.pumpWidget(await buildTestApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    await tester.tap(find.text("本地音乐"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text("本地音乐是空的"), findsOneWidget);
+
+    await tester.tap(find.text("扫描本地音乐"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text("有 1 个文件未能读取"), findsOneWidget);
+    expect(find.text("/music/bad.ogg"), findsOneWidget);
+    expect(find.text("知道了"), findsOneWidget);
   });
 
   testWidgets("搜索页：空态 → 输入 → 单曲/歌单分区", (WidgetTester tester) async {

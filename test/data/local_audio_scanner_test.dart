@@ -1,3 +1,4 @@
+import "dart:async";
 import "dart:io";
 
 import "package:bobomusic/data/local_audio_scanner.dart";
@@ -97,6 +98,51 @@ void main() {
       source: _FakeSource(const <String>{}, emptyArtist: true),
     );
     expect(result.tracks.single.author, "未知歌手");
+  });
+
+  test("scanTask：流式回传文件、失败原因、进度与完成", () async {
+    touch("a.mp3");
+    touch("bad.ogg");
+
+    final events = <LocalScanEvent>[];
+    final task = LocalAudioScanner().scanTask(
+      roots: [tmp],
+      source: fakeSource(bad: {"bad.ogg"}),
+    );
+    await for (final event in task.events) {
+      events.add(event);
+    }
+
+    final files = events
+        .whereType<LocalScanFiles>()
+        .expand((event) => event.paths)
+        .toList();
+    expect(files.any((path) => path.endsWith("a.mp3")), isTrue);
+
+    final failures = events.whereType<LocalScanFileFailure>().toList();
+    expect(failures.single.path.endsWith("bad.ogg"), isTrue);
+    expect(failures.single.reason, contains("解析失败"));
+
+    final progress = events.whereType<LocalScanProgress>().last;
+    expect(progress.scanned, 2);
+    expect(progress.indexed, 1);
+    expect(progress.failed, 1);
+
+    final done = events.whereType<LocalScanDone>().single;
+    expect(done.result.tracks.length, 1);
+    expect(done.result.failures.single.path.endsWith("bad.ogg"), isTrue);
+  });
+
+  test("scanTask.cancel：取消后事件流关闭", () async {
+    touch("a.mp3");
+    final task = LocalAudioScanner().scanTask(
+      roots: [tmp],
+      source: fakeSource(),
+    );
+    final closed = Completer<void>();
+    task.events.listen((_) {}, onDone: closed.complete);
+    task.cancel();
+    await closed.future.timeout(const Duration(seconds: 1));
   });
 }
 

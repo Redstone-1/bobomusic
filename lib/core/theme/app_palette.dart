@@ -98,6 +98,8 @@ AuroraTokens buildAuroraTokens(AppThemeColor seed, Brightness brightness) {
     toastBorder: const Color(0xFFFFFFFF).withValues(alpha: 0.12),
     toastFg: const Color(0xFFFFFFFF),
     maskBg: const Color(0xFF000000).withValues(alpha: 0.50),
+    // 扫描舱固定黑灰：不随明暗/主题变化，保证黑客感
+    scanSurface: const Color(0xFF0A0D10),
   );
 }
 

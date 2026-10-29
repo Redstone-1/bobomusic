@@ -1,3 +1,4 @@
+import "dart:async";
 import "dart:io";
 import "dart:isolate";
 
@@ -31,13 +32,78 @@ class DefaultAudioMetadataSource implements AudioMetadataSource {
   }
 }
 
-/// 扫描结果：入库形状的本地曲目 + 元数据读取失败的文件路径
+/// 单个文件读取失败（路径 + 原因，供扫描结果面板展示）
+class ScanFailure {
+  final String path;
+  final String reason;
+
+  const ScanFailure({required this.path, required this.reason});
+}
+
+/// 扫描结果：入库形状的本地曲目 + 失败文件
 class LocalScanResult {
   final List<Track> tracks;
   final List<String> failed;
 
-  const LocalScanResult({required this.tracks, required this.failed});
+  /// 结构化的失败列表（`failed` 保留为路径列表，兼容旧调用）
+  final List<ScanFailure> failures;
+
+  const LocalScanResult({
+    required this.tracks,
+    required this.failed,
+    this.failures = const [],
+  });
 }
+
+/// 扫描流式事件（UI 用文件名滚动与计数；不持有扫描器内部状态）
+sealed class LocalScanEvent {
+  const LocalScanEvent();
+}
+
+/// 一批已遍历的音频文件（批量发送，降低 isolate 消息频率）
+class LocalScanFiles extends LocalScanEvent {
+  final List<String> paths;
+
+  const LocalScanFiles(this.paths);
+}
+
+/// 单个文件读取失败
+class LocalScanFileFailure extends LocalScanEvent {
+  final String path;
+  final String reason;
+
+  const LocalScanFileFailure(this.path, this.reason);
+}
+
+/// 累计进度（已遍历 / 已入库 / 失败）
+class LocalScanProgress extends LocalScanEvent {
+  final int scanned;
+  final int indexed;
+  final int failed;
+
+  const LocalScanProgress({
+    required this.scanned,
+    required this.indexed,
+    required this.failed,
+  });
+}
+
+/// 扫描完成
+class LocalScanDone extends LocalScanEvent {
+  final LocalScanResult result;
+
+  const LocalScanDone(this.result);
+}
+
+/// 扫描任务句柄：订阅 [events] 获取进度，[cancel] 立即终止后台 isolate
+class LocalScanTask {
+  final Stream<LocalScanEvent> events;
+  final void Function() cancel;
+
+  const LocalScanTask({required this.events, required this.cancel});
+}
+
+typedef _ScanEmitter = void Function(LocalScanEvent event);
 
 /// 本地内容指纹（§3.4-9）：大小 + 时长 + 归一化标题/歌手
 /// 归一化 = 去全部空白 + 小写（中文标题空格有无不稳定；英文极端碰撞由大小/时长兜底）
@@ -53,8 +119,8 @@ String localAudioFingerprint({
 }
 
 /// 本地音频扫描器（C3）
-/// 生产路径整体在 Isolate.run 中执行（大库同步读元数据不卡 UI）；
-/// 注入 [AudioMetadataSource]（测试）时主 isolate 直跑——闭包不可跨 isolate
+/// 生产路径在独立 isolate 中遍历并流式回传文件/进度；
+/// 注入 [AudioMetadataSource]（测试）时主 isolate 直跑，事件仍走同一套流。
 class LocalAudioScanner {
   /// 音频扩展名白名单（沿 2.7.0）
   static const audioExtensions = {
@@ -70,12 +136,16 @@ class LocalAudioScanner {
     return false;
   }
 
+  /// 一次性扫描（兼容旧调用/导入）；内部消费 [scanTask] 事件流
   Future<LocalScanResult> scan({
     required List<Directory> roots,
     AudioMetadataSource? source,
   }) async {
-    if (source != null) return _scanSync(roots, source);
-    return Isolate.run(() => _scanSync(roots, DefaultAudioMetadataSource()));
+    final task = scanTask(roots: roots, source: source);
+    await for (final event in task.events) {
+      if (event is LocalScanDone) return event.result;
+    }
+    return const LocalScanResult(tracks: [], failed: []);
   }
 
   /// 只扫描指定文件（iOS/桌面导入用；避免把历史导入条目重复计入本次数量）
@@ -89,36 +159,169 @@ class LocalAudioScanner {
     );
   }
 
+  /// 流式扫描任务：生产走 Isolate + SendPort，注入 source 走主 isolate
+  LocalScanTask scanTask({
+    required List<Directory> roots,
+    AudioMetadataSource? source,
+  }) {
+    if (source != null) {
+      final controller = StreamController<LocalScanEvent>();
+      var closed = false;
+      void close() {
+        if (closed) return;
+        closed = true;
+        if (!controller.isClosed) controller.close();
+      }
+
+      scheduleMicrotask(() {
+        if (closed) return;
+        final result = _scanSync(roots, source, controller.add);
+        if (closed) return;
+        controller.add(LocalScanDone(result));
+        close();
+      });
+      return LocalScanTask(events: controller.stream, cancel: close);
+    }
+
+    final receivePort = ReceivePort();
+    final controller = StreamController<LocalScanEvent>();
+    Isolate? isolate;
+    var closed = false;
+    void close() {
+      if (closed) return;
+      closed = true;
+      receivePort.close();
+      if (!controller.isClosed) controller.close();
+    }
+
+    receivePort.listen((message) {
+      if (closed) return;
+      // Isolate 异常退出/提前结束：避免 controller 永久等待
+      if (message == null) {
+        controller.addError(StateError("扫描 isolate 提前退出"));
+        close();
+        return;
+      }
+      if (message is! List || message.isEmpty) return;
+      if (message[0] is! String) {
+        controller.addError(StateError("扫描 isolate 失败：${message[0]}"));
+        close();
+        return;
+      }
+      switch (message[0]) {
+        case "files":
+          controller.add(LocalScanFiles(List<String>.from(message[1] as List)));
+        case "failure":
+          controller.add(
+            LocalScanFileFailure(message[1] as String, message[2] as String),
+          );
+        case "progress":
+          controller.add(
+            LocalScanProgress(
+              scanned: message[1] as int,
+              indexed: message[2] as int,
+              failed: message[3] as int,
+            ),
+          );
+        case "done":
+          final tracks = (message[1] as List).cast<Track>();
+          final failures = (message[2] as List).cast<ScanFailure>();
+          controller.add(
+            LocalScanDone(
+              LocalScanResult(
+                tracks: tracks,
+                failed: [for (final f in failures) f.path],
+                failures: failures,
+              ),
+            ),
+          );
+          close();
+      }
+    });
+
+    Isolate.spawn(
+      _scanIsolate,
+      [
+        receivePort.sendPort,
+        [for (final root in roots) root.path],
+      ],
+      onExit: receivePort.sendPort,
+      onError: receivePort.sendPort,
+      errorsAreFatal: true,
+    ).then((spawned) {
+      if (closed) {
+        spawned.kill(priority: Isolate.immediate);
+      } else {
+        isolate = spawned;
+      }
+    }).catchError((Object error) {
+      if (!closed) {
+        controller.addError(error);
+        close();
+      }
+    });
+
+    return LocalScanTask(
+      events: controller.stream,
+      cancel: () {
+        isolate?.kill(priority: Isolate.immediate);
+        close();
+      },
+    );
+  }
+
+  /// 后台 isolate 入口：同步遍历并批量回传事件
+  static void _scanIsolate(List<Object?> args) {
+    final send = args[0] as SendPort;
+    final roots = [
+      for (final path in (args[1] as List).cast<String>()) Directory(path),
+    ];
+    final result = _scanSync(roots, DefaultAudioMetadataSource(), (event) {
+      switch (event) {
+        case LocalScanFiles(:final paths):
+          send.send(["files", paths]);
+        case LocalScanFileFailure(:final path, :final reason):
+          send.send(["failure", path, reason]);
+        case LocalScanProgress(:final scanned, :final indexed, :final failed):
+          send.send(["progress", scanned, indexed, failed]);
+        default:
+          break;
+      }
+    });
+    send.send(["done", result.tracks, result.failures]);
+  }
+
   static LocalScanResult _scanFilesSync(
     List<File> files,
     AudioMetadataSource source,
   ) {
-    final tracks = <Track>[];
-    final failed = <String>[];
+    final acc = _ScanAccumulator();
     for (final file in files) {
-      if (_isAudio(file.path)) _read(file, source, tracks, failed);
+      if (_isAudio(file.path)) acc.record(file, source, (_) {});
     }
-    return LocalScanResult(tracks: tracks, failed: failed);
+    acc.flush((_) {});
+    return acc.result;
   }
 
   static LocalScanResult _scanSync(
     List<Directory> roots,
     AudioMetadataSource source,
+    _ScanEmitter emit,
   ) {
-    final tracks = <Track>[];
-    final failed = <String>[];
+    final acc = _ScanAccumulator();
     for (final root in roots) {
-      _walk(root, source, tracks, failed);
+      _walk(root, source, acc, emit);
     }
-    return LocalScanResult(tracks: tracks, failed: failed);
+    acc.flush(emit);
+    return acc.result;
   }
 
   /// 递归扫描：无权限目录静默跳过（系统目录如 lost+found 会拒访）
   static void _walk(
     Directory dir,
     AudioMetadataSource source,
-    List<Track> tracks,
-    List<String> failed,
+    _ScanAccumulator acc,
+    _ScanEmitter emit,
   ) {
     final List<FileSystemEntity> entities;
     try {
@@ -128,9 +331,9 @@ class LocalAudioScanner {
     }
     for (final entity in entities) {
       if (entity is Directory) {
-        if (!isExcludedDir(entity)) _walk(entity, source, tracks, failed);
+        if (!isExcludedDir(entity)) _walk(entity, source, acc, emit);
       } else if (entity is File && _isAudio(entity.path)) {
-        _read(entity, source, tracks, failed);
+        acc.record(entity, source, emit);
       }
     }
   }
@@ -141,12 +344,7 @@ class LocalAudioScanner {
   }
 
   /// 单文件读元数据：标题缺失回退文件名；歌手缺失记「未知歌手」（沿 2.7.0 文案）
-  static void _read(
-    File file,
-    AudioMetadataSource source,
-    List<Track> tracks,
-    List<String> failed,
-  ) {
+  static _ReadResult _read(File file, AudioMetadataSource source) {
     try {
       final meta = source.read(file);
       final fileTitle = file.path
@@ -159,8 +357,8 @@ class LocalAudioScanner {
           : fileTitle;
       final artist = (meta.artist ?? "").trim();
       final durationSec = ((meta.durationMs ?? 0) / 1000).round();
-      tracks.add(
-        Track(
+      return _ReadResult(
+        track: Track(
           id: localAudioFingerprint(
             sizeBytes: file.lengthSync(),
             durationSec: durationSec,
@@ -174,24 +372,102 @@ class LocalAudioScanner {
           localPath: file.path,
         ),
       );
-    } catch (_) {
-      failed.add(file.path);
+    } catch (e) {
+      return _ReadResult(
+        failure: ScanFailure(path: file.path, reason: _failureReason(e)),
+      );
     }
   }
+
+  static String _failureReason(Object error) {
+    final text = error.toString().replaceAll("\n", " ").trim();
+    return text.isEmpty ? "元数据解析失败" : "读取失败：$text";
+  }
+}
+
+/// 扫描过程的累计状态：批量发送文件事件与进度，避免每个文件都过通道
+class _ScanAccumulator {
+  final tracks = <Track>[];
+  final failures = <ScanFailure>[];
+  final pendingPaths = <String>[];
+  int scanned = 0;
+  int indexed = 0;
+  int failed = 0;
+
+  LocalScanResult get result => LocalScanResult(
+        tracks: tracks,
+        failed: [for (final failure in failures) failure.path],
+        failures: failures,
+      );
+
+  void record(File file, AudioMetadataSource source, _ScanEmitter emit) {
+    scanned++;
+    final read = LocalAudioScanner._read(file, source);
+    if (read.track case final track?) {
+      tracks.add(track);
+      indexed++;
+      pendingPaths.add(file.path);
+    } else if (read.failure case final failure?) {
+      failures.add(failure);
+      failed++;
+      emit(LocalScanFileFailure(failure.path, failure.reason));
+    }
+    if (pendingPaths.length >= 8 || scanned % 8 == 0) flush(emit);
+  }
+
+  void flush(_ScanEmitter emit) {
+    if (pendingPaths.isNotEmpty) {
+      emit(LocalScanFiles(List<String>.unmodifiable(pendingPaths)));
+      pendingPaths.clear();
+    }
+    emit(LocalScanProgress(scanned: scanned, indexed: indexed, failed: failed));
+  }
+}
+
+class _ReadResult {
+  final Track? track;
+  final ScanFailure? failure;
+
+  const _ReadResult({this.track, this.failure});
 }
 
 /// 可替换全局：测试注入扫描结果（跳过权限/文件系统/Isolate，同 appDb 等环境单例模式）
 LocalScanResult? localScanTestOverride;
 
-/// 扫描入口（生产用）：按平台解析根目录后后台扫描
-/// Android 全盘 /storage/emulated/0；其余平台（桌面联调）扫用户主目录下 Music，
-/// 不依赖插件通道（path_provider 2.1.5 无音乐目录 API，纯环境变量拼接 Isolate 内可用）
-Future<LocalScanResult> scanLocalLibrary() async {
-  if (localScanTestOverride != null) return localScanTestOverride!;
+/// 流式扫描入口（生产用）：按平台解析根目录后返回任务
+LocalScanTask scanLocalLibraryTask() {
+  if (localScanTestOverride case final override?) {
+    final controller = StreamController<LocalScanEvent>();
+    var closed = false;
+    void close() {
+      if (closed) return;
+      closed = true;
+      if (!controller.isClosed) controller.close();
+    }
+
+    scheduleMicrotask(() {
+      if (closed) return;
+      controller.add(LocalScanDone(override));
+      close();
+    });
+    return LocalScanTask(events: controller.stream, cancel: close);
+  }
   final home =
       Platform.environment["USERPROFILE"] ?? Platform.environment["HOME"] ?? ".";
   final roots = <Directory>[
-    if (Platform.isAndroid) Directory("/storage/emulated/0") else Directory("$home/Music"),
+    if (Platform.isAndroid)
+      Directory("/storage/emulated/0")
+    else
+      Directory("$home/Music"),
   ];
-  return LocalAudioScanner().scan(roots: roots);
+  return LocalAudioScanner().scanTask(roots: roots);
+}
+
+/// 一次性扫描入口（兼容旧调用）：消费 [scanLocalLibraryTask] 的事件流
+Future<LocalScanResult> scanLocalLibrary() async {
+  final task = scanLocalLibraryTask();
+  await for (final event in task.events) {
+    if (event is LocalScanDone) return event.result;
+  }
+  return const LocalScanResult(tracks: [], failed: []);
 }
