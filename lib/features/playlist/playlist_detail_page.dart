@@ -31,6 +31,7 @@ import "local_scan_controller.dart";
 import "local_scan_panel.dart";
 import "playlists_provider.dart"
     show
+        likedCountProvider,
         localCountProvider,
         playlistDetailTracksProvider,
         queueEntriesProvider;
@@ -87,7 +88,8 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
   @override
   void initState() {
     super.initState();
-    _future = _load();
+    // 本地/喜欢由 family provider 供数，其余模式才建局部 Future
+    _future = (_isLocal || _isLiked) ? Future.value(const <Track>[]) : _load();
   }
 
   @override
@@ -268,11 +270,17 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
     final currentTrackId = ref.watch(
       playbackProvider.select((s) => s.track?.id),
     );
-    // 本地模式走 family provider（扫描 invalidate 后列表自动刷新）；
-    // 库/注入模式沿用局部 Future（重试走 _reloadSeq）
-    final localFuture = _isLocal
+    // 本地/喜欢走 family provider（扫描、播放卡/搜索页点喜欢 invalidate 后
+    // 列表自动重读）；库/注入模式沿用局部 Future（重试走 _reloadSeq）
+    final detailFuture = (_isLocal || _isLiked)
         ? ref.watch(playlistDetailTracksProvider(widget.playlist).future)
         : null;
+    // 外部改变喜欢状态后 provider 重读：清掉行内心形覆盖，统一以库态为准
+    if (_isLiked) {
+      ref.listen(playlistDetailTracksProvider(widget.playlist), (_, __) {
+        if (_likedOverrides.isNotEmpty) setState(_likedOverrides.clear);
+      });
+    }
 
     return Scaffold(
       body: AuroraBackground(
@@ -282,7 +290,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
             // 列表可视区且不占列表流，透明区域点击穿透到 BackLink/头部按钮）
             child: FutureBuilder(
               key: ValueKey(_reloadSeq),
-              future: localFuture ?? _future,
+              future: detailFuture ?? _future,
               builder: (context, snap) {
                 final loading =
                     snap.connectionState != ConnectionState.done || _scanning;
@@ -345,11 +353,13 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                               : _isLiked
                                   ? GlassIconButton(
                                       icon: const Icon(Icons.refresh),
-                                      // 喜欢列表走局部 Future（非 family provider），
-                                      // 必须重读 Future 才有刷新效果；顺带清心形本地覆盖
+                                      // 喜欢列表走 family provider：失效后自动重读；
+                                      // 顺带清心形本地覆盖
                                       onTap: () {
                                         _likedOverrides.clear();
-                                        _retry();
+                                        ref.invalidate(
+                                          playlistDetailTracksProvider,
+                                        );
                                       },
                                     )
                                   : GlassIconButton(
@@ -419,9 +429,13 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                       : null,
                                   onHeartTap: !_isLiked
                                       ? null
-                                      : (liked) {
-                                          TrackRepository()
+                                      : (liked) async {
+                                          // 先落库再刷新计数，避免重读抢在写库前
+                                          await TrackRepository()
                                               .setLiked(track.id, liked);
+                                          if (!mounted) return;
+                                          // 行内只更新心形不刷新列表，但计数要同步
+                                          ref.invalidate(likedCountProvider);
                                           setState(() =>
                                               _likedOverrides[track.id] =
                                                   liked);

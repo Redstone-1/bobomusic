@@ -1,5 +1,6 @@
 import "package:bobomusic/core/widgets/song_list_tile.dart";
 import "package:bobomusic/data/repositories/track_repository.dart";
+import "package:bobomusic/features/player/player_card_page.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
@@ -38,6 +39,85 @@ void main() {
     );
     expect(
       find.descendant(of: find.byType(SongListTile), matching: find.text("夜曲")),
+      findsNothing,
+    );
+  });
+
+  testWidgets("喜欢列表：播放卡取消喜欢后返回自动刷新", (WidgetTester tester) async {
+    final app = await buildTestApp(
+      seedTracks: const [
+        {"id": "bili:1_a", "name": "晴天", "author": "周杰伦"},
+        {"id": "bili:2_b", "name": "夜曲", "author": "周杰伦"},
+      ],
+    );
+    await TrackRepository().setLiked("bili:1_a", true);
+    await TrackRepository().setLiked("bili:2_b", true);
+
+    await tester.pumpWidget(app);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    await tester.tap(find.text("我喜欢的音乐"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // 播放「晴天」→ 迷你条 → 播放卡
+    await tester.tap(find.text("晴天"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const Key("mini_player")));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    // 播放卡取消喜欢 → 关闭返回列表
+    expect(find.text("正在播放"), findsOneWidget);
+    final likedIcon = find.descendant(
+      of: find.byType(PlayerCardPage),
+      matching: find.byIcon(Icons.favorite),
+    );
+    expect(likedIcon, findsOneWidget);
+    await tester.tap(likedIcon);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(
+      find.descendant(
+        of: find.byType(PlayerCardPage),
+        matching: find.byIcon(Icons.favorite_border),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key("player_close")));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    // 列表由 family provider 自动重读：取消喜欢的曲目即时消失
+    // （迷你条仍显示正在播放的歌名，故只断言列表行）
+    expect(
+      find.descendant(of: find.byType(SongListTile), matching: find.text("晴天")),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: find.byType(SongListTile), matching: find.text("夜曲")),
+      findsOneWidget,
+    );
+
+    // 再次打开播放卡：喜欢态以库为准（取消后应为空心）
+    await tester.tap(find.byKey(const Key("mini_player")));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text("正在播放"), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(PlayerCardPage),
+        matching: find.byIcon(Icons.favorite_border),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(PlayerCardPage),
+        matching: find.byIcon(Icons.favorite),
+      ),
       findsNothing,
     );
   });

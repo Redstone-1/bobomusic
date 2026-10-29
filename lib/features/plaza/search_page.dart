@@ -33,7 +33,11 @@ import "../player/playback_provider.dart";
 import "../player/player_card_page.dart";
 import "../playlist/playlist_detail_page.dart";
 import "../playlist/playlists_provider.dart"
-    show collectionsProvider, likedCountProvider, queueEntriesProvider;
+    show
+        collectionsProvider,
+        likedCountProvider,
+        playlistDetailTracksProvider,
+        queueEntriesProvider;
 
 /// 搜索音源（默认 B 站；仅本页生效，不再写全局设置）
 enum _SearchSource {
@@ -338,10 +342,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   }
 
   /// 快速收藏（搜索行心形）：先入库再写喜欢；列表不刷新，本地覆盖即时变红/变空
-  void _toggleLike(Track track, bool liked) {
-    TrackRepository().upsert(track);
-    TrackRepository().setLiked(track.id, liked);
+  Future<void> _toggleLike(Track track, bool liked) async {
+    await TrackRepository().upsert(track);
+    await TrackRepository().setLiked(track.id, liked);
+    if (!mounted) return;
     ref.invalidate(likedCountProvider);
+    // 喜欢列表可能正在后台：失效共享数据源，返回列表即同步
+    ref.invalidate(playlistDetailTracksProvider);
     setState(() => _likedOverrides[track.id] = liked);
   }
 

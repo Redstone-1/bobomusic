@@ -19,7 +19,7 @@ import "../../origin_sdk/lyric/lrc.dart";
 import "../../origin_sdk/lyric/lyric_types.dart";
 import "../download/download_actions.dart";
 import "../playlist/playlists_provider.dart"
-    show likedCountProvider, queueEntriesProvider;
+    show likedCountProvider, playlistDetailTracksProvider, queueEntriesProvider;
 import "lyric_provider.dart";
 import "open_bilibili.dart";
 import "play_mode.dart";
@@ -77,7 +77,9 @@ class PlayerCardPage extends ConsumerStatefulWidget {
 }
 
 class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
-  bool? _likedOverride; // 相对 track.liked 的本地覆盖（写库后与库态一致）
+  /// 喜欢态覆盖：打开/切歌时从库同步，卡内写库后即时更新；
+  /// 播放状态里的 Track 是入队快照，不能直接作为心形依据
+  bool? _likedOverride;
 
   @override
   void initState() {
@@ -88,27 +90,46 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
       Future.microtask(() {
         if (mounted) {
           ref.read(lyricControllerProvider.notifier).loadFor(track);
+          _syncLikedFromDb(track);
         }
       });
     }
   }
 
+  /// 快照上的 liked 可能已被别处改写：以库态校正，避免取消喜欢后重开仍是红心
+  Future<void> _syncLikedFromDb(Track track) async {
+    final stored = await TrackRepository().getById(track.id);
+    if (!mounted) return;
+    if (ref.read(playbackProvider).track?.id != track.id) return;
+    // 卡内已操作过：以用户刚才的操作为准，避免回退
+    if (_likedOverride != null) return;
+    setState(() => _likedOverride = stored?.liked);
+  }
+
   /// 喜欢/取消喜欢：心形与动作行共用同一份库态/本地覆盖
-  void _toggleLike(Track track) {
+  Future<void> _toggleLike(Track track) async {
     final newLiked = !(_likedOverride ?? track.liked);
-    TrackRepository().setLiked(track.id, newLiked);
+    // 先落库再失效数据源，避免列表重读抢在写库前拿到旧库态
+    await TrackRepository().setLiked(track.id, newLiked);
+    if (!mounted) return;
     ref.invalidate(likedCountProvider);
-    setState(() => _likedOverride = newLiked);
+    // 喜欢列表可能正在后台：失效共享数据源，返回列表即同步
+    ref.invalidate(playlistDetailTracksProvider);
+    // 写库期间可能已切歌：只更新当前曲目的覆盖
+    if (ref.read(playbackProvider).track?.id == track.id) {
+      setState(() => _likedOverride = newLiked);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     // 切歌时重新加载歌词（保持同一播放卡内的歌词跟随），
-    // 并清掉上一曲的喜欢覆盖，回退新曲库态（防跨曲残留）
+    // 并清掉上一曲的喜欢覆盖，随后从库同步新曲喜欢态（防跨曲残留）
     ref.listen(playbackProvider.select((s) => s.track), (_, next) {
       if (next != null) {
         setState(() => _likedOverride = null);
         ref.read(lyricControllerProvider.notifier).loadFor(next);
+        _syncLikedFromDb(next);
       }
     });
     // 高频 position 不进本层：只订阅曲目/播放态/总时长，进度由 _SeekRow/_LyricView 各自 select
