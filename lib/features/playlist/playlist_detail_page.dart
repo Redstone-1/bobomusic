@@ -7,6 +7,7 @@ import "../../core/overlays/app_dialog.dart";
 import "../../core/overlays/app_sheet.dart";
 import "../../core/overlays/app_toast.dart";
 import "../../core/permissions/audio_permission.dart";
+import "../../core/permissions/file_delete_permission.dart";
 import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/app_buttons.dart";
 import "../../core/widgets/aurora_background.dart";
@@ -184,7 +185,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
   }
 
   /// 删除本地曲目：默认仅移出曲库（外键级联清队列/歌单引用），
-  /// 复选框勾选时连源文件一起删；文件删除失败只提示，不回滚曲库移除
+  /// 复选框勾选时先删源文件再移出曲库；文件删不掉则保留曲目，可重试
   Future<void> _deleteLocalTrack(Track track) async {
     final t = AuroraTokens.of(context);
     final deleteFile = ValueNotifier<bool>(false);
@@ -232,24 +233,30 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
       ],
     );
     if (ok != true || !mounted) return;
+    final path = track.localPath;
+    // 勾选删源文件时先删文件：失败则保留曲目，用户可再次进入菜单重试
+    if (deleteFile.value && path != null && path.isNotEmpty) {
+      // 分区存储：Android 11+ 的音频读权限不含删除，需要所有文件访问
+      if (!await requestFileDeletePermission()) {
+        if (mounted) AppToast.show(context, "未获得存储权限，无法删除源文件");
+        return;
+      }
+      try {
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+      } catch (e) {
+        print("删除本地源文件失败：$e");
+        if (mounted) AppToast.show(context, "源文件删除失败，曲目已保留");
+        return;
+      }
+    }
     try {
       await TrackRepository().delete(track.id);
-      var fileGone = true;
-      final path = track.localPath;
-      if (deleteFile.value && path != null && path.isNotEmpty) {
-        try {
-          final file = File(path);
-          if (await file.exists()) await file.delete();
-        } catch (e) {
-          print("删除本地源文件失败：$e");
-          fileGone = false;
-        }
-      }
       ref.invalidate(playlistDetailTracksProvider);
       ref.invalidate(localCountProvider);
       ref.invalidate(queueEntriesProvider);
       if (!mounted) return;
-      AppToast.show(context, fileGone ? "已删除" : "已移出曲库 · 源文件删除失败");
+      AppToast.show(context, "已删除");
     } catch (e) {
       print("删除本地曲目失败：$e");
       if (mounted) AppToast.show(context, "删除失败，请重试");
