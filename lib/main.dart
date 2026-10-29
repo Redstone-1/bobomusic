@@ -4,13 +4,11 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:just_audio_media_kit/just_audio_media_kit.dart";
 import "package:path_provider/path_provider.dart";
-import "package:permission_handler/permission_handler.dart";
 
 import "app/app.dart";
 import "core/prefs/app_prefs.dart";
 import "data/db/app_database.dart";
 import "data/db/desktop_database.dart";
-import "features/player/playback_audio_handler.dart";
 import "features/player/range_proxy_source.dart";
 
 /// v3 入口：预取 SharedPreferences（主题同步初值）+ 桌面端 sqflite ffi
@@ -28,15 +26,8 @@ Future<void> main() async {
   final cacheRoot = await getApplicationCacheDirectory();
   RangeProxySource.cacheDir = Directory("${cacheRoot.path}/bobomusic_audio")
     ..createSync(recursive: true);
-  // Android 通知栏/耳机键媒体会话（其他平台跳过；失败不阻塞启动）
-  if (Platform.isAndroid) {
-    await initPlaybackAudioService();
-    // Android 13+ 通知权限：没有它通知栏播放控制不显示
-    try {
-      await Permission.notification.request();
-    } catch (_) {
-      // 权限插件失败不影响播放
-    }
-  }
+  // 系统媒体卡已关闭：不再初始化 audio_service，
+  // 通知栏/锁屏/耳机键/蓝牙不再提供播放控制；播放本身不受影响。
+  // 恢复时在这里重新调用 initPlaybackAudioService() 并请求通知权限。
   runApp(const ProviderScope(child: App()));
 }
