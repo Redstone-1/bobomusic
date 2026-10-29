@@ -244,7 +244,7 @@ class PlaylistPage extends ConsumerWidget {
           onTap: () async {
             await TrackRepository().upsert(track);
             await QueueRepository().insertNext(track.id, atPosition: 0);
-            ref.invalidate(queueTracksProvider);
+            ref.invalidate(queueEntriesProvider);
             if (context.mounted) AppToast.show(context, "已设为下一首播放");
           },
         ),

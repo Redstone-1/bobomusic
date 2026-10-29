@@ -33,7 +33,7 @@ import "../player/playback_provider.dart";
 import "../player/player_card_page.dart";
 import "../playlist/playlist_detail_page.dart";
 import "../playlist/playlists_provider.dart"
-    show collectionsProvider, likedCountProvider, queueTracksProvider;
+    show collectionsProvider, likedCountProvider, queueEntriesProvider;
 
 /// 搜索音源（默认 B 站；仅本页生效，不再写全局设置）
 enum _SearchSource {
@@ -419,7 +419,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               await TrackRepository().upsert(track);
               await QueueRepository().append(track.id);
             }
-            ref.invalidate(queueTracksProvider);
+            ref.invalidate(queueEntriesProvider);
             if (mounted) AppToast.show(context, "已加入播放队列");
           },
         ),
@@ -456,7 +456,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           onTap: () async {
             await TrackRepository().upsert(track);
             await QueueRepository().insertNext(track.id, atPosition: 0);
-            ref.invalidate(queueTracksProvider);
+            ref.invalidate(queueEntriesProvider);
             if (mounted) AppToast.show(context, "已设为下一首播放");
           },
         ),
@@ -466,7 +466,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           onTap: () async {
             await TrackRepository().upsert(track);
             await QueueRepository().append(track.id);
-            ref.invalidate(queueTracksProvider);
+            ref.invalidate(queueEntriesProvider);
             if (mounted) AppToast.show(context, "已加入播放队列");
           },
         ),

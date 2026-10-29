@@ -12,7 +12,6 @@ import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/empty_state.dart";
 import "../../core/widgets/origin_tag.dart";
 import "../../core/widgets/scale_tap.dart";
-import "../../core/widgets/song_list_tile.dart";
 import "../../data/models/track.dart";
 import "../../data/repositories/queue_repository.dart";
 import "../../data/repositories/track_repository.dart";
@@ -20,7 +19,7 @@ import "../../origin_sdk/lyric/lrc.dart";
 import "../../origin_sdk/lyric/lyric_types.dart";
 import "../download/download_actions.dart";
 import "../playlist/playlists_provider.dart"
-    show likedCountProvider, queueTracksProvider;
+    show likedCountProvider, queueEntriesProvider;
 import "lyric_provider.dart";
 import "open_bilibili.dart";
 import "play_mode.dart";
@@ -28,6 +27,7 @@ import "playback_provider.dart";
 import "playback_speed.dart";
 import "playback_speed_sheet.dart";
 import "sleep_timer_sheet.dart";
+import "queue_sheet.dart";
 
 /// 全屏播放卡片（对齐原型 .player：歌词 + seek + 控制区 + 动作行）
 /// 所有者 2026-10-26 反馈：移除黑胶，播放卡默认只显示歌词
@@ -390,7 +390,7 @@ class _ControlsRow extends ConsumerWidget {
           IconButton(
             key: const Key("player_queue"),
             tooltip: "播放队列",
-            onPressed: () => _openQueue(context, ref),
+            onPressed: () => showPlaybackQueueSheet(context),
             icon: const Icon(Icons.queue_music_outlined),
             color: t.primary,
             iconSize: 24,
@@ -400,84 +400,6 @@ class _ControlsRow extends ConsumerWidget {
     );
   }
 
-  // 播放队列 sheet：上「待播放」（queue 表，各处稍后/下一首播放/加入待播放的落点，
-  // 当前曲播完后依次播出）、下「播放队列」（当前会话队列）
-  void _openQueue(BuildContext context, WidgetRef ref) {
-    AppSheet.show(
-      context,
-      title: "播放队列 · ${ref.read(playbackProvider).queue.length} 首",
-      child: SizedBox(
-        height: 420,
-        child: Consumer(
-          builder: (context, sheetRef, _) {
-            final pbState = sheetRef.watch(playbackProvider);
-            final current = pbState.track;
-            final queued = sheetRef.watch(queueTracksProvider).value;
-            return ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              children: [
-                if (queued != null && queued.isNotEmpty) ...[
-                  const _QueueSectionHeader("待播放 · 当前曲播完后依次播出"),
-                  for (final track in queued)
-                    SongListTile(
-                      track: track,
-                      playing: track.id == current?.id,
-                      onTap: () {
-                        // 立即播放同时出队，否则播完会被 takeFirst 再消费一遍
-                        sheetRef
-                            .read(playbackProvider.notifier)
-                            .play(track, queue: pbState.queue);
-                        QueueRepository().removeByTrackId(track.id);
-                        sheetRef.invalidate(queueTracksProvider);
-                        if (context.mounted) Navigator.of(context).pop();
-                      },
-                      onMorePressed: () {
-                        QueueRepository().removeByTrackId(track.id);
-                        sheetRef.invalidate(queueTracksProvider);
-                      },
-                    ),
-                ],
-                _QueueSectionHeader("播放队列 · ${pbState.queue.length} 首"),
-                for (final track in pbState.queue)
-                  SongListTile(
-                    track: track,
-                    playing: track.id == current?.id,
-                    onTap: () {
-                      sheetRef
-                          .read(playbackProvider.notifier)
-                          .play(track, queue: pbState.queue);
-                      Navigator.of(context).pop();
-                    },
-                    onMorePressed: () =>
-                        AppToast.show(context, "插队/移除在队列引擎批次接入"),
-                  ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
-/// 队列 sheet 分区头
-class _QueueSectionHeader extends StatelessWidget {
-  final String label;
-
-  const _QueueSectionHeader(this.label);
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AuroraTokens.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 12, 10, 4),
-      child: Text(
-        label,
-        style: TextStyle(
-            fontSize: 12, fontWeight: FontWeight.w600, color: t.fgDim),
-      ),
-    );
-  }
 }
 
 /// 动作行（喜欢 / 下载 / 稍后 / 倍速），位于进度条上方
@@ -511,14 +433,20 @@ class _ActionsRow extends ConsumerWidget {
         Icons.playlist_play_rounded,
         "稍后",
         false,
-        () {
+        () async {
           final track = ref.read(playbackProvider).track;
           if (track == null) return;
-          TrackRepository().upsert(track);
-          // 稍后 = 插到待播放队首（所有者 2026-10-28 定）：当前曲播完即播它
-          QueueRepository().insertNext(track.id);
-          ref.invalidate(queueTracksProvider);
-          AppToast.show(context, "已稍后播放 · 当前歌曲结束后播出");
+          try {
+            await TrackRepository().upsert(track);
+            // 稍后 = 插到待播放队首；完成写入后再刷新，避免先查到旧列表。
+            await QueueRepository().insertNext(track.id);
+            if (!context.mounted) return;
+            ref.invalidate(queueEntriesProvider);
+            AppToast.show(context, "已稍后播放 · 当前歌曲结束后播出");
+          } catch (e) {
+            print("加入待播放失败：$e");
+            if (context.mounted) AppToast.show(context, "加入待播放失败，请重试");
+          }
         },
         // 列表播放字形留白较多，单独放大补齐可见尺寸，不改变对齐槽位。
         30.0,

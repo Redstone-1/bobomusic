@@ -32,7 +32,7 @@ import "playlists_provider.dart"
     show
         localCountProvider,
         playlistDetailTracksProvider,
-        queueTracksProvider;
+        queueEntriesProvider;
 
 /// 歌单详情（对齐原型 renderSub/playlist）
 /// 两种数据模式：
@@ -224,7 +224,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
       }
       ref.invalidate(playlistDetailTracksProvider);
       ref.invalidate(localCountProvider);
-      ref.invalidate(queueTracksProvider);
+      ref.invalidate(queueEntriesProvider);
       if (!mounted) return;
       AppToast.show(context, fileGone ? "已删除" : "已移出曲库 · 源文件删除失败");
     } catch (e) {
@@ -420,7 +420,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                             track.id,
                                             atPosition: 0,
                                           );
-                                          ref.invalidate(queueTracksProvider);
+                                          ref.invalidate(queueEntriesProvider);
                                           if (context.mounted) {
                                             AppToast.show(context, "已设为下一首播放");
                                           }
@@ -433,7 +433,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                           await TrackRepository().upsert(track);
                                           await QueueRepository()
                                               .append(track.id);
-                                          ref.invalidate(queueTracksProvider);
+                                          ref.invalidate(queueEntriesProvider);
                                           if (context.mounted) {
                                             AppToast.show(context, "已加入播放队列");
                                           }

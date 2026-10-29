@@ -131,44 +131,46 @@ final class LocalCountProvider
 
 String _$localCountHash() => r'094d4c6728e187468f41d9e884b093a534ab7ccf';
 
-/// 播放队列曲目（歌单页队列区；S4 播放内核填充数据）
+/// 独立待播条目；所有写队列入口统一刷新此 provider。
 
-@ProviderFor(queueTracks)
-final queueTracksProvider = QueueTracksProvider._();
+@ProviderFor(queueEntries)
+final queueEntriesProvider = QueueEntriesProvider._();
 
-/// 播放队列曲目（歌单页队列区；S4 播放内核填充数据）
+/// 独立待播条目；所有写队列入口统一刷新此 provider。
 
-final class QueueTracksProvider extends $FunctionalProvider<
-        AsyncValue<List<Track>>, List<Track>, FutureOr<List<Track>>>
-    with $FutureModifier<List<Track>>, $FutureProvider<List<Track>> {
-  /// 播放队列曲目（歌单页队列区；S4 播放内核填充数据）
-  QueueTracksProvider._()
+final class QueueEntriesProvider extends $FunctionalProvider<
+        AsyncValue<List<QueueEntry>>,
+        List<QueueEntry>,
+        FutureOr<List<QueueEntry>>>
+    with $FutureModifier<List<QueueEntry>>, $FutureProvider<List<QueueEntry>> {
+  /// 独立待播条目；所有写队列入口统一刷新此 provider。
+  QueueEntriesProvider._()
       : super(
           from: null,
           argument: null,
           retry: null,
-          name: r'queueTracksProvider',
+          name: r'queueEntriesProvider',
           isAutoDispose: true,
           dependencies: null,
           $allTransitiveDependencies: null,
         );
 
   @override
-  String debugGetCreateSourceHash() => _$queueTracksHash();
+  String debugGetCreateSourceHash() => _$queueEntriesHash();
 
   @$internal
   @override
-  $FutureProviderElement<List<Track>> $createElement(
+  $FutureProviderElement<List<QueueEntry>> $createElement(
           $ProviderPointer pointer) =>
       $FutureProviderElement(pointer);
 
   @override
-  FutureOr<List<Track>> create(Ref ref) {
-    return queueTracks(ref);
+  FutureOr<List<QueueEntry>> create(Ref ref) {
+    return queueEntries(ref);
   }
 }
 
-String _$queueTracksHash() => r'6a7f37c551c6edebcd633fcb8112ae550d073e0d';
+String _$queueEntriesHash() => r'5b03102ac1ac676dcf36772c16f867fb574e23e1';
 
 /// 最近播放（歌单页；切歌后由页面 invalidate）
 

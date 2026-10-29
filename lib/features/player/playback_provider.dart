@@ -12,7 +12,7 @@ import "../../data/repositories/queue_repository.dart";
 import "../../data/repositories/track_repository.dart";
 import "../../origin_sdk/bili/bili_api.dart";
 import "../../origin_sdk/bili/bili_api_error.dart";
-import "../playlist/playlists_provider.dart" show queueTracksProvider;
+import "../playlist/playlists_provider.dart" show queueEntriesProvider;
 import "audio_engine.dart";
 import "just_audio_engine.dart";
 import "play_mode.dart";
@@ -236,12 +236,88 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     await _load(sessionQueue, index, autoplay: true);
   }
 
+  /// 点播一个独立待播条目：插入会话当前位之后，成功开播才移除该次排队。
+  Future<bool> playQueuedEntry(int entryId) async {
+    final repository = QueueRepository();
+    try {
+      final entry = await repository.entryById(entryId);
+      if (!ref.mounted) return false;
+      if (entry == null) {
+        ref.invalidate(queueEntriesProvider);
+        state = state.copyWith(error: "该条目已播放或移除");
+        return false;
+      }
+      _persistNow();
+      final session = [...state.queue];
+      final index = state.queueIndex < 0 ? 0 : state.queueIndex + 1;
+      session.insert(index, entry.track);
+      if (!await _load(session, index, autoplay: true)) return false;
+      if (!ref.mounted) return false;
+      await repository.removeEntry(entryId);
+      if (!ref.mounted) return false;
+      ref.invalidate(queueEntriesProvider);
+      return true;
+    } catch (e) {
+      print("待播放条目点播失败：$e");
+      if (ref.mounted) {
+        ref.invalidate(queueEntriesProvider);
+        state = state.copyWith(error: "待播放列表更新失败，请重试");
+      }
+      return false;
+    }
+  }
+
+  /// 菜单和点播绑定打开时的会话，异步切歌后不让旧下标误指其它条目。
+  bool _validateSessionEntry(int index, List<Track> expectedQueue) {
+    if (!ref.mounted) return false;
+    if (state.buffering) {
+      state = state.copyWith(error: "正在切歌，请稍后操作");
+      return false;
+    }
+    if (!identical(state.queue, expectedQueue) ||
+        index < 0 ||
+        index >= state.queue.length) {
+      state = state.copyWith(error: "播放队列已变化，请重新操作");
+      return false;
+    }
+    return true;
+  }
+
+  Future<bool> playSessionEntry(
+    int index, {
+    required List<Track> expectedQueue,
+  }) async {
+    if (!_validateSessionEntry(index, expectedQueue)) return false;
+    _persistNow();
+    return _load(state.queue, index, autoplay: true);
+  }
+
+  /// 移除非当前条目不打断播放；下标随前方删除同步调整并立即保存。
+  bool removeSessionEntry(int index, {required List<Track> expectedQueue}) {
+    if (!_validateSessionEntry(index, expectedQueue)) return false;
+    if (index == state.queueIndex) {
+      state = state.copyWith(error: "当前正在播放的条目不能移除");
+      return false;
+    }
+    final queue = [...state.queue]..removeAt(index);
+    state = state.copyWith(
+      queue: queue,
+      queueIndex: index < state.queueIndex
+          ? state.queueIndex - 1
+          : state.queueIndex,
+    );
+    _snapshot();
+    _persistNow();
+    _syncSystem(force: true);
+    return true;
+  }
+
   Future<void> toggle() async {
     if (state.track == null) {
       // 无当前曲时从播放队列取第一首开播（插队队列优先，§3.4-5）
       final queued = await _takeQueuedTrack();
       if (queued != null) {
-        ref.invalidate(queueTracksProvider);
+        ref.invalidate(queueEntriesProvider);
         await _load([queued], 0, autoplay: true);
       }
       return;
@@ -421,7 +497,7 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
         final insertAt = state.queueIndex < 0 ? 0 : state.queueIndex + 1;
         session.insert(insertAt, queued);
         // 队列表已消费一条，待播放分区（播放队列 sheet）即时刷新
-        ref.invalidate(queueTracksProvider);
+        ref.invalidate(queueEntriesProvider);
         await _load(session, insertAt, autoplay: true);
         return;
       }
@@ -470,7 +546,7 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     }
   }
 
-  Future<void> _load(
+  Future<bool> _load(
     List<Track> queue,
     int index, {
     required bool autoplay,
@@ -483,7 +559,7 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     // 先记录历史再切 state：歌单页监听 track 变化后立即查询也能拿到最新记录；
     // 记下旧时间戳，装载失败时回滚，失败播放不留「最近播放」
     final history = await _recordHistory(track);
-    if (!ref.mounted) return;
+    if (!ref.mounted) return false;
     state = state.copyWith(
       track: track,
       queue: queue,
@@ -500,17 +576,17 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     var reachedEngine = false;
     try {
       final source = await _resolveSource(track, forceRefresh: _failedSourceKey == track.id);
-      if (!ref.mounted) return;
+      if (!ref.mounted) return false;
       reachedEngine = true;
       final engine = _resolveEngine();
       await engine.load(source, initialPosition: initialPosition);
-      if (!ref.mounted) return;
+      if (!ref.mounted) return false;
       await _queueSpeed(() async {
         if (ref.mounted) await engine.setSpeed(state.speed);
       });
-      if (!ref.mounted) return;
+      if (!ref.mounted) return false;
       if (autoplay) await _resolveEngine().play();
-      if (!ref.mounted) return;
+      if (!ref.mounted) return false;
       // 同一引擎切源时 playingStream 不一定会再次发 true（自动下一曲常见），
       // 只等 playing 事件清 buffering 会让 position 流被永久丢弃，进度条/歌词停在旧位置；
       // playing 同步乐观写，防止 UI 停在旧值
@@ -523,6 +599,7 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       // 切歌后立即写新曲与队列快照：与 queue 表 takeFirst 的删除时序对齐，
       // 避免播放器启动后、下个去抖周期前被杀导致“已出队但快照仍是旧曲”
       _persistNow();
+      return true;
     } catch (e) {
       // 回滚乐观写入的播放历史（recorded=false 时没写过，无需回滚）
       if (history.recorded) {
@@ -535,7 +612,7 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       // 引擎阶段失败 = 旧源已被打断，引擎无源；标记后下次播放走完整装载恢复
       _loadedKey = null;
       _failedSourceKey = track.id;
-      if (!ref.mounted) return;
+      if (!ref.mounted) return false;
       // 装载失败：类型化错误上抛到 state（UI 提示），不静默挂死（§5.1-2）
       print("播放装载失败 [${track.id}] $e");
       // B 站 -404（"啥都木有"）= 视频/分 P 已被删除或下架，翻译成用户能懂的提示
@@ -554,6 +631,7 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       _snapshot();
       _persistNow();
       _syncSystem(force: true);
+      return false;
     }
   }
 

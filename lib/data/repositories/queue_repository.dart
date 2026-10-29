@@ -3,6 +3,7 @@ import "package:sqflite/sqflite.dart";
 import "../db/app_database.dart";
 
 import "../models/track.dart";
+import "../models/queue_entry.dart";
 
 /// 播放队列仓库（§3.4-5）：独立于歌单、允许重复、跨启动持久化
 /// 「下一首播放」= insertNext（插到队首偏移位）；「稍后听」= append
@@ -25,15 +26,82 @@ class QueueRepository {
         lyricOffsetMs: (r["lyric_offset"] as int?) ?? 0,
       );
 
-  /// 队列全部曲目（按 position）
-  Future<List<Track>> all() async {
+  QueueEntry _entryFromRow(Map<String, Object?> row) =>
+      QueueEntry(id: row["queue_entry_id"] as int, track: _fromRow(row));
+
+  /// 按位置读取独立排队记录，保留主键以避免重排后操作错位。
+  Future<List<QueueEntry>> entries() async {
     final rows = await db.rawQuery("""
-      SELECT t.*, q.position
-      FROM queue q
-      JOIN tracks t ON t.id = q.track_id
-      ORDER BY q.position
-    """);
-    return [for (final r in rows) _fromRow(r)];
+        SELECT t.*, q.id AS queue_entry_id
+        FROM queue q
+        JOIN tracks t ON t.id = q.track_id
+        ORDER BY q.position
+      """);
+    return [for (final row in rows) _entryFromRow(row)];
+  }
+
+  Future<QueueEntry?> entryById(int entryId) async {
+    final rows = await db.rawQuery(
+      """
+        SELECT t.*, q.id AS queue_entry_id
+        FROM queue q
+        JOIN tracks t ON t.id = q.track_id
+        WHERE q.id = ?
+      """,
+      [entryId],
+    );
+    return rows.isEmpty ? null : _entryFromRow(rows.first);
+  }
+
+  /// 兼容只需要曲目的调用方，重复次数和顺序均保留。
+  Future<List<Track>> all() async => [
+    for (final entry in await entries()) entry.track,
+  ];
+
+  /// 按独立条目删除；迟到的菜单遇到已出队记录时不影响其它条目。
+  Future<bool> removeEntry(int entryId) async {
+    return db.transaction((txn) async {
+      final rows = await txn.query(
+        "queue",
+        columns: ["position"],
+        where: "id = ?",
+        whereArgs: [entryId],
+      );
+      if (rows.isEmpty) return false;
+      final position = rows.single["position"] as int;
+      await txn.delete("queue", where: "id = ?", whereArgs: [entryId]);
+      await txn.execute(
+        "UPDATE queue SET position = position - 1 WHERE position > ?",
+        [position],
+      );
+      return true;
+    });
+  }
+
+  /// 把已有排队记录移到最前，不额外复制同曲条目。
+  Future<bool> moveEntryToFront(int entryId) async {
+    return db.transaction((txn) async {
+      final rows = await txn.query(
+        "queue",
+        columns: ["position"],
+        where: "id = ?",
+        whereArgs: [entryId],
+      );
+      if (rows.isEmpty) return false;
+      final position = rows.single["position"] as int;
+      if (position == 0) return true;
+      await txn.execute(
+        "UPDATE queue SET position = position + 1 WHERE position < ?",
+        [position],
+      );
+      await txn.update(
+        "queue",
+        {"position": 0},
+        where: "id = ?",
+        whereArgs: [entryId],
+      );
+      return true;
+    });
   }
 
   /// 取出并移除队首（播放内核「插队优先」消费，事务内完成避免并发重复取）
@@ -57,7 +125,7 @@ class QueueRepository {
     });
   }
 
-  /// 整表替换（S4 播放会话装载队列用）
+  /// 整表替换待播条目；会话队列由 Playback 独立持有。
   Future<void> replaceAll(List<String> trackIds) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     await db.transaction((txn) async {
@@ -110,7 +178,7 @@ class QueueRepository {
     });
   }
 
-  /// 移除某曲目的全部排队记录（待播放区点播/删除曲目时用），
+  /// 批量移除同曲全部排队记录，不用于单条菜单或点播，
   /// 删后重排 position 保持连续（takeFirst/move 依赖连续位）
   Future<void> removeByTrackId(String trackId) async {
     await db.transaction((txn) async {

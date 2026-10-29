@@ -47,7 +47,7 @@ final class PlaybackProvider
   }
 }
 
-String _$playbackHash() => r'58a7c84d25c94597deebc7d3b4660b2fba229738';
+String _$playbackHash() => r'180230f12f70b767878a33a3ceaa5f71f5ddc909';
 
 /// 播放状态机（§5.2-1：PlaySession + NextStrategy；引擎只做"取下一首→装载→播放"）
 /// 断点续播：进度去抖 5s 写盘，暂停/切歌/销毁立即写（§5.2-2）

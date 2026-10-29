@@ -2,6 +2,7 @@ import "package:riverpod_annotation/riverpod_annotation.dart";
 
 import "../../data/models/playlist.dart";
 import "../../data/models/track.dart";
+import "../../data/models/queue_entry.dart";
 import "../../data/repositories/history_repository.dart";
 import "../../data/repositories/playlist_repository.dart";
 import "../../data/repositories/queue_repository.dart";
@@ -48,9 +49,10 @@ Future<int> likedCount(Ref ref) async =>
 @riverpod
 Future<int> localCount(Ref ref) async => TrackRepository().localCount();
 
-/// 播放队列曲目（歌单页队列区；S4 播放内核填充数据）
+/// 独立待播条目；所有写队列入口统一刷新此 provider。
 @riverpod
-Future<List<Track>> queueTracks(Ref ref) async => QueueRepository().all();
+Future<List<QueueEntry>> queueEntries(Ref ref) async =>
+    QueueRepository().entries();
 
 /// 最近播放（歌单页；切歌后由页面 invalidate）
 @riverpod
