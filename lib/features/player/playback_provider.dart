@@ -10,6 +10,7 @@ import "../../data/origin_service.dart";
 import "../../data/repositories/history_repository.dart";
 import "../../data/repositories/queue_repository.dart";
 import "../../data/repositories/track_repository.dart";
+import "../../origin_sdk/bili/bili_api.dart";
 import "../../origin_sdk/bili/bili_api_error.dart";
 import "../playlist/playlists_provider.dart" show queueTracksProvider;
 import "audio_engine.dart";
@@ -132,6 +133,9 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
   /// 引擎当前已装载的曲目 id（null = 引擎无源：冷启动恢复后/装载失败后）。
   /// 播放键据此决定裸 play 还是完整装载（裸 play 在无源引擎上无声无进度）
   String? _loadedKey;
+
+  // UI 提示后会清除 error，失效源标记须独立保留到重新装载成功。
+  String? _failedSourceKey;
   DateTime _lastSystemSync = DateTime.fromMillisecondsSinceEpoch(0);
 
   /// 惰性创建并订阅事件流（首次使用时；dispose 统一取消）
@@ -441,7 +445,7 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     // just_audio 会先停掉旧源——失败后引擎已哑，回退不能宣称仍在播
     var reachedEngine = false;
     try {
-      final source = await _resolveSource(track);
+      final source = await _resolveSource(track, forceRefresh: _failedSourceKey == track.id);
       if (!ref.mounted) return;
       reachedEngine = true;
       await _resolveEngine().load(source, initialPosition: initialPosition);
@@ -456,6 +460,7 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
         playing: autoplay ? true : state.playing,
       );
       _loadedKey = track.id;
+      if (_failedSourceKey == track.id) _failedSourceKey = null;
       // 切歌后立即写新曲与队列快照：与 queue 表 takeFirst 的删除时序对齐，
       // 避免播放器启动后、下个去抖周期前被杀导致“已出队但快照仍是旧曲”
       _persistNow();
@@ -470,6 +475,7 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       }
       // 引擎阶段失败 = 旧源已被打断，引擎无源；标记后下次播放走完整装载恢复
       _loadedKey = null;
+      _failedSourceKey = track.id;
       if (!ref.mounted) return;
       // 装载失败：类型化错误上抛到 state（UI 提示），不静默挂死（§5.1-2）
       print("播放装载失败 [${track.id}] $e");
@@ -492,7 +498,7 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
   }
 
   /// 源解析：本地文件（本地曲/已下载）优先直读；在线曲按音源取 playurl
-  Future<PlaySource> _resolveSource(Track track) async {
+  Future<PlaySource> _resolveSource(Track track, {bool forceRefresh = false}) async {
     final override = playbackDepsTestOverride?.resolveSource;
     if (override != null) return override(track);
     var localPath = track.localPath;
@@ -558,7 +564,11 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
         contentType: musicUrl.contentType,
       );
     }
-    final musicUrl = await biliApi.getMusicUrl(track.id);
+    // 失败后用户重试时重新解析 B 站直链，避免继续命中已失效的短缓存。
+    final api = biliApi;
+    final musicUrl = api is BiliApi
+        ? await api.getMusicUrl(track.id, forceRefresh: forceRefresh)
+        : await api.getMusicUrl(track.id);
     return PlaySource(
       key: track.id,
       url: musicUrl.url,
@@ -588,6 +598,8 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     _onCompletion = e.completionStream.listen((_) => unawaited(_onCompleted()));
     _onError = e.errorStream.listen((err) {
       print("播放引擎错误：$err");
+      _failedSourceKey = state.track?.id;
+      _loadedKey = null;
       state = state.copyWith(
         buffering: false,
         playing: false,

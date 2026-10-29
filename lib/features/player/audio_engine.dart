@@ -52,6 +52,7 @@ abstract class AudioEngine {
   /// 装载音频源。[initialPosition] 供断点续播跳过前缀
   Future<void> load(PlaySource source, {Duration? initialPosition});
 
+  /// 完成表示播放命令已发出，不等待整曲结束；异步播放失败走 errorStream。
   Future<void> play();
 
   Future<void> pause();

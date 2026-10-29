@@ -14,8 +14,7 @@ import "package:just_audio/just_audio.dart";
 /// 解析 Content-Range 头（"bytes 0-999/2000"）→ (end, total)；格式不符返回 null
 (int, int)? parseContentRange(String? value) {
   if (value == null) return null;
-  final match =
-      RegExp(r"^bytes\s+(\d+)-(\d+)/(\d+)$").firstMatch(value.trim());
+  final match = RegExp(r"^bytes\s+(\d+)-(\d+)/(\d+)$").firstMatch(value.trim());
   if (match == null) return null;
   return (int.parse(match.group(2)!), int.parse(match.group(3)!));
 }
@@ -97,9 +96,9 @@ class RangeProxySource extends StreamAudioSource {
   static late Directory cacheDir;
 
   /// 缓存文件（key=origin-id 的 md5 文件名；扩展名随音源，下载模块命中即复制）
-  static File cacheFileFor(String key) => File(
-      "${cacheDir.path}/${md5.convert(utf8.encode(key))}"
-      "${key.startsWith("kuwo:") ? ".mp3" : ".m4a"}");
+  static File cacheFileFor(String key) =>
+      File("${cacheDir.path}/${md5.convert(utf8.encode(key))}"
+          "${key.startsWith("kuwo:") ? ".mp3" : ".m4a"}");
 
   /// 音频缓存占用（音频缓存 + 下载中的 .part，字节）
   static Future<int> cacheSize() async {
@@ -134,10 +133,12 @@ class RangeProxySource extends StreamAudioSource {
     return freed;
   }
 
-  static final Dio _dio = Dio();
+  static final Dio _dio = Dio(
+    BaseOptions(connectTimeout: const Duration(seconds: 10)),
+  );
+  static int _partialSequence = 0;
 
   late final File _cacheFile;
-  late final File _partFile;
 
   RangeProxySource({
     required String key,
@@ -146,25 +147,36 @@ class RangeProxySource extends StreamAudioSource {
     this.headers,
     this.contentType = "video/mp4",
   }) : super(tag: key) {
-    // origin-id 可能含路径非法字符（冒号等），md5 短哈希作缓存文件名
-    final name = md5.convert(utf8.encode(key)).toString();
     _cacheFile = cacheFileFor(key);
-    _partFile = File("${cacheDir.path}/$name.part");
   }
 
   @override
   Future<StreamAudioResponse> request([int? start, int? end]) async {
     final s = start ?? 0;
-    // 缓存命中：本地文件直读（老用户/重听秒开）
+    if (s < 0 || (end != null && end < s)) {
+      throw RangeError("音频区间不合法：$s..$end");
+    }
     if (await _cacheFile.exists()) {
       final total = await _cacheFile.length();
-      final last = end != null && end < total - 1 ? end : total - 1;
+      if (total > 0) {
+        if (s > total) throw RangeError.range(s, 0, total);
+        final endEx = end != null && end < total ? end : total;
+        // just_audio 的 end 排尾，文件读取与 HTTP Range 转换必须保持同一契约。
+        return StreamAudioResponse(
+          sourceLength: total,
+          contentLength: endEx - s,
+          offset: s,
+          stream: _cacheFile.openRead(s, endEx).cast<Uint8List>(),
+          contentType: contentType,
+        );
+      }
+    }
+    if (end == s) {
       return StreamAudioResponse(
-        sourceLength: total,
-        contentLength: last - s + 1,
+        sourceLength: null,
+        contentLength: 0,
         offset: s,
-        stream: _cacheFile.openRead(s, last + 1).cast<Uint8List>(),
-        // B 站 dash 按 video/mp4 声明（实际 m4a），demux 依赖此声明
+        stream: const Stream<Uint8List>.empty(),
         contentType: contentType,
       );
     }
@@ -172,17 +184,27 @@ class RangeProxySource extends StreamAudioSource {
   }
 
   Future<StreamAudioResponse> _fetch(int start, int? end) async {
-    Object? lastError;
     final candidates = [
       url,
-      if (backupUrl != null && backupUrl!.isNotEmpty) backupUrl!,
+      if (backupUrl != null && backupUrl!.isNotEmpty && backupUrl != url)
+        backupUrl!,
     ];
-    for (final candidate in candidates) {
+    Object? lastError;
+    for (var index = 0; index < candidates.length; index++) {
       try {
-        return await _fetchOne(candidate, start, end);
-      } on TimeoutException {
-        // 看门狗超时视为链路问题，继续降级
-        lastError ??= TimeoutException("音频流 15s 无数据（看门狗）");
+        final first = await _fetchOne(candidates[index], start, end);
+        Stream<Uint8List> stream =
+            _resumeStream(first, candidates, index, start, end);
+        if (start == 0 && first.sourceLength != null) {
+          stream = _teeToCache(stream, first.sourceLength!);
+        }
+        return StreamAudioResponse(
+          sourceLength: first.sourceLength,
+          contentLength: first.contentLength,
+          offset: start,
+          stream: stream,
+          contentType: contentType,
+        );
       } catch (e) {
         lastError = e;
       }
@@ -190,108 +212,213 @@ class RangeProxySource extends StreamAudioSource {
     throw StateError("音频直链请求失败（主/备均不可用）：$lastError");
   }
 
-  Future<StreamAudioResponse> _fetchOne(String candidate, int start, int? end) async {
-    final cancelToken = CancelToken();
-    final range = "bytes=$start-${end ?? ""}";
+  /// 流在响应头之后失败时，从已交付字节处接备用链，避免重播前缀或吞掉截断。
+  Stream<Uint8List> _resumeStream(
+    StreamAudioResponse first,
+    List<String> candidates,
+    int firstIndex,
+    int start,
+    int? end,
+  ) async* {
+    var delivered = 0;
+    var current = first;
+    Object? lastError;
+    for (var index = firstIndex; index < candidates.length; index++) {
+      try {
+        if (index != firstIndex) {
+          current = await _fetchOne(candidates[index], start + delivered, end);
+          if (first.sourceLength != null &&
+              current.sourceLength != null &&
+              first.sourceLength != current.sourceLength) {
+            await current.stream.listen((_) {}).cancel();
+            throw StateError("主备音频长度不同，无法续传");
+          }
+        }
+        await for (final chunk in current.stream) {
+          delivered += chunk.length;
+          yield chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
+        }
+        final expected = first.contentLength;
+        if (expected != null && delivered != expected) {
+          throw HttpException("音频流不完整：$delivered/$expected");
+        }
+        return;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    throw StateError("音频传输中断（主/备均不可用）：$lastError");
+  }
+
+  Future<StreamAudioResponse> _fetchOne(
+    String candidate,
+    int start,
+    int? end,
+  ) async {
+    final token = CancelToken();
     final resp = await _dio.get<ResponseBody>(
       candidate,
       options: Options(
         responseType: ResponseType.stream,
-        headers: {...?headers, "Range": range},
-        // CDN 直链响应慢是常态，连接超时收紧；读超时由看门狗负责
+        // HTTP 尾字节含尾，just_audio 尾位置排尾。
+        headers: {
+          ...?headers,
+          "Range": "bytes=$start-${end == null ? "" : end - 1}"
+        },
         sendTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(minutes: 1),
       ),
-      cancelToken: cancelToken,
+      cancelToken: token,
     );
     final body = resp.data;
     if (body == null) throw StateError("CDN 响应无数据体");
-    final (endIdx, total) = _resolveExtent(resp, start);
-    Stream<Uint8List> stream = body.stream;
-    // 看门狗：15s 无数据快速失败（下游订阅取消时 Dio 一并中止）
-    stream = _withWatchdog(stream, cancelToken);
-    // 顺序流（自 0）tee 落盘；seek 触发的中段流不落盘
-    if (start == 0) {
-      await _partFile.parent.create(recursive: true);
-      if (await _partFile.exists()) await _partFile.delete();
-      stream = _teeToCache(stream, total);
+    final range = resp.headers.value("Content-Range");
+    final parsed = parseContentRange(range);
+    final length = int.tryParse(resp.headers.value("Content-Length") ?? "");
+    final int? total;
+    final int responseStart;
+    final int? availableEnd;
+    if (resp.statusCode == HttpStatus.partialContent) {
+      final startText = RegExp(r"^bytes\s+(\d+)-").firstMatch(range ?? "");
+      if (parsed == null ||
+          startText == null ||
+          int.parse(startText.group(1)!) != start) {
+        token.cancel("无效 Content-Range");
+        throw StateError("CDN 返回了不匹配的音频区间");
+      }
+      total = parsed.$2;
+      responseStart = start;
+      availableEnd = parsed.$1 + 1;
+    } else {
+      // 上游忽略 Range 返回 200 时，按整曲总长计算并丢弃 start 之前的字节。
+      total = length;
+      responseStart = 0;
+      availableEnd = length;
     }
+    if (total != null && start > total) {
+      token.cancel("音频区间越界");
+      throw RangeError.range(start, 0, total);
+    }
+    var endEx = availableEnd;
+    if (end != null && (endEx == null || end < endEx)) endEx = end;
+    final count = endEx == null ? null : endEx - start;
+    final stream = _slice(
+      _withWatchdog(body.stream, token),
+      start - responseStart,
+      count,
+    );
     return StreamAudioResponse(
       sourceLength: total,
-      contentLength: endIdx - start + 1,
+      contentLength: count,
       offset: start,
       stream: stream,
       contentType: contentType,
     );
   }
 
-  /// 从响应头确定 (end, total)：206 用 Content-Range；兜底 Content-Length
-  (int, int) _resolveExtent(Response<ResponseBody> resp, int start) {
-    final parsed = parseContentRange(resp.headers.value("Content-Range"));
-    if (parsed != null) return parsed;
-    final cl = resp.headers.value("Content-Length");
-    final length = cl != null ? int.tryParse(cl) ?? 0 : 0;
-    return (start + length - 1, start + length);
+  Stream<Uint8List> _slice(
+    Stream<Uint8List> source,
+    int skip,
+    int? remaining,
+  ) async* {
+    if (remaining == 0) return;
+    await for (final chunk in source) {
+      if (skip >= chunk.length) {
+        skip -= chunk.length;
+        continue;
+      }
+      final from = skip;
+      skip = 0;
+      final available = chunk.length - from;
+      final take =
+          remaining != null && remaining < available ? remaining : available;
+      yield Uint8List.sublistView(chunk, from, from + take);
+      if (remaining != null) {
+        remaining -= take;
+        if (remaining == 0) return;
+      }
+    }
   }
 
   Stream<Uint8List> _withWatchdog(
-    Stream<Uint8List> src,
+    Stream<Uint8List> source,
     CancelToken token,
   ) async* {
-    var expired = false;
-    Timer? watchdog;
-    void reset() {
-      watchdog?.cancel();
-      watchdog = Timer(const Duration(seconds: 15), () {
-        expired = true;
-        token.cancel("音频流看门狗：15s 无数据");
-      });
-    }
-
-    reset();
     try {
-      await for (final chunk in src) {
-        if (expired) break;
-        reset();
-        yield chunk;
-      }
+      yield* source.timeout(const Duration(seconds: 15), onTimeout: (sink) {
+        sink.addError(TimeoutException("音频流 15s 无数据"));
+        sink.close();
+        token.cancel("音频流看门狗超时");
+      });
     } finally {
-      watchdog?.cancel();
-    }
-    if (expired) {
-      throw TimeoutException("音频流 15s 无数据（看门狗）");
+      if (!token.isCancelled) token.cancel("本次音频区间读取结束");
     }
   }
 
-  /// 顺序流旁路落盘：完整（== total）后 .part 转正为缓存文件并触发 LRU 清理
-  Stream<Uint8List> _teeToCache(Stream<Uint8List> src, int total) async* {
+  /// 缓存写入失败不影响音频；上游断流必须原样传给续传/播放器，不能混为缓存错误。
+  Stream<Uint8List> _teeToCache(Stream<Uint8List> source, int total) async* {
+    final partial = File(
+      "${_cacheFile.path}.${_partialSequence++}.part",
+    );
     IOSink? sink;
+    Future<void>? sinkDone;
+    var healthy = true;
+    var complete = false;
+    var written = 0;
+    void cacheError(Object error) {
+      healthy = false;
+      print("音频缓存写入失败 [${partial.path}]：$error");
+    }
+
     try {
-      sink = _partFile.openWrite();
-      var written = 0;
-      await for (final chunk in src) {
-        yield chunk;
-        sink.add(chunk);
+      try {
+        await partial.parent.create(recursive: true);
+        sink = partial.openWrite();
+        sinkDone = sink.done.then<void>((_) {}, onError: (Object error) {
+          cacheError(error);
+        });
+      } catch (e) {
+        cacheError(e);
+      }
+      await for (final chunk in source) {
         written += chunk.length;
+        if (healthy && sink != null) {
+          try {
+            sink.add(chunk);
+          } catch (e) {
+            cacheError(e);
+          }
+        }
+        yield chunk;
       }
-      await sink.flush();
-      await sink.close();
-      sink = null;
-      if (written == total) {
-        await _partFile.rename(_cacheFile.path);
-        // 治理异步执行，不阻塞播放
-        unawaited(pruneAudioCache(cacheDir));
-      } else {
-        await _partFile.delete();
-      }
-    } catch (e) {
-      // 落盘失败不影响播放（网络流已由下游消费），但必须可见，防吞内部错误
-      print("音频缓存落盘失败 [${_cacheFile.path}]: $e");
-      await sink?.close();
-      if (await _partFile.exists()) {
+      complete = true;
+    } finally {
+      try {
+        if (sink != null) {
+          try {
+            await sink.flush();
+          } catch (e) {
+            cacheError(e);
+          }
+          try {
+            await sink.close();
+          } catch (e) {
+            cacheError(e);
+          }
+          await sinkDone;
+        }
+        if (complete && healthy && written == total) {
+          await partial.rename(_cacheFile.path);
+          unawaited(pruneAudioCache(cacheDir));
+        }
+      } catch (e) {
+        cacheError(e);
+      } finally {
         try {
-          await _partFile.delete();
-        } catch (_) {}
+          if (await partial.exists()) await partial.delete();
+        } catch (_) {
+          // 并发清缓存时文件可能已经消失。
+        }
       }
     }
   }

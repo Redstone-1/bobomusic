@@ -13,149 +13,131 @@ const _userAgent =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 const _referer = "https://www.bilibili.com/";
 
-/// B 站 API（S2.1 拆分）：请求与解析层，依赖 [BiliAuth] 提供鉴权材料
-/// - 单一 Dio 实例（S2.2：消灭 getBNut 每次 new Dio）
-/// - 对外只抛 [BiliApiError] 子类；playurl 结果走内存 LRU 短缓存（S2.2）
+/// 请求、风控归一和一次鉴权恢复；SDK 不直接提示 UI。
 class BiliApi implements OriginService {
   final Dio _dio;
   final BiliAuth auth;
-
-  /// playurl LRU 短缓存：B 站直链自身有时效（~数小时），5 分钟足够消灭冷播重复 RTT
-  final _playurlCache = TtlLruCache<MusicUrl>(maxEntries: 8, ttl: const Duration(minutes: 5));
+  final _playurlCache = TtlLruCache<MusicUrl>(
+    maxEntries: 8,
+    ttl: const Duration(minutes: 5),
+  );
 
   BiliApi({BiliAuth? authOverride, Dio? dioOverride})
       : _dio = dioOverride ??
-            Dio(BaseOptions(connectTimeout: const Duration(seconds: 10))),
+            Dio(BaseOptions(
+              connectTimeout: const Duration(seconds: 10),
+              receiveTimeout: const Duration(seconds: 15),
+            )),
         auth = authOverride ?? BiliAuth() {
     _dio.options.headers["User-Agent"] = _userAgent;
     _dio.options.headers["Referer"] = _referer;
-    _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) {
-          // playurl 不带 cookie（B 站风控特判，继承旧版行为）
-          if (!options.uri.path.startsWith("/x/player/wbi/playurl")) {
-            final cookie = auth.cookieHeader();
-            if (cookie != null) options.headers["cookie"] = cookie;
-          }
-          return handler.next(options);
-        },
-        onResponse: (response, handler) {
-          if (response.realUri.toString().contains("x/web-interface/nav")) {
-            return handler.next(response);
-          }
-          if ((response.statusCode ?? 0) < 200 ||
-              (response.statusCode ?? 0) > 300) {
-            throw BiliHttpError(
-              "请求失败 ${response.statusCode} ${response.statusMessage}",
-              statusCode: response.statusCode,
-              cause: response.data,
-            );
-          }
-          if (response.data is! Map) return handler.next(response);
-
-          final code = response.data["code"];
-          final message = response.data["message"];
-          final resData = response.data["data"];
-          if (code != 0) {
-            throw BiliApiRejectError(
-              "请求被拒绝：$message",
-              code: code,
-              riskControl: resData is Map && resData["v_voucher"] != null,
-              cause: response.data,
-            );
-          }
-          return handler.next(response);
-        },
-      ),
-    );
+    _dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        // playurl 始终不带 cookie，包括重试时，避免继承搜索请求的身份头。
+        if (options.uri.path.startsWith("/x/player/wbi/playurl")) {
+          options.headers
+              .removeWhere((key, _) => key.toLowerCase() == "cookie");
+        } else {
+          final cookie = auth.cookieHeader();
+          if (cookie != null) options.headers["cookie"] = cookie;
+        }
+        handler.next(options);
+      },
+      onResponse: (response, handler) {
+        final body = response.data;
+        if (body is! Map) {
+          handler.next(response);
+          return;
+        }
+        final code = body["code"];
+        final data = body["data"];
+        final risk = data is Map && data["v_voucher"] != null;
+        // 风控可能返回 code=0，必须先识别 voucher，不能送进正常列表解析。
+        if (risk || (code is int && code != 0)) {
+          final error = BiliApiRejectError(
+            risk ? "请求触发风控，请稍后重试" : "请求被拒绝：${body["message"]}",
+            code: code is int ? code : 0,
+            riskControl: risk,
+            cause: body,
+          );
+          handler.reject(DioException(
+            requestOptions: response.requestOptions,
+            response: response,
+            type: DioExceptionType.badResponse,
+            error: error,
+          ));
+          return;
+        }
+        handler.next(response);
+      },
+    ));
   }
 
   @override
-  Future<SearchResponse> search(SearchParams params) async {
-    final query = await _signedQuery({
-      "search_type": "video",
-      "keyword": params.keyword,
-      "page": params.page.toString(),
-      "pagesize": "20",
-    });
-    final apiPath = Uri.parse(
-      "https://api.bilibili.com/x/web-interface/wbi/search/type",
-    ).replace(queryParameters: query).toString();
-    // S2.1：不再静默吞错返回空结果——无结果与请求失败由调用方区分
-    final response = await _guard(() => _dio.get(apiPath));
-    return BiliSearchResponse.fromJson(response.data);
-  }
+  Future<SearchResponse> search(SearchParams params) => _query(
+        "https://api.bilibili.com/x/web-interface/wbi/search/type",
+        {
+          "search_type": "video",
+          "keyword": params.keyword,
+          "page": params.page.toString(),
+          "pagesize": "20",
+        },
+        (data) => BiliSearchResponse.fromJson(data),
+      );
 
   @override
-  Future<SearchItem> searchDetail(String id) async {
+  Future<SearchItem> searchDetail(String id) {
     final biliid = BiliId.unicode(id);
-    final query = await _signedQuery({
-      "aid": biliid.aid,
-      "bvid": biliid.bvid,
-    });
-    final apiPath = Uri.parse(
+    return _query(
       "https://api.bilibili.com/x/web-interface/view",
-    ).replace(queryParameters: query).toString();
-    final response = await _guard(() => _dio.get(apiPath));
-    return BiliSearchItem.fromJson(response.data["data"]);
+      {"aid": biliid.aid, "bvid": biliid.bvid},
+      (data) => BiliSearchItem.fromJson(data["data"]),
+    );
   }
 
-  /// 搜索视频所在系列或合集
-  Future<BiliSearchSeasonItem?> searchSeason(int mid, int seasonId) async {
-    final query = await _signedQuery({
-      "mid": "$mid",
-      "season_id": "$seasonId",
-      "page_num": "1",
-      "page_size": "30",
-    });
-    final apiPath = Uri.parse(
-      "https://api.bilibili.com/x/polymer/web-space/seasons_archives_list",
-    ).replace(queryParameters: query).toString();
-    final response = await _guard(() => _dio.get(apiPath));
-    return BiliSearchSeasonItem.fromJson(response.data["data"]);
-  }
+  Future<BiliSearchSeasonItem?> searchSeason(int mid, int seasonId) => _query(
+        "https://api.bilibili.com/x/polymer/web-space/seasons_archives_list",
+        {
+          "mid": "$mid",
+          "season_id": "$seasonId",
+          "page_num": "1",
+          "page_size": "30",
+        },
+        (data) => BiliSearchSeasonItem.fromJson(data["data"]),
+      );
 
   @override
-  Future<List<SearchSuggestItem>> searchSuggest(String keyword) async {
-    final query = await _signedQuery({"term": keyword});
-    final response = await _guard(
-      () => _dio.get(
+  Future<List<SearchSuggestItem>> searchSuggest(String keyword) => _query(
         "https://s.search.bilibili.com/main/suggest",
-        queryParameters: query,
-      ),
-    );
-    final data =
-        response.data is String ? jsonDecode(response.data) : response.data;
-    try {
-      final List<dynamic> tags = data["result"]["tag"];
-      return [
-        for (final t in tags) SearchSuggestItem(name: t["name"], value: t["value"]),
-      ];
-    } catch (e) {
-      throw BiliParseError("搜索建议响应结构不符", cause: e);
-    }
-  }
+        {"term": keyword},
+        (data) {
+          final decoded = data is String ? jsonDecode(data) : data;
+          final tags = decoded["result"]["tag"] as List;
+          return [
+            for (final tag in tags)
+              SearchSuggestItem(name: tag["name"], value: tag["value"]),
+          ];
+        },
+      );
 
   @override
   Future<List<SearchItem>> hotSongs() async => const [];
 
-  // B 站音乐榜已按用户决定下线（请求不稳定）：返回 null = 本源不支持榜单 key
   @override
   Future<List<ChartHit>?> getChartHits(String chartKey) async => null;
 
   @override
-  Future<MusicUrl> getMusicUrl(String id) async {
-    // LRU 命中直接秒回（冷播省一次签名+RTT）
-    final cached = _playurlCache.get(id);
-    if (cached != null) return cached;
-
+  Future<MusicUrl> getMusicUrl(String id, {bool forceRefresh = false}) async {
+    if (forceRefresh) _playurlCache.remove(id);
+    if (!forceRefresh) {
+      final cached = _playurlCache.get(id);
+      if (cached != null) return cached;
+    }
     final biliid = BiliId.unicode(id);
     var cid = biliid.cid;
     if (cid == null || cid.isEmpty) {
-      // 搜索响应不带 pages，搜索/队列/旧库曲目可能无 cid（接口漂移实证 2026-10）：
-      // 先走 view 补默认分 P 的 cid 再取流；view 也给不出才判 ID 非法
       final detail = await searchDetail(id);
-      final healedId = (detail.musicList?.isNotEmpty ?? false)
+      final healedId = detail.musicList?.isNotEmpty == true
           ? detail.musicList!.first.id
           : detail.id;
       cid = BiliId.unicode(healedId).cid;
@@ -163,34 +145,55 @@ class BiliApi implements OriginService {
         throw BiliInvalidIdError("歌曲 ID 不正确：无法补齐 CID（$id）");
       }
     }
-    final query = await _signedQuery({
-      "avid": biliid.aid,
-      "bvid": biliid.bvid,
-      "cid": cid,
-      "fnval": "16",
-    });
-    final uri = Uri.parse(
+    final musicUrl = await _query(
       "https://api.bilibili.com/x/player/wbi/playurl",
-    ).replace(queryParameters: query).toString();
-    final response = await _guard(() => _dio.get(uri));
-    final musicUrl = parsePlayUrl(response.data["data"]);
+      {"avid": biliid.aid, "bvid": biliid.bvid, "cid": cid, "fnval": "16"},
+      (data) => parsePlayUrl(Map<String, dynamic>.from(data["data"])),
+    );
     _playurlCache.set(id, musicUrl);
     return musicUrl;
   }
 
-  /// WBI 签名查询串；鉴权材料缺失 → [BiliAuthError]
+  /// 每次重试重新签名；风控/签名失效只重刷一次，普通业务错误不重试。
+  Future<T> _query<T>(
+    String url,
+    Map<String, String> params,
+    T Function(dynamic data) parse,
+  ) async {
+    for (var attempt = 0;; attempt++) {
+      try {
+        final query = await _signedQuery(Map.of(params));
+        final response = await _guard(
+          () => _dio.get(url, queryParameters: query),
+        );
+        return await _guard(() async => parse(response.data));
+      } on BiliApiRejectError catch (e) {
+        if (attempt != 0 ||
+            !(e.riskControl ||
+                e.code == -403 ||
+                e.code == -352 ||
+                e.code == -412)) {
+          rethrow;
+        }
+        _playurlCache.clear();
+        await auth.refresh();
+      } on BiliHttpError catch (e) {
+        if (attempt != 0 || e.statusCode != 412) rethrow;
+        _playurlCache.clear();
+        await auth.refresh();
+      }
+    }
+  }
+
   Future<Map<String, String>> _signedQuery(Map<String, String> params) async {
     await auth.ensure();
     final sign = auth.signData;
-    if (sign == null) {
-      throw const BiliAuthError("签名密钥缺失（ensure 未生效）");
-    }
+    if (sign == null) throw const BiliAuthError("签名密钥缺失");
     return Map<String, String>.from(
       encWbi(params, sign.imgKey, sign.subKey),
     );
   }
 
-  /// 统一错误包装：拦截器抛出的 BiliApiError 原样上抛，Dio 层错误类型化
   Future<T> _guard<T>(Future<T> Function() run) async {
     try {
       return await run();
@@ -199,9 +202,16 @@ class BiliApi implements OriginService {
     } on DioException catch (e) {
       final inner = e.error;
       if (inner is BiliApiError) throw inner;
-      throw BiliNetworkError("网络请求失败（${e.type.name}）", cause: e);
+      if (e.response != null) {
+        throw BiliHttpError(
+          "请求失败（HTTP ${e.response!.statusCode}），请稍后重试",
+          statusCode: e.response!.statusCode,
+          cause: e,
+        );
+      }
+      throw BiliNetworkError("网络请求失败，请检查网络后重试", cause: e);
     } catch (e) {
-      throw BiliParseError("响应处理失败", cause: e);
+      throw BiliParseError("响应格式变化，请稍后重试", cause: e);
     }
   }
 }
@@ -217,9 +227,8 @@ MusicUrl parsePlayUrl(Map<String, dynamic> data) {
   }
   audioList.sort((a, b) => b["bandwidth"].compareTo(a["bandwidth"]));
   final best = audioList[0];
-  final backupUrl = (best["backupUrl"] as List?)
-      ?.whereType<String>()
-      .firstOrNull;
+  final backupUrl =
+      (best["backupUrl"] as List?)?.whereType<String>().firstOrNull;
   return MusicUrl(
     url: best["baseUrl"],
     headers: {"Referer": _referer},
@@ -235,7 +244,8 @@ class TtlLruCache<V> {
 
   final _entries = <String, _CacheEntry<V>>{};
 
-  TtlLruCache({required this.maxEntries, required this.ttl, DateTime Function()? now})
+  TtlLruCache(
+      {required this.maxEntries, required this.ttl, DateTime Function()? now})
       : _now = now ?? DateTime.now;
 
   V? get(String key) {
@@ -255,6 +265,8 @@ class TtlLruCache<V> {
   }
 
   void clear() => _entries.clear();
+
+  void remove(String key) => _entries.remove(key);
 }
 
 class _CacheEntry<V> {

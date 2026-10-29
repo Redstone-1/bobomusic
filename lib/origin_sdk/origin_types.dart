@@ -55,11 +55,15 @@ abstract class SearchResponse {
   final int pageSize; // 每页数
   final List<SearchItem> data; // 结果
 
+  /// 过滤后的结果可能为空，是否仍有原始页由音源显式告知。
+  final bool? hasMore;
+
   const SearchResponse({
     required this.current,
     required this.total,
     required this.pageSize,
     required this.data,
+    this.hasMore,
   });
 }
 

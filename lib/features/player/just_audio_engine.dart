@@ -5,35 +5,46 @@ import "package:just_audio/just_audio.dart";
 import "audio_engine.dart";
 import "range_proxy_source.dart";
 
-/// just_audio 引擎（真实现）：桌面解码走 media_kit 后端
-/// （main 里 JustAudioMediaKit.ensureInit，Android 用平台默认解码器）
-///
-/// 网络 B 站直链走 [RangeProxySource]（Range 直取/看门狗/降级/落盘缓存），
-/// 本地文件直读；事件流一一映射到 just_audio 对应流
+/// 将 just_audio 的播放生命周期 Future 转成“命令已发出”；后续错误走事件流。
 class JustAudioEngine implements AudioEngine {
-  final AudioPlayer _player = AudioPlayer();
+  final AudioPlayer _player;
+  final _errors = StreamController<Object>.broadcast();
+  late final StreamSubscription<Object> _errorSubscription;
+  Object? _lastError;
+  int _playGeneration = 0;
+
+  JustAudioEngine({AudioPlayer? player}) : _player = player ?? AudioPlayer() {
+    _errorSubscription = _player.errorStream.listen(_reportError);
+  }
+
+  void _reportError(Object error) {
+    if (_errors.isClosed || identical(_lastError, error)) return;
+    _lastError = error;
+    _errors.add(error);
+  }
 
   @override
   Stream<Duration> get positionStream => _player.positionStream;
 
   @override
-  Stream<Duration> get durationStream => _player.durationStream.map(
-        (d) => d ?? Duration.zero,
-      );
+  Stream<Duration> get durationStream =>
+      _player.durationStream.map((duration) => duration ?? Duration.zero);
 
   @override
   Stream<bool> get playingStream => _player.playingStream;
 
   @override
   Stream<void> get completionStream => _player.playerStateStream
-      .where((s) => s.processingState == ProcessingState.completed)
+      .where((state) => state.processingState == ProcessingState.completed)
       .map((_) {});
 
   @override
-  Stream<Object> get errorStream => _player.errorStream;
+  Stream<Object> get errorStream => _errors.stream;
 
   @override
   Future<void> load(PlaySource source, {Duration? initialPosition}) async {
+    _playGeneration++;
+    _lastError = null;
     final AudioSource audioSource = source.isLocal
         ? AudioSource.file(source.url)
         : RangeProxySource(
@@ -47,17 +58,35 @@ class JustAudioEngine implements AudioEngine {
   }
 
   @override
-  Future<void> play() => _player.play();
+  Future<void> play() async {
+    _lastError = null;
+    final generation = ++_playGeneration;
+    // AudioPlayer.play 直到暂停/结束才完成；不能让状态机等到那时又写回 playing=true。
+    unawaited(_player.play().catchError((Object error, StackTrace _) {
+      if (generation == _playGeneration) _reportError(error);
+    }));
+  }
 
   @override
-  Future<void> pause() => _player.pause();
+  Future<void> pause() {
+    _playGeneration++;
+    return _player.pause();
+  }
 
   @override
   Future<void> seek(Duration position) => _player.seek(position);
 
   @override
-  Future<void> stop() => _player.stop();
+  Future<void> stop() {
+    _playGeneration++;
+    return _player.stop();
+  }
 
   @override
-  Future<void> dispose() => _player.dispose();
+  Future<void> dispose() async {
+    _playGeneration++;
+    await _errorSubscription.cancel();
+    await _player.dispose();
+    await _errors.close();
+  }
 }

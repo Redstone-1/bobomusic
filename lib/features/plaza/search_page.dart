@@ -3,6 +3,8 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../origin_sdk/bili/bili_api_error.dart";
+import "../../origin_sdk/qq/qq_api.dart";
 import "../../core/overlays/app_loading.dart";
 import "../../core/overlays/app_sheet.dart";
 import "../../core/overlays/app_toast.dart";
@@ -130,11 +132,14 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final q = _controller.text.trim();
     if (q == _query) return;
     _query = q;
+    // 输入变化立即作废旧请求，不能等防抖结束后才隔离旧词响应。
+    _seq++;
     _debounce?.cancel();
     if (q.isEmpty) {
       setState(() {
         _results = [];
         _loading = false;
+        _loadingMore = false;
         _error = null;
       });
       return;
@@ -145,6 +150,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   /// 切换音源：清空旧结果并立即重搜当前关键词（默认 B 站）
   void _setSource(_SearchSource source) {
     if (_source == source) return;
+    _debounce?.cancel();
+    _seq++;
     setState(() {
       _source = source;
       _results = [];
@@ -171,6 +178,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       _results = [];
       _page = 1;
       _hasMore = true;
+      _loadingMore = false;
     });
     try {
       // 本页音源选择（默认 B 站）；各源共用 OriginService 契约
@@ -179,6 +187,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       if (!mounted || seq != _seq) return;
       setState(() {
         _results = resp.data;
+        _page = resp.current;
         _loading = false;
         _hasMore = _evalHasMore(resp);
       });
@@ -196,6 +205,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   /// 由响应判断是否还有下一页：有总数按页推算；无总数先乐观认为有，
   /// 由 _loadMore 的空页/去重兜底
   bool _evalHasMore(SearchResponse resp) {
+    if (resp.hasMore != null) return resp.hasMore!;
     if (resp.data.isEmpty) return false;
     if (resp.total <= 0) return true;
     return resp.current * resp.pageSize < resp.total;
@@ -220,13 +230,17 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           if (seen.add(r.id)) fresh.add(r);
         }
         _results = [..._results, ...fresh];
-        _page += 1;
-        _hasMore = fresh.isNotEmpty && _evalHasMore(resp);
+        // QQ 可补查多个原始页，继续从实际消费的页码翻页；纯过滤空页仍可继续。
+        _page = resp.current;
+        _hasMore = _evalHasMore(resp) &&
+            (fresh.isNotEmpty || (resp.data.isEmpty && resp.hasMore == true));
       });
     } catch (e) {
       if (!mounted || seq != _seq) return;
       setState(() => _loadingMore = false);
-      AppToast.show(context, "加载失败，上滑重试");
+      AppToast.show(context, e is QqApiError
+          ? e.message
+          : e is BiliApiError ? e.message : "加载失败，上滑重试");
     }
   }
 
@@ -719,6 +733,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                                       ),
                                     ),
                                   )
+                                else if (_results.isNotEmpty && _hasMore && !_loading)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 12),
+                                    child: Center(
+                                      child: GlassChip(label: "加载更多", onTap: _loadMore),
+                                    ),
+                                  )
                                 else if (_results.isNotEmpty &&
                                     !_hasMore &&
                                     !_loading)
@@ -757,7 +778,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                                       asset:
                                           "assets/illustrations/empty_alert.svg",
                                       title: "搜索失败",
-                                      subtitle: "检查网络后重试",
+                                      subtitle: _error is BiliApiError
+                                          ? (_error as BiliApiError).message
+                                          : _error is QqApiError
+                                              ? (_error as QqApiError).message
+                                              : "检查网络后重试",
                                       action: GlassChip(
                                         label: "重试",
                                         onTap: () => _search(_query),
@@ -766,8 +791,20 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                                   : EmptyState(
                                       asset:
                                           "assets/illustrations/empty_search.svg",
-                                      title: "没有找到与“$_query”相关的内容",
-                                      subtitle: "换个关键词试试",
+                                      title: _hasMore
+                                          ? "暂未找到可播放歌曲"
+                                          : "没有找到与“$_query”相关的内容",
+                                      subtitle: _hasMore
+                                          ? "可继续查找更多结果"
+                                          : "换个关键词试试",
+                                      action: _hasMore
+                                          ? GlassChip(
+                                              label: _loadingMore ? "查找中…" : "继续查找",
+                                              onTap: () {
+                                                if (!_loadingMore) _loadMore();
+                                              },
+                                            )
+                                          : null,
                                     ),
                             ),
                         ],
