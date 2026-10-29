@@ -40,6 +40,19 @@ Map<String, dynamic> vkey({String purl = "", int result = 0}) => {
     };
 
 void main() {
+  test("最高音质可用时只请求 M800，不额外探测较低档位", () async {
+    final adapter = StubHttpAdapter((options) {
+      final body = jsonDecode(options.queryParameters["data"] as String);
+      expect(body["req_0"]["param"]["filename"], ["M800free.mp3"]);
+      return jsonBody(vkey(purl: "M800free.mp3?vkey=sample"));
+    });
+    final dio = Dio()..httpClientAdapter = adapter;
+    final result = await QqApi(dio: dio).getMusicUrl("qq:free");
+    expect(result.url, contains("M800free.mp3"));
+    expect(adapter.requests.length, 1);
+    dio.close();
+  });
+
   test("免费曲目 320k 不可用时降到 128k，保留备链", () async {
     final filenames = <String>[];
     final adapter = StubHttpAdapter((options) {

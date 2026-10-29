@@ -16,6 +16,9 @@ class FakeEngine implements AudioEngine {
   int pauseCalls = 0;
   int stopCalls = 0;
   final seeks = <Duration>[];
+  final speeds = <double>[];
+  double speed = 1.0;
+  bool failNextSpeed = false;
 
   bool playing = false;
   Duration position = Duration.zero;
@@ -49,6 +52,7 @@ class FakeEngine implements AudioEngine {
       failNextLoad = false;
       throw Exception("装载中断");
     }
+    speed = 1.0; // 模拟切源后平台重置速度，要求状态机主动恢复。
     position = initialPosition ?? Duration.zero;
     emitPosition(position);
     _durationCtrl.add(duration);
@@ -73,6 +77,16 @@ class FakeEngine implements AudioEngine {
     seeks.add(position);
     this.position = position;
     emitPosition(position);
+  }
+
+  @override
+  Future<void> setSpeed(double value) async {
+    speeds.add(value);
+    if (failNextSpeed) {
+      failNextSpeed = false;
+      throw StateError("平台拒绝倍速");
+    }
+    speed = value;
   }
 
   @override

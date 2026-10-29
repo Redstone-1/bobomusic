@@ -20,6 +20,10 @@ class LifecyclePlayer extends Fake implements AudioPlayer {
   bool playingNow = false;
   Object? playError;
   int loads = 0;
+  @override
+  double speed = 1.0;
+  final speedCalls = <double>[];
+  double? rejectedSpeed;
 
   @override
   Stream<PlayerException> get errorStream => errors.stream;
@@ -62,6 +66,13 @@ class LifecyclePlayer extends Fake implements AudioPlayer {
   }
 
   @override
+  Future<void> setSpeed(double value) async {
+    speedCalls.add(value);
+    speed = value; // 模拟 just_audio 在平台确认之前先修改内部值。
+    if (value == rejectedSpeed) throw StateError("平台不支持该速度");
+  }
+
+  @override
   Future<void> dispose() async {
     if (active?.isCompleted == false) active!.complete();
     await errors.close();
@@ -98,6 +109,28 @@ void main() {
     final error = engine.errorStream.first;
     await engine.play();
     expect(await error, same(failure));
+    await engine.dispose();
+  });
+
+  test("调整速度不等待播放结束，也不重新装载音源", () async {
+    final player = LifecyclePlayer();
+    final engine = JustAudioEngine(player: player);
+    await engine.play();
+    final active = player.active;
+    await engine.setSpeed(1.5);
+    expect(player.speed, 1.5);
+    expect(player.active, same(active));
+    expect(active!.isCompleted, isFalse);
+    expect(player.loads, 0);
+    await engine.dispose();
+  });
+
+  test("平台拒绝速度时回滚 just_audio 已乐观修改的内部速度", () async {
+    final player = LifecyclePlayer()..rejectedSpeed = 1.5;
+    final engine = JustAudioEngine(player: player);
+    await expectLater(engine.setSpeed(1.5), throwsA(isA<StateError>()));
+    expect(player.speed, 1.0);
+    expect(player.speedCalls, [1.5, 1.0]);
     await engine.dispose();
   });
 

@@ -132,6 +132,18 @@ void main() {
     expect(data, content.sublist(1000, 2000));
   });
 
+  test("旧无档位缓存不覆盖最高音质优先的新取流", () async {
+    mode = "range206";
+    final legacy = File(
+      "${cacheDir.path}/${md5.convert(utf8.encode("test_track"))}.m4a",
+    );
+    await legacy.writeAsBytes([1, 2, 3]);
+    final response = await buildSource().request();
+    expect(await drain(response.stream), content);
+    expect(refererSeen, isTrue, reason: "旧缓存不能短路新取流");
+    expect(await legacy.exists(), isTrue, reason: "不主动删除旧文件");
+  });
+
   test("整曲顺序播完：落盘转正缓存，二次请求文件直读", () async {
     mode = "range206";
     final port = server.port;
@@ -139,9 +151,7 @@ void main() {
     final first = await source.request(0, null);
     await drain(first.stream); // 完整消费 → 转正
     await Future<void>.delayed(Duration.zero);
-    final cached = File(
-      "${cacheDir.path}/${md5.convert(utf8.encode("test_track"))}.m4a",
-    );
+    final cached = RangeProxySource.cacheFileFor("test_track");
     expect(await cached.exists(), isTrue, reason: "顺序流完整后应转正缓存");
     // 命中缓存：不再走网络（服务器关掉也能读）
     await server.close(force: true);

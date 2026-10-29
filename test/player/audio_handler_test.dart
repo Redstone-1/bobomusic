@@ -4,6 +4,12 @@ import "package:bobomusic/features/player/play_mode.dart";
 import "package:bobomusic/features/player/playback_audio_handler.dart";
 import "package:flutter_test/flutter_test.dart";
 
+class _SpeedCommands extends Fake implements SystemPlaybackCommands {
+  final values = <double>[];
+  @override
+  Future<void> systemSetSpeed(double speed) async => values.add(speed);
+}
+
 /// S4-A3：系统媒体会话快照映射（纯函数，不依赖 Android 平台通道）
 void main() {
   const track = Track(
@@ -20,6 +26,7 @@ void main() {
     PlayMode mode = PlayMode.listLoop,
     Duration duration = const Duration(seconds: 252),
     int queueIndex = 2,
+    double speed = 1.0,
   }) =>
       SystemPlaybackSnapshot(
         track: track,
@@ -29,6 +36,7 @@ void main() {
         duration: duration,
         mode: mode,
         queueIndex: queueIndex,
+        speed: speed,
       );
 
   test("MediaItem：曲目/歌手/时长/封面映射", () {
@@ -74,6 +82,23 @@ void main() {
     final paused = buildSystemPlaybackState(snap(playing: false));
     expect(paused.playing, isFalse);
     expect(paused.controls[1].action, MediaAction.play);
+  });
+
+  test("系统媒体会话使用实际倍速推算进度，并声明倍速命令", () {
+    final state = buildSystemPlaybackState(snap(speed: 1.75));
+    expect(state.speed, 1.75);
+    expect(state.updatePosition, const Duration(seconds: 30));
+    expect(state.systemActions, contains(MediaAction.setSpeed));
+  });
+
+  test("系统倍速命令转发给统一播放状态机", () async {
+    final commands = _SpeedCommands();
+    final handler = PlaybackAudioHandler()..commands = commands;
+    await handler.setSpeed(1.5);
+    expect(commands.values, [1.5]);
+    handler.detach();
+    await handler.setSpeed(2.0);
+    expect(commands.values, [1.5]);
   });
 
   test("PlaybackState：四模式 → repeat/shuffle 映射", () {
