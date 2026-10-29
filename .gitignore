@@ -46,3 +46,6 @@ app.*.map.json
 # 本地规划与设计稿，不入库
 /重构计划.md
 /prototype/
+# Widget Preview related
+.widget_preview/
+.reasonix

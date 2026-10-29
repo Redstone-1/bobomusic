@@ -7,7 +7,10 @@
       "request": "launch",
       "program": "lib/main.dart",
       "args": ["--dart-define=ENV=dev"],
-      "flutterMode": "debug"
+      "flutterMode": "debug",
+      "env": {
+        "FLUTTER_STORAGE_BASE_URL": "https://storage.flutter-io.cn"
+      }
     },
   ]
 }
