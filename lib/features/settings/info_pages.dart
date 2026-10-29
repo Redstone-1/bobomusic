@@ -36,13 +36,14 @@ class DeclarationPage extends StatelessWidget {
           icon: Icons.lock_outline,
           title: "数据与隐私",
           body: "无需登录。歌单、喜欢、歌词、播放队列和下载记录只保存在本机；"
-              "扫描本地音乐、导入文件、下载与播放控制时才会申请必要权限，不收集你的个人信息。",
+              "扫描本地音乐、导入文件和下载时才会申请必要的媒体 / 存储权限，不收集你的个人信息。",
         ),
         SizedBox(height: 12),
         _InfoSection(
           icon: Icons.copyright_outlined,
           title: "内容版权",
-          body: "在线音乐来自 B 站、酷我等音源，歌曲版权归原平台及版权方所有。"
+          body: "在线音乐来自 B 站、酷我、网易云、QQ 音乐、千千等音源，"
+              "歌曲版权归原平台及版权方所有。"
               "请支持正版，勿修改、复制、传播或售卖在线内容。",
         ),
         SizedBox(height: 12),
@@ -116,6 +117,13 @@ class ThanksPage extends StatelessWidget {
           title: "Riverpod",
           subtitle: "状态管理与依赖注入",
           url: "https://riverpod.dev",
+        ),
+        SizedBox(height: 12),
+        _LinkCard(
+          icon: Icons.article_outlined,
+          title: "markdown_widget",
+          subtitle: "帮助文档的 Markdown 渲染",
+          url: "https://github.com/asjqkkkk/markdown_widget",
         ),
         SizedBox(height: 20),
         _FootNote("也谢谢每一位使用啵啵音乐的你。"),
