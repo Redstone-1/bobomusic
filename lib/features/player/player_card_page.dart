@@ -25,6 +25,8 @@ import "lyric_provider.dart";
 import "open_bilibili.dart";
 import "play_mode.dart";
 import "playback_provider.dart";
+import "playback_speed.dart";
+import "playback_speed_sheet.dart";
 import "sleep_timer_sheet.dart";
 
 /// 全屏播放卡片（对齐原型 .player：歌词 + seek + 控制区 + 动作行）
@@ -478,7 +480,7 @@ class _QueueSectionHeader extends StatelessWidget {
   }
 }
 
-/// 动作行（喜欢 / 下载 / 稍后），位于进度条上方
+/// 动作行（喜欢 / 下载 / 稍后 / 倍速），位于进度条上方
 class _ActionsRow extends ConsumerWidget {
   final bool liked;
   final VoidCallback onToggleLike;
@@ -487,8 +489,6 @@ class _ActionsRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final t = AuroraTokens.of(context);
-    // 尺寸为光学校正值：下载/加号为细线条字形，同字号视觉偏小，放大补齐（所有者反馈）
     final actions = [
       (
         liked ? Icons.favorite : Icons.favorite_border,
@@ -508,7 +508,7 @@ class _ActionsRow extends ConsumerWidget {
         23.0,
       ),
       (
-        Icons.add_rounded,
+        Icons.playlist_play_rounded,
         "稍后",
         false,
         () {
@@ -520,39 +520,112 @@ class _ActionsRow extends ConsumerWidget {
           ref.invalidate(queueTracksProvider);
           AppToast.show(context, "已稍后播放 · 当前歌曲结束后播出");
         },
-        24.0,
+        // 列表播放字形留白较多，单独放大补齐可见尺寸，不改变对齐槽位。
+        30.0,
       ),
     ];
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(30, 4, 30, 4),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        // 四个等宽单元决定中心间距，图标大小仅做光学校正。
         children: [
           for (final (icon, label, active, onTap, size) in actions)
-            ScaleTap(
-              onTap: onTap,
-              child: Column(
-                children: [
-                  Icon(
-                    icon,
-                    size: size,
-                    color: active ? t.primary : t.fgDim,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                      color: active ? t.primary : t.fgDim,
-                    ),
-                  ),
-                ],
+            Expanded(
+              child: _PlayerActionButton(
+                icon: icon,
+                label: label,
+                active: active,
+                onTap: onTap,
+                iconSize: size,
               ),
             ),
+          const Expanded(child: _SpeedAction()),
         ],
       ),
+    );
+  }
+}
+
+/// 动作行共用图标槽与文字行高，避免新增入口再次带入不同的布局规则。
+class _PlayerActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  final double iconSize;
+  final String? semanticLabel;
+
+  const _PlayerActionButton({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
+    this.iconSize = 24,
+    this.semanticLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AuroraTokens.of(context);
+    final color = active ? tokens.primary : tokens.fgDim;
+    return Semantics(
+      button: true,
+      label: semanticLabel ?? label,
+      excludeSemantics: true,
+      onTap: onTap,
+      child: ScaleTap(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 56),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: Center(
+                    child: Icon(icon, size: iconSize, color: color),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    height: 1.2,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 倍速值独立订阅，不随高频进度重建整个动作行。
+class _SpeedAction extends ConsumerWidget {
+  const _SpeedAction();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final speed = ref.watch(playbackProvider.select((state) => state.speed));
+    final speedLabel = playbackSpeedLabel(speed);
+    return _PlayerActionButton(
+      key: const Key("player_speed"),
+      icon: Icons.speed_rounded,
+      label: "倍速",
+      active: speed != 1.0,
+      semanticLabel: "播放速度：$speedLabel",
+      onTap: () => showPlaybackSpeedSheet(context),
     );
   }
 }

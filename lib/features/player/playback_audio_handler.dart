@@ -11,6 +11,7 @@ abstract class SystemPlaybackCommands {
   Future<void> systemNext();
   Future<void> systemPrevious();
   Future<void> systemSeek(Duration position);
+  Future<void> systemSetSpeed(double speed);
   Future<void> systemStop();
 }
 
@@ -22,6 +23,7 @@ class SystemPlaybackSnapshot {
   final Duration position;
   final Duration duration;
   final PlayMode mode;
+  final double speed;
   final int queueIndex;
 
   const SystemPlaybackSnapshot({
@@ -31,6 +33,7 @@ class SystemPlaybackSnapshot {
     required this.position,
     required this.duration,
     required this.mode,
+    this.speed = 1.0,
     required this.queueIndex,
   });
 }
@@ -80,6 +83,9 @@ class PlaybackAudioHandler extends BaseAudioHandler {
 
   @override
   Future<void> stop() async => commands?.systemStop();
+
+  @override
+  Future<void> setSpeed(double speed) async => commands?.systemSetSpeed(speed);
 
   /// 状态机 → 系统会话（曲目/播放态/进度/模式）
   void sync(SystemPlaybackSnapshot snap) {
@@ -140,9 +146,9 @@ PlaybackState buildSystemPlaybackState(SystemPlaybackSnapshot snap) {
     playing: snap.playing,
     updatePosition: snap.position,
     bufferedPosition: snap.position,
-    speed: 1.0,
+    speed: snap.speed,
     queueIndex: snap.queueIndex >= 0 ? snap.queueIndex : null,
-    systemActions: const {MediaAction.seek},
+    systemActions: const {MediaAction.seek, MediaAction.setSpeed},
     repeatMode: switch (snap.mode) {
       PlayMode.singleLoop => AudioServiceRepeatMode.one,
       PlayMode.listLoop => AudioServiceRepeatMode.all,

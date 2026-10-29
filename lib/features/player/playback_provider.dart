@@ -17,6 +17,7 @@ import "audio_engine.dart";
 import "just_audio_engine.dart";
 import "play_mode.dart";
 import "playback_audio_handler.dart";
+import "playback_speed.dart";
 
 part "playback_provider.g.dart";
 
@@ -37,6 +38,7 @@ class PlaybackState {
   final Duration position;
   final Duration duration;
   final PlayMode mode;
+  final double speed;
 
   /// 定时关闭截止时间（null = 未开启；仅会话内有效，不持久化）
   final DateTime? sleepDeadline;
@@ -54,6 +56,7 @@ class PlaybackState {
     this.position = Duration.zero,
     this.duration = Duration.zero,
     this.mode = PlayMode.listLoop,
+    this.speed = 1.0,
     this.sleepDeadline,
     this.stopAfterTrack = false,
   });
@@ -68,6 +71,7 @@ class PlaybackState {
     Duration? position,
     Duration? duration,
     PlayMode? mode,
+    double? speed,
     DateTime? sleepDeadline,
     bool clearSleep = false,
     bool? stopAfterTrack,
@@ -83,6 +87,7 @@ class PlaybackState {
         position: position ?? this.position,
         duration: duration ?? this.duration,
         mode: mode ?? this.mode,
+        speed: speed ?? this.speed,
         sleepDeadline:
             clearSleep ? null : sleepDeadline ?? this.sleepDeadline,
         stopAfterTrack: stopAfterTrack ?? this.stopAfterTrack,
@@ -130,6 +135,9 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
   Timer? _sleepTimer;
   bool _restored = false;
 
+  // 串行应用速度：连续选择与装载后恢复共用队列，避免迟到的平台结果覆盖新设置。
+  Future<void> _speedOperation = Future<void>.value();
+
   /// 引擎当前已装载的曲目 id（null = 引擎无源：冷启动恢复后/装载失败后）。
   /// 播放键据此决定裸 play 还是完整装载（裸 play 在无源引擎上无声无进度）
   String? _loadedKey;
@@ -153,7 +161,9 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     // 通知栏/耳机键命令接到本状态机（Android 才有 handler）
     playbackAudioHandler?.commands = this;
     _restoreFromPrefs();
-    return const PlaybackState();
+    return PlaybackState(
+      speed: restorePlaybackSpeed(appPrefs.get(playbackSpeedPreferenceKey)),
+    );
   }
 
   // ---- 系统媒体会话命令（通知栏/耳机键） ----
@@ -176,6 +186,9 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
 
   @override
   Future<void> systemSeek(Duration position) => seek(position);
+
+  @override
+  Future<void> systemSetSpeed(double speed) => setSpeed(speed);
 
   @override
   Future<void> systemStop() async {
@@ -203,6 +216,7 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
         position: state.position,
         duration: state.duration,
         mode: state.mode,
+        speed: state.speed,
         queueIndex: state.queueIndex,
       ),
     );
@@ -277,6 +291,46 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     } catch (e) {
       print("暂停引擎失败：$e");
     }
+  }
+
+  Future<void> _queueSpeed(Future<void> Function() action) {
+    final operation = _speedOperation.then((_) => action());
+    // 调用方处理本次错误；队列保持可继续，失败不能堵死后续选择。
+    _speedOperation = operation.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {},
+    );
+    return operation;
+  }
+
+  /// 速度属于全局偏好，不改歌曲时间轴；平台确认成功后才更新显示和持久化。
+  Future<void> setSpeed(double speed) {
+    if (!isValidPlaybackSpeed(speed)) {
+      state = state.copyWith(error: "播放速度需在 0.5～2.0 倍之间");
+      return Future<void>.value();
+    }
+    return _queueSpeed(() async {
+      if (!ref.mounted || speed == state.speed) return;
+      try {
+        final engine = _engine;
+        if (engine != null) await engine.setSpeed(speed);
+      } catch (e) {
+        print("设置播放速度失败：$e");
+        if (ref.mounted) state = state.copyWith(error: "倍速设置失败，请重试");
+        return;
+      }
+      if (!ref.mounted) return;
+      state = state.copyWith(speed: speed);
+      _syncSystem(force: true);
+      try {
+        if (!await appPrefs.setDouble(playbackSpeedPreferenceKey, speed)) {
+          throw StateError("偏好写入被拒绝");
+        }
+      } catch (e) {
+        print("保存播放速度失败：$e");
+        if (ref.mounted) state = state.copyWith(error: "倍速已调整，但未能保存设置");
+      }
+    });
   }
 
   Future<void> seek(Duration position) async {
@@ -448,7 +502,12 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       final source = await _resolveSource(track, forceRefresh: _failedSourceKey == track.id);
       if (!ref.mounted) return;
       reachedEngine = true;
-      await _resolveEngine().load(source, initialPosition: initialPosition);
+      final engine = _resolveEngine();
+      await engine.load(source, initialPosition: initialPosition);
+      if (!ref.mounted) return;
+      await _queueSpeed(() async {
+        if (ref.mounted) await engine.setSpeed(state.speed);
+      });
       if (!ref.mounted) return;
       if (autoplay) await _resolveEngine().play();
       if (!ref.mounted) return;
@@ -487,6 +546,7 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       // 引擎未被动过（源解析失败）→ 旧曲仍在播，保留播放态与听感一致；
       // 引擎已被动过（load 阶段失败）→ 强制暂停态，播放键走完整装载恢复
       state = prev.copyWith(
+        speed: state.speed,
         buffering: false,
         error: friendly,
         playing: reachedEngine ? false : prev.playing,

@@ -175,6 +175,7 @@ class _MiniLyricLineState extends ConsumerState<_MiniLyricLine> {
       playbackProvider.select((s) => s.position.inMilliseconds),
     );
 
+    final speed = ref.watch(playbackProvider.select((state) => state.speed));
     final loaded = lyric.trackId == widget.track.id;
     var text = "歌词匹配中…";
     var active = -1;
@@ -223,6 +224,7 @@ class _MiniLyricLineState extends ConsumerState<_MiniLyricLine> {
           ),
           text: text,
           playing: widget.playing,
+          speed: speed,
           style: TextStyle(
             fontSize: 11.5,
             height: 1.2,
@@ -243,12 +245,14 @@ class _ScrollingLyricText extends StatefulWidget {
   final String text;
   final TextStyle style;
   final bool playing;
+  final double speed;
 
   const _ScrollingLyricText({
     super.key,
     required this.text,
     required this.style,
     required this.playing,
+    required this.speed,
   });
 
   @override
@@ -271,9 +275,19 @@ class _ScrollingLyricTextState extends State<_ScrollingLyricText>
   bool _overflow = false;
   double _distance = 0;
 
+  Duration _scrollDuration() => Duration(
+        milliseconds:
+            ((4000 + _distance * 18).clamp(4000, 12000) / widget.speed).round(),
+      );
+
   @override
   void didUpdateWidget(covariant _ScrollingLyricText oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.speed != widget.speed) {
+      // 调整已在运行的动画时保留滚动位置，并按新倍速重新计算剩余时长。
+      _controller.stop();
+      _controller.duration = _scrollDuration();
+    }
     _syncPlaying();
   }
 
@@ -319,9 +333,7 @@ class _ScrollingLyricTextState extends State<_ScrollingLyricText>
         _overflow = true;
         _distance = painter.width - maxWidth + _trailingPad;
         // 滚动时长随距离线性（约 55px/s），限制 4~12s
-        _controller.duration = Duration(
-          milliseconds: (4000 + _distance * 18).clamp(4000, 12000).round(),
-        );
+        _controller.duration = _scrollDuration();
         // build 内不动动画状态，帧末再启动/暂停（避免 build 期 setState）
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _syncPlaying();

@@ -77,6 +77,22 @@ class JustAudioEngine implements AudioEngine {
   Future<void> seek(Duration position) => _player.seek(position);
 
   @override
+  Future<void> setSpeed(double speed) async {
+    final previous = _player.speed;
+    try {
+      await _player.setSpeed(speed);
+    } catch (e) {
+      // just_audio 会先更新内部速度再调用平台，平台拒绝时须把内部值一并回滚。
+      try {
+        await _player.setSpeed(previous);
+      } catch (restoreError) {
+        print("恢复播放速度失败：$restoreError");
+      }
+      rethrow;
+    }
+  }
+
+  @override
   Future<void> stop() {
     _playGeneration++;
     return _player.stop();

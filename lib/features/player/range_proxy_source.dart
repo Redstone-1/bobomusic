@@ -95,9 +95,10 @@ class RangeProxySource extends StreamAudioSource {
   /// 缓存根目录（main 初始化为应用缓存目录下 bobomusic_audio；测试可指临时目录）
   static late Directory cacheDir;
 
-  /// 缓存文件（key=origin-id 的 md5 文件名；扩展名随音源，下载模块命中即复制）
+  /// 最高音质优先使用新缓存命名，避免旧低码率文件覆盖新请求；已下载文件不受影响。
+  /// 扩展名随音源，下载模块命中即复制。
   static File cacheFileFor(String key) =>
-      File("${cacheDir.path}/${md5.convert(utf8.encode(key))}"
+      File("${cacheDir.path}/${md5.convert(utf8.encode("$key|highest-v1"))}"
           "${key.startsWith("kuwo:") ? ".mp3" : ".m4a"}");
 
   /// 音频缓存占用（音频缓存 + 下载中的 .part，字节）

@@ -16,17 +16,20 @@ class KuwoApiError implements Exception {
 /// 酷我第二音源（D11）：免签名搜索 + anti.s 取流 + 官方 bang 榜单卡（getChartHits）
 /// 搜索优先新接口，失败/空结果回退 web_2013 老接口（两套响应结构都兼容）
 class KuwoApi implements OriginService {
-  final Dio _dio = Dio(
-    BaseOptions(
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 15),
-      headers: {
-        "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": "https://www.kuwo.cn/",
-      },
-    ),
-  );
+  final Dio _dio;
+
+  KuwoApi({Dio? dio})
+      : _dio = dio ??
+            Dio(BaseOptions(
+              connectTimeout: const Duration(seconds: 10),
+              receiveTimeout: const Duration(seconds: 15),
+            )) {
+    _dio.options.headers.addAll({
+      "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Referer": "https://www.kuwo.cn/",
+    });
+  }
 
   @override
   Future<SearchResponse> search(SearchParams params) async {
@@ -265,24 +268,27 @@ class KuwoApi implements OriginService {
     final rid = id.startsWith("kuwo:") ? id.substring("kuwo:".length) : id;
     if (rid.isEmpty) throw const KuwoApiError("酷我歌曲 ID 不正确");
     try {
-      final response = await _dio.get(
-        "https://antiserver.kuwo.cn/anti.s",
-        queryParameters: {
-          "type": "convert_url3",
-          "rid": rid,
-          "format": "mp3",
-          "response": "url",
-        },
-      );
-      final url = parseKuwoUrl(response.data);
-      if (url == null || url.isEmpty) {
-        throw const KuwoApiError("酷我未返回可用播放地址");
+      // 优先申请最高 MP3 档位；明确没有地址才回退原默认请求，服务错误不重复冲击接口。
+      for (final bitrate in const ["320kmp3", null]) {
+        final response = await _dio.get(
+          "https://antiserver.kuwo.cn/anti.s",
+          queryParameters: {
+            "type": "convert_url3",
+            "rid": rid,
+            "format": "mp3",
+            "response": "url",
+            if (bitrate != null) "br": bitrate,
+          },
+        );
+        final url = parseKuwoUrl(response.data);
+        if (url == null || url.isEmpty) continue;
+        return MusicUrl(
+          url: url,
+          headers: {"Referer": "https://www.kuwo.cn/"},
+          contentType: "audio/mpeg",
+        );
       }
-      return MusicUrl(
-        url: url,
-        headers: {"Referer": "https://www.kuwo.cn/"},
-        contentType: "audio/mpeg",
-      );
+      throw const KuwoApiError("酷我未返回可用播放地址");
     } on KuwoApiError {
       rethrow;
     } catch (e) {
