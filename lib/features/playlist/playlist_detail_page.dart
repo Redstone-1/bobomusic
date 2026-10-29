@@ -15,7 +15,6 @@ import "../../core/widgets/back_link.dart";
 import "../../core/widgets/empty_state.dart";
 import "../../core/widgets/glass_card.dart";
 import "../../core/widgets/page_header.dart";
-import "../../core/widgets/skeleton.dart";
 import "../../core/widgets/song_list_tile.dart";
 import "../../data/local_audio_importer.dart";
 import "../../data/models/playlist.dart";
@@ -287,18 +286,12 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
               builder: (context, snap) {
                 final loading =
                     snap.connectionState != ConnectionState.done || _scanning;
-                // 扫描/加载中一律骨架（列表清空进 loading，所有者 2026-10-27 定）：
-                // 点击刷新即刻有反馈，替代旧版"按钮禁用数秒无响应再弹 toast"
+                // 扫描/导入进行中让刷新图标持续旋转（即时反馈，按钮同时禁用）
                 if (_scanning) {
                   _spin.repeat();
                 } else {
                   _spin.stop();
                 }
-                final showSkeleton = loading;
-                // 骨架行数按视口算满（行高 60：封面 42 + 上下 padding 18），
-                // 固定 6 行在高屏上只占一半，观感差（所有者反馈）
-                final skRows =
-                    ((MediaQuery.sizeOf(context).height - 170) / 60).ceil();
                 final raw = snap.data;
                 // 本地页搜索过滤（歌名/歌手，忽略大小写）；其余模式原样展示。
                 // 空库覆盖层与「没有找到」空态都以 raw 为准，过滤只影响列表行
@@ -382,8 +375,6 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                               onCancel: () => _scanController?.cancel(),
                             ),
                           )
-                        else if (showSkeleton)
-                          SkeletonListView(rows: skRows < 6 ? 6 : skRows)
                         else if (snap.hasError)
                           EmptyState(
                             compact: true,
