@@ -5,9 +5,9 @@
 
 | 目录 | 覆盖范围 | 什么时候读 |
 | --- | --- | --- |
-| [player/](./player/README.md) | Playback 状态机、失败回退与重试、Range 续接、会话恢复、系统会话、歌词与缓存 | 改播放/切歌/队列/歌词/缓存/通知前 |
+| [player/](./player/README.md) | Playback 状态机、播放卡动作行、倍速偏好与滑杆、失败回退与重试、Range 续接、会话恢复、系统会话、歌词与缓存 | 改播放/倍速/切歌/队列/歌词/缓存/通知前 |
 | [plaza/](./plaza/README.md) | 五源搜索、过滤空页与原始页码分页、五张跨源榜单、B 站合集分流、键盘与空态布局 | 改广场/搜索/合集前 |
-| [origin_sdk/](./origin_sdk/README.md) | Bili/Kuwo/Netease/QQ/Qianqian、B 站风控恢复、QQ 音质降级、榜单能力、cid 自愈、三顺位歌词链 | 改搜索/取流/签名/榜单/歌词接口前 |
+| [origin_sdk/](./origin_sdk/README.md) | Bili/Kuwo/Netease/QQ/Qianqian、B 站风控恢复、最高可用音质优先与降级、榜单能力、cid 自愈、三顺位歌词链 | 改搜索/取流/签名/榜单/歌词接口前 |
 | [db/](./db/README.md) | bobomusic3.db 五表、四仓库约束、指纹同步、播放历史回滚 | 改歌单/收藏/队列/历史、本地扫描或 SQL 前 |
 | [bugs/](./bugs/README.md) | 缺陷记忆：现象 → 历史根因 → 修复 → 当前约束（MEM 编号） | 排查相似缺陷时 |
 
