@@ -476,19 +476,14 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final queryEmpty = _controller.text.trim().isEmpty;
     // 聚焦且无关键词且历史非空 → 展示历史面板（否则走空态覆盖层）
     final showHistory = _focus.hasFocus && queryEmpty && _history.isNotEmpty;
-    // 键盘在场：初始引导空态若全页居中会被压缩挤压，让位隐藏
-    final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
 
     return Scaffold(
       body: AuroraBackground(
         child: MiniBarPage(
           child: SafeArea(
-            // 外层 Stack：初始引导空态全页居中（原视觉），键盘弹出时隐藏——
-            // 在压缩空间里居中既难看也会压到头部（2026-10-29 真机反馈）。
-            // 头部（返回/搜索框/音源）固定；失败/无结果空态在内层只占头部以下
-            child: Stack(
-              children: [
-                Column(
+            // 头部（返回/搜索框/音源）固定；空态覆盖只占头部以下，键盘压缩时
+            // 由 FittedBox 等比缩小，不会遮挡头部（2026-10-29 真机反馈）
+            child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     // 头部固定区：返回 + 搜索框 + 音源选择
@@ -741,8 +736,21 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                               ],
                             ),
                           ),
-                          // 失败 / 无结果覆盖：只占头部以下，键盘在场也可读可点
-                          if (!queryEmpty && !_loading && _results.isEmpty)
+                          // 空态覆盖：初始引导（键盘在场同样显示，FittedBox 等比
+                          // 缩小不遮挡头部）/ 搜索失败 / 无结果（历史在场时让位）
+                          if (queryEmpty && !showHistory)
+                            const Positioned.fill(
+                              child: EmptyState(
+                                asset:
+                                    "assets/illustrations/empty_search.svg",
+                                title: "输入关键词开始搜索",
+                                subtitle:
+                                    "支持 B站 / 酷我 / 网易 / QQ / 千千 音源",
+                              ),
+                            )
+                          else if (!queryEmpty &&
+                              !_loading &&
+                              _results.isEmpty)
                             Positioned.fill(
                               child: _error != null
                                   ? EmptyState(
@@ -766,17 +774,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                       ),
                     ),
                   ],
-                ),
-                // 初始引导空态：全页居中（原视觉）；键盘弹出或历史面板在场时让位
-                if (queryEmpty && !showHistory && !keyboardOpen)
-                  const Positioned.fill(
-                    child: EmptyState(
-                      asset: "assets/illustrations/empty_search.svg",
-                      title: "输入关键词开始搜索",
-                      subtitle: "支持 B站 / 酷我 / 网易 / QQ / 千千 音源",
-                    ),
-                  ),
-              ],
             ),
           ),
         ),
