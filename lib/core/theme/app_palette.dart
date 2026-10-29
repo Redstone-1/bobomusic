@@ -4,7 +4,7 @@ import "package:flutter/painting.dart";
 
 import "aurora_tokens.dart";
 
-/// 8 种主题色原色；实际强调色统一从 buildAuroraTokens 读取。
+/// 10 种主题色原色；实际强调色统一从 buildAuroraTokens 读取。
 /// 青绿置首 = 默认主题色（所有者 2026-10-27 修订）
 enum AppThemeColor {
   natureGreen(0xFF2EC4B6, "青绿色"),
@@ -12,6 +12,8 @@ enum AppThemeColor {
   sunsetRed(0xFFFF3B6B, "晚霞红"),
   autumnOrange(0xFFFF8A3D, "秋日橙"),
   lemonYellow(0xFFFFD23F, "柠檬黄"),
+  leafGreen(0xFF71C75B, "草木绿"),
+  skyCyan(0xFF38BDF8, "晴空青"),
   oceanBlue(0xFF3D7BFF, "海洋蓝"),
   charmPurple(0xFF7B5CFF, "韵味紫"),
   sakuraPink(0xFFFF5DB1, "樱花粉");

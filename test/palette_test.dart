@@ -2,7 +2,7 @@ import "package:bobomusic/core/theme/app_palette.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
-// 8 色派生与 token 的纯逻辑校验（S1.2）
+// 10 色派生与 token 的纯逻辑校验（S1.2）
 void main() {
   group("hexToHsl", () {
     test("晚霞红解析出红色相与高饱和", () {
@@ -48,7 +48,7 @@ void main() {
       }
     });
 
-    test("全 8 色 × 明暗构建无异常且 lerp 端点正确", () {
+    test("全 10 色 × 明暗构建无异常且 lerp 端点正确", () {
       for (final seed in AppThemeColor.values) {
         final dark = buildAuroraTokens(seed, Brightness.dark);
         final light = buildAuroraTokens(seed, Brightness.light);

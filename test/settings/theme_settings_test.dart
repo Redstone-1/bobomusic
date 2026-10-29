@@ -78,7 +78,7 @@ void main() {
     expect(find.text("浅色"), findsNothing);
     expect(find.text("深色"), findsNothing);
     expect(find.text("主题色"), findsOneWidget);
-    expect(find.byType(ThemeSwatch), findsNWidgets(8));
+    expect(find.byType(ThemeSwatch), findsNWidgets(10));
     expect(
       find.descendant(
         of: find.byType(PageHeader),
@@ -168,7 +168,7 @@ void main() {
   testWidgets("320 窄屏放大字号时主题入口和色块无溢出", (tester) async {
     await _prepare(tester, width: 320, scale: 1.3);
     expect(find.byTooltip("切换为深色"), findsOneWidget);
-    expect(find.byType(ThemeSwatch), findsNWidgets(8));
+    expect(find.byType(ThemeSwatch), findsNWidgets(10));
     for (final color in AppThemeColor.values) {
       final rect = tester.getRect(_swatch(color));
       expect(rect.left, greaterThanOrEqualTo(20));

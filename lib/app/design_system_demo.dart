@@ -19,7 +19,7 @@ import "../core/widgets/theme_swatch.dart";
 import "../features/plaza/search_page.dart";
 import "../data/models/track.dart";
 
-/// S1.2/S1.3 设计系统验证页（S1.4 移除）：明暗 × 8 主题色实时切换 + 全部组件陈列
+/// S1.2/S1.3 设计系统验证页（S1.4 移除）：明暗 × 10 主题色实时切换 + 全部组件陈列
 class DesignSystemDemo extends ConsumerStatefulWidget {
   const DesignSystemDemo({super.key});
 
@@ -81,7 +81,7 @@ class _DesignSystemDemoState extends ConsumerState<DesignSystemDemo> {
                 ],
               ),
               const SizedBox(height: 18),
-              const _SectionTitle("主题色 · 8 色"),
+              _SectionTitle("主题色 · ${AppThemeColor.values.length} 色"),
               Wrap(
                 spacing: 12,
                 runSpacing: 12,

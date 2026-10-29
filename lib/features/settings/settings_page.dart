@@ -73,16 +73,26 @@ class SettingsPage extends ConsumerWidget {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-                child: Wrap(
+                child: Column(
                   spacing: 12,
-                  runSpacing: 12,
                   children: [
-                    for (final c in AppThemeColor.values)
-                      ThemeSwatch(
-                        color: c,
-                        selected: c == seed,
-                        onTap: () =>
-                            ref.read(appThemeSeedProvider.notifier).select(c),
+                    // 每行五色并均分剩余宽度，让两行圆点上下对齐、两端铺满。
+                    for (var start = 0;
+                        start < AppThemeColor.values.length;
+                        start += 5)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          for (final c
+                              in AppThemeColor.values.skip(start).take(5))
+                            ThemeSwatch(
+                              color: c,
+                              selected: c == seed,
+                              onTap: () => ref
+                                  .read(appThemeSeedProvider.notifier)
+                                  .select(c),
+                            ),
+                        ],
                       ),
                   ],
                 ),
