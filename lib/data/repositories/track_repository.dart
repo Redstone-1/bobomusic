@@ -193,6 +193,15 @@ class TrackRepository {
     );
   }
 
+  /// 清空我喜欢（清除全部 liked_at 标记；曲目本身与歌单/队列不受影响）
+  Future<void> clearLiked() async {
+    await db.update(
+      "tracks",
+      {"liked_at": null},
+      where: "liked_at IS NOT NULL",
+    );
+  }
+
   /// 写入歌词（应用新歌词时校准偏移归零）
   Future<void> updateLyric(String id, String lyric, {int offsetMs = 0}) async {
     await db.update(

@@ -121,4 +121,46 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets("喜欢列表：清除全部需二次确认，确认后清空且曲目保留", (WidgetTester tester) async {
+    final app = await buildTestApp(
+      seedTracks: const [
+        {"id": "bili:1_a", "name": "晴天", "author": "周杰伦"},
+        {"id": "bili:2_b", "name": "夜曲", "author": "周杰伦"},
+      ],
+    );
+    await TrackRepository().setLiked("bili:1_a", true);
+    await TrackRepository().setLiked("bili:2_b", true);
+
+    await tester.pumpWidget(app);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    await tester.tap(find.text("我喜欢的音乐"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // 弹确认 → 取消不删
+    await tester.tap(find.byIcon(Icons.delete_sweep_outlined));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text("清除全部喜欢的歌曲？"), findsOneWidget);
+    await tester.tap(find.text("取消"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text("晴天"), findsOneWidget);
+
+    // 再开确认 → 清除后列表清空，曲目数据保留
+    await tester.tap(find.byIcon(Icons.delete_sweep_outlined));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text("清除"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text("已清空喜欢列表"), findsOneWidget);
+    expect(find.text("晴天"), findsNothing);
+    final liked = await TrackRepository().likedTracks();
+    expect(liked, isEmpty);
+    expect(await TrackRepository().getById("bili:1_a"), isNotNull);
+  });
 }

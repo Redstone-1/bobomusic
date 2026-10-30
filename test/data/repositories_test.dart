@@ -60,6 +60,19 @@ void main() {
       expect((await tracks.likedTracks()).map((e) => e.id).toList(), ["b"]);
     });
 
+    test("clearLiked 清空全部喜欢标记，曲目本身保留", () async {
+      await tracks.upsert(t("a"));
+      await tracks.upsert(t("b"));
+      await tracks.upsert(t("c"));
+      await tracks.setLiked("a", true);
+      await tracks.setLiked("b", true);
+      await tracks.clearLiked();
+      expect(await tracks.likedTracks(), isEmpty);
+      // 曲目行只解除标记，不被删除
+      expect(await tracks.getById("a"), isNotNull);
+      expect(await tracks.getById("c"), isNotNull);
+    });
+
     test("下载登记与歌词更新", () async {
       await tracks.upsert(t("local:x"));
       await tracks.markDownloaded("local:x", "/sdcard/a.m4a");

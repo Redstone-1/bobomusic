@@ -34,6 +34,7 @@ import "playlists_provider.dart"
         likedCountProvider,
         localCountProvider,
         playlistDetailTracksProvider,
+        playlistsProvider,
         queueEntriesProvider;
 import "scan_failures_dialog.dart";
 
@@ -112,7 +113,9 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
     return PlaylistRepository().items(widget.playlist.id);
   }
 
-  void _retry() {
+  /// 重读本页列表（错误重试 / 移出歌单等库内变更后共用；
+  /// 本地/喜欢走 family provider 自动重读，不走这里）
+  void _reload() {
     setState(() {
       _reloadSeq++;
       _future = _load();
@@ -187,6 +190,54 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
 
   /// 删除本地曲目：默认仅移出曲库（外键级联清队列/歌单引用），
   /// 复选框勾选时先删源文件再移出曲库；文件删不掉则保留曲目，可重试
+  /// 移出歌单（自定义歌单行内操作）：删除关联后重读本页列表并刷新目录计数；
+  /// 曲目本身保留，可再次通过「加入歌单」加回。
+  /// 自定义歌单与注入模式共用局部 Future（不走 family provider），须手动重载
+  Future<void> _removeFromPlaylist(Track track) async {
+    await PlaylistRepository().removeTrack(widget.playlist.id, track.id);
+    if (!mounted) return;
+    ref.invalidate(playlistsProvider);
+    _reload();
+    AppToast.show(context, "已移出歌单");
+  }
+
+  /// 清除全部喜欢：二次确认后清空 liked_at 标记（曲目本身与歌单不受影响）
+  Future<void> _clearLiked() async {
+    final t = AuroraTokens.of(context);
+    final ok = await AppDialog.show<bool>(
+      context,
+      title: "清除全部喜欢的歌曲？",
+      content: Text(
+        "将移除喜欢列表内全部歌曲；歌曲本身、歌单与播放队列不受影响。",
+        style: TextStyle(fontSize: 13.5, height: 1.5, color: t.fgDim),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: Text("取消", style: TextStyle(color: t.fgDim)),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: Text(
+            "清除",
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.error,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+    if (ok != true || !mounted) return;
+    await TrackRepository().clearLiked();
+    if (!mounted) return;
+    setState(_likedOverrides.clear);
+    ref.invalidate(likedCountProvider);
+    // 喜欢列表走 family provider：失效后自动重读为空态
+    ref.invalidate(playlistDetailTracksProvider);
+    AppToast.show(context, "已清空喜欢列表");
+  }
+
   Future<void> _deleteLocalTrack(Track track) async {
     final t = AuroraTokens.of(context);
     final deleteFile = ValueNotifier<bool>(false);
@@ -350,16 +401,31 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                   ],
                                 )
                               : _isLiked
-                                  ? GlassIconButton(
-                                      icon: const Icon(Icons.refresh),
-                                      // 喜欢列表走 family provider：失效后自动重读；
-                                      // 顺带清心形本地覆盖
-                                      onTap: () {
-                                        _likedOverrides.clear();
-                                        ref.invalidate(
-                                          playlistDetailTracksProvider,
-                                        );
-                                      },
+                                  ? Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        GlassIconButton(
+                                          // 清除全部：二次确认后清空喜欢标记
+                                          icon: const Icon(
+                                            Icons.delete_sweep_outlined,
+                                          ),
+                                          onTap: raw == null || raw.isEmpty
+                                              ? null
+                                              : _clearLiked,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        GlassIconButton(
+                                          icon: const Icon(Icons.refresh),
+                                          // 喜欢列表走 family provider：失效后自动重读；
+                                          // 顺带清心形本地覆盖
+                                          onTap: () {
+                                            _likedOverrides.clear();
+                                            ref.invalidate(
+                                              playlistDetailTracksProvider,
+                                            );
+                                          },
+                                        ),
+                                      ],
                                     )
                                   : null,
                         ),
@@ -390,7 +456,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                             emoji: "⚠️",
                             title: "加载失败",
                             subtitle: "点击重试",
-                            action: GlassChip(label: "重试", onTap: _retry),
+                            action: GlassChip(label: "重试", onTap: _reload),
                           )
                         else if (query.isNotEmpty &&
                             raw != null &&
@@ -484,6 +550,16 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                           }
                                         },
                                       ),
+                                      // 仅自定义歌单提供移出（我喜欢用行内心形取消，
+                                      // 本地音乐用删除，合集详情无持久化）
+                                      if (widget.playlist.type ==
+                                        PlaylistType.custom)
+                                        AppSheetAction(
+                                          icon: Icons.playlist_remove,
+                                          label: "移出歌单",
+                                          onTap: () =>
+                                              _removeFromPlaylist(track),
+                                        ),
                                       if (track.origin != OriginType.local)
                                         AppSheetAction(
                                           icon: Icons.download_outlined,

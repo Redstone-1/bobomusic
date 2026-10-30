@@ -130,7 +130,7 @@ class _DesignSystemDemoState extends ConsumerState<DesignSystemDemo> {
               const SizedBox(height: 14),
               const Row(
                 children: [
-                  GlassChip(label: "播放全部", selected: true),
+                  GlassChip(label: "已选中", selected: true),
                   SizedBox(width: 9),
                   GlassChip(label: "加入待播放"),
                 ],
