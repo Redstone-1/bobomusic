@@ -236,7 +236,7 @@ class PlaylistPage extends ConsumerWidget {
         AppSheetAction(
           icon: Icons.library_add_outlined,
           label: "加入歌单",
-          onTap: () => showAddToPlaylistSheet(context, ref, track),
+          onTap: () => showAddToPlaylistSheet(context, ref, [track]),
         ),
         AppSheetAction(
           icon: Icons.queue_music_outlined,

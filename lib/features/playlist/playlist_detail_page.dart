@@ -39,7 +39,7 @@ import "scan_failures_dialog.dart";
 
 /// 歌单详情（对齐原型 renderSub/playlist）
 /// 两种数据模式：
-/// - [tracks] 非空：内存注入（热门歌手/合集等外部数据源）
+/// - [tracks] 非空：内存注入（合集等外部数据源）
 /// - [tracks] 为空：按 [playlist] 从库取数（我喜欢 → likedTracks；本地 → localTracks；自定义 → items）
 /// [trackCover] = 曲目行统一封面（如歌手歌单共用歌手写真），空则各行用自身封面
 class PlaylistDetailPage extends ConsumerStatefulWidget {
@@ -457,7 +457,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                         onTap: () => showAddToPlaylistSheet(
                                           context,
                                           ref,
-                                          track,
+                                          [track],
                                         ),
                                       ),
                                       AppSheetAction(

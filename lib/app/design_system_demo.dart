@@ -16,7 +16,6 @@ import "../core/widgets/glass_card.dart";
 import "../core/widgets/song_list_tile.dart";
 import "../core/widgets/skeleton.dart";
 import "../core/widgets/theme_swatch.dart";
-import "../features/plaza/search_page.dart";
 import "../data/models/track.dart";
 
 /// S1.2/S1.3 设计系统验证页（S1.4 移除）：明暗 × 10 主题色实时切换 + 全部组件陈列
@@ -264,24 +263,6 @@ class _DesignSystemDemoState extends ConsumerState<DesignSystemDemo> {
                 ),
               ),
               const Divider(height: 1),
-              GlassCard(
-                padding: const EdgeInsets.all(8),
-                child: SizedBox(
-                  height: 190,
-                  child: EmptyState(
-                    compact: true,
-                    asset: "assets/illustrations/empty_collection.svg",
-                    title: "还没有收藏合集",
-                    subtitle: "在搜索中收藏喜欢的合集",
-                    action: GlassChip(
-                      label: "去搜索",
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const SearchPage()),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
               GlassCard(
                 padding: const EdgeInsets.all(8),
                 child: const SizedBox(

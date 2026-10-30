@@ -11,7 +11,7 @@ late Database appDb;
 Future<void> initAppDatabase({String? path}) async {
   appDb = await openDatabase(
     path ?? "bobomusic3.db",
-    version: 3,
+    version: 4,
     singleInstance: false,
     onConfigure: (db) async {
       // 级联删除依赖外键开关（sqflite 默认关闭）
@@ -24,6 +24,7 @@ Future<void> initAppDatabase({String? path}) async {
 
 /// v1 → v2：歌词时间校准偏移（S4.4 手动校准需要跨启动保留）
 /// v2 → v3：播放历史（歌单页「最近播放」，track_id 主键保证同曲只留最新一条）
+/// v3 → v4：清除收藏合集歌单（功能已删除，playlist_items 由外键级联清理）
 Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
   if (oldVersion < 2) {
     await db.execute(
@@ -37,6 +38,12 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
         played_at INTEGER NOT NULL
       )
     """);
+  }
+  if (oldVersion < 4) {
+    await db.execute(
+      "DELETE FROM playlists WHERE type = ?",
+      ["collection"],
+    );
   }
 }
 

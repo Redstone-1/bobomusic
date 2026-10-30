@@ -10,11 +10,12 @@ import "../../data/repositories/track_repository.dart";
 import "playlists_provider.dart"
     show playlistDetailTracksProvider, playlistsProvider;
 
-/// 「加入歌单」面板：普通歌单禁止重复（§3.4-6），成功/重复都有提示
+/// 「加入歌单」面板：普通歌单禁止重复（§3.4-6）；[tracks] 支持多首批量
+/// （合集整包加入），成功/重复都有提示
 Future<void> showAddToPlaylistSheet(
   BuildContext context,
   WidgetRef ref,
-  Track track,
+  List<Track> tracks,
 ) async {
   final playlists = (await PlaylistRepository().list())
       .where((p) => p.type == PlaylistType.custom)
@@ -33,16 +34,29 @@ Future<void> showAddToPlaylistSheet(
           icon: Icons.queue_music_outlined,
           label: playlist.name,
           onTap: () async {
-            await TrackRepository().upsert(track);
-            final added =
-                await PlaylistRepository().addTrack(playlist.id, track.id);
+            var added = 0;
+            for (final track in tracks) {
+              await TrackRepository().upsert(track);
+              if (await PlaylistRepository().addTrack(playlist.id, track.id)) {
+                added++;
+              }
+            }
             ref.invalidate(playlistsProvider);
             ref.invalidate(playlistDetailTracksProvider);
             if (context.mounted) {
-              AppToast.show(
-                context,
-                added ? "已加入「${playlist.name}」" : "已在歌单中",
-              );
+              final total = tracks.length;
+              final String message;
+              if (added == 0) {
+                message = "歌曲均已在歌单中";
+              } else if (total == 1) {
+                message = "已加入「${playlist.name}」";
+              } else if (added == total) {
+                message = "已加入「${playlist.name}」$total 首";
+              } else {
+                message = "已加入「${playlist.name}」$added 首，"
+                    "${total - added} 首已在歌单中";
+              }
+              AppToast.show(context, message);
             }
           },
         ),

@@ -198,7 +198,7 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
         AppSheetAction(
           icon: Icons.library_add_outlined,
           label: "加入歌单",
-          onTap: () => showAddToPlaylistSheet(context, ref, track),
+          onTap: () => showAddToPlaylistSheet(context, ref, [track]),
         ),
         AppSheetAction(
           icon: Icons.delete_outline,

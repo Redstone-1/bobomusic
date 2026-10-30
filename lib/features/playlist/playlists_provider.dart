@@ -65,10 +65,3 @@ Future<List<Track>> playlistDetailTracks(Ref ref, Playlist playlist) async {
   if (playlist.id == "builtin:local") return TrackRepository().localTracks();
   return PlaylistRepository().items(playlist.id);
 }
-
-/// 收藏合集（广场合集区；收藏动作落库后 invalidate）
-@riverpod
-Future<List<Playlist>> collections(Ref ref) async =>
-    (await PlaylistRepository().list())
-        .where((p) => p.type == PlaylistType.collection)
-        .toList();

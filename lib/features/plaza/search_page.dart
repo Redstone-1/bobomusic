@@ -19,7 +19,6 @@ import "../../core/widgets/song_list_tile.dart";
 import "../../data/models/track.dart" hide OriginType;
 import "../../data/mappers.dart";
 import "../../data/origin_service.dart";
-import "../../data/repositories/playlist_repository.dart";
 import "../../data/repositories/queue_repository.dart";
 import "../../data/repositories/track_repository.dart";
 import "../../origin_sdk/bili/bili_api.dart";
@@ -34,7 +33,6 @@ import "../player/player_card_page.dart";
 import "../playlist/playlist_detail_page.dart";
 import "../playlist/playlists_provider.dart"
     show
-        collectionsProvider,
         likedCountProvider,
         playlistDetailTracksProvider,
         queueEntriesProvider;
@@ -259,11 +257,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     PlayerCardPage.start(context, ref, track, queue: singles);
   }
 
-  /// 单曲点击（对齐 2.7.0：列表卡片不带合集标记，必须先拉 view 详情再分流——
-  /// 多P 与合集进次级列表，真单曲才播放，从根上消灭"拿合集 id 取流必失败"）：
-  /// ① detail 是多P（orderName）→ 合集列表页；
-  /// ② detail.isSeasonDisplay（属于 UGC 合集）→ searchSeason 拉成员 → 合集列表页；
-  /// ③ 真单曲 → 播放
+  /// 单曲点击（对齐 2.7.0：列表卡片不带合集标记，先拉 view 详情再分流）：
+  /// 多P 与合集进次级列表，真单曲才播放，从根上消灭"拿合集 id 取流必失败"
   Future<void> _playWithResolve(SearchItem item) async {
     // 酷我无合集概念，单曲直接播（view/searchSeason 均为 B 站接口）
     if (item.origin != OriginType.bili) {
@@ -272,32 +267,14 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     }
     AppLoading.show(msg: "加载中…");
     try {
-      final detail = await biliApi.searchDetail(item.id);
-      if (!mounted) return;
-      final embedded = musicItemsToTracks(detail.musicList ?? const []);
-      if (detail.type == SearchType.orderName && embedded.length > 1) {
-        _pushCollectionDetail(detail.name, detail.cover, item.id, embedded);
-        return;
+      final r = await _resolveBiliEntry(item);
+      if (!mounted || r == null) return;
+      if (r.isCollection) {
+        _pushCollectionDetail(r.name, r.cover, r.id, r.tracks);
+      } else {
+        // 真单曲 → 播放：用详情条目（id 带 cid；搜索条目无 cid，取流会再补一次 view）
+        _playTrack(r.single!);
       }
-      final season = detail.ugcSeason;
-      if (season != null && biliApi is BiliApi) {
-        // searchSeason 是 B 站特有接口，不在 OriginService 抽象上
-        final collection = await (biliApi as BiliApi)
-            .searchSeason(season.mid, season.seasonId);
-        if (!mounted) return;
-        final tracks = musicItemsToTracks(collection?.musicList ?? const []);
-        if (tracks.isNotEmpty) {
-          _pushCollectionDetail(
-            collection!.meta.name,
-            collection.meta.cover,
-            "${collection.meta.seasonId}",
-            tracks,
-          );
-          return;
-        }
-      }
-      // 真单曲 → 播放：用详情条目（id 带 cid；搜索条目无 cid，取流会再补一次 view）
-      _playTrack(detail.toTrack());
     } catch (_) {
       if (mounted) AppToast.show(context, "加载失败，请重试");
     } finally {
@@ -305,27 +282,44 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     }
   }
 
-  // 多P歌单 → 收藏为合集（type=collection，曲目逐个入库）
-  Future<void> _collectOrder(SearchItem item) async {
-    AppLoading.show(msg: "收藏合集中…");
-    try {
-      final tracks = await _fetchCollectionTracks(item);
-      final repo = PlaylistRepository();
-      final pl = await repo.create(item.name, type: PlaylistType.collection);
-      for (final t in tracks) {
-        await TrackRepository().upsert(t);
-        await repo.addTrack(pl.id, t.id);
-      }
-      ref.invalidate(collectionsProvider);
-      if (mounted) AppToast.show(context, "已收藏「${item.name}」");
-    } catch (_) {
-      if (mounted) AppToast.show(context, "收藏失败：同名歌单已存在");
-    } finally {
-      AppLoading.dismiss();
+  /// B 站条目详情分流（点击与喜欢的共同权威判定，MEM-1：搜索卡片数据
+  /// 不足以判定合集，必须经 view 详情）：
+  /// ① 详情多P（orderName 且内嵌曲目 > 1）→ 合集（内嵌曲目即成员）；
+  /// ② 详情带 ugcSeason → searchSeason 拉成员 → 合集（成员为空视作真单曲，
+  ///    与既有点击行为一致）；
+  /// ③ 其余 → 真单曲（详情条目，id 带 cid）
+  Future<_BiliResolve?> _resolveBiliEntry(SearchItem item) async {
+    final detail = await biliApi.searchDetail(item.id);
+    if (!mounted) return null;
+    final embedded = musicItemsToTracks(detail.musicList ?? const []);
+    if (detail.type == SearchType.orderName && embedded.length > 1) {
+      return _BiliResolve.collection(
+        name: detail.name,
+        cover: detail.cover,
+        id: item.id,
+        tracks: embedded,
+      );
     }
+    final season = detail.ugcSeason;
+    if (season != null && biliApi is BiliApi) {
+      // searchSeason 是 B 站特有接口，不在 OriginService 抽象上
+      final collection =
+          await (biliApi as BiliApi).searchSeason(season.mid, season.seasonId);
+      if (!mounted) return null;
+      final tracks = musicItemsToTracks(collection?.musicList ?? const []);
+      if (tracks.isNotEmpty) {
+        return _BiliResolve.collection(
+          name: collection!.meta.name,
+          cover: collection.meta.cover,
+          id: "${collection.meta.seasonId}",
+          tracks: tracks,
+        );
+      }
+    }
+    return _BiliResolve.single(detail.toTrack());
   }
 
-  /// 取合集全部曲目（收藏/整包操作共用）：
+  /// 取合集全部曲目（整包操作共用）：
   /// 内嵌多P曲目直用；UGC 合集（season）走 searchSeason；其余合集条目拉 view 详情
   Future<List<Track>> _fetchCollectionTracks(SearchItem item) async {
     final embedded = musicItemsToTracks(item.musicList ?? const []);
@@ -341,15 +335,56 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     return musicItemsToTracks(view.musicList ?? const []);
   }
 
-  /// 快速收藏（搜索行心形）：先入库再写喜欢；列表不刷新，本地覆盖即时变红/变空
-  Future<void> _toggleLike(Track track, bool liked) async {
+  /// 搜索行心形喜欢入口：取消喜欢与非 B 站直接写库；B 站一律先走与点击
+  /// 相同的详情分流再处置（MEM-1 实证：卡片数据永远不足以判定合集）——
+  /// 真单曲按详情曲目（带 cid）入库喜欢；合集不是歌（所有者 2026-10-30 定）：
+  /// 加载成员后把合集全部歌曲加入喜欢
+  Future<void> _toggleLike(SearchItem item, Track track, bool liked) async {
+    if (!liked || item.origin != OriginType.bili) {
+      await _likeTrack(track, liked);
+      return;
+    }
+    AppLoading.show(msg: "加载中…");
+    try {
+      final r = await _resolveBiliEntry(item);
+      if (!mounted || r == null) return;
+      if (r.isCollection) {
+        await _likeCollection(r, cardId: track.id);
+      } else {
+        // 入库详情曲目（带 cid）；行内心形仍按卡片 id 覆盖变色
+        await _likeTrack(r.single!, liked, heartKey: track.id);
+      }
+    } catch (_) {
+      if (mounted) AppToast.show(context, "加载失败，请重试");
+    } finally {
+      AppLoading.dismiss();
+    }
+  }
+
+  /// 合集喜欢：全部成员入库并标记喜欢（所有者 2026-10-30 定），
+  /// 行内心形按卡片 id 即时变红
+  Future<void> _likeCollection(_BiliResolve r, {required String cardId}) async {
+    for (final track in r.tracks) {
+      await TrackRepository().upsert(track);
+      await TrackRepository().setLiked(track.id, true);
+    }
+    if (!mounted) return;
+    ref.invalidate(likedCountProvider);
+    ref.invalidate(playlistDetailTracksProvider);
+    setState(() => _likedOverrides[cardId] = true);
+    AppToast.show(context, "已将合集 ${r.tracks.length} 首歌曲加入喜欢");
+  }
+
+  /// 直接写库喜欢：入库 → setLiked → 同步计数/喜欢列表，行内覆盖即时变色；
+  /// [heartKey] 供"入库 id 与卡片 id 不同"的分流场景对齐行内心形
+  Future<void> _likeTrack(Track track, bool liked, {String? heartKey}) async {
     await TrackRepository().upsert(track);
     await TrackRepository().setLiked(track.id, liked);
     if (!mounted) return;
     ref.invalidate(likedCountProvider);
     // 喜欢列表可能正在后台：失效共享数据源，返回列表即同步
     ref.invalidate(playlistDetailTracksProvider);
-    setState(() => _likedOverrides[track.id] = liked);
+    setState(() => _likedOverrides[heartKey ?? track.id] = liked);
   }
 
   /// 合集点击：进次级列表页（合集不是可播单曲，直接播必失败——所有者明确）。
@@ -397,20 +432,52 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     );
   }
 
-  /// 合集更多菜单：先取全曲目再展示整包操作（全部加入待播放 / 全部下载）
-  Future<void> _showCollectionActions(SearchItem item) async {
-    AppLoading.show(msg: "加载合集中…");
-    List<Track> tracks;
+  /// 单曲/合集结果更多菜单：B 站一律先详情分流（卡片类型不可信，MEM-1）——
+  /// 合集先取全曲目走整包操作，真单曲用详情曲目走单曲操作
+  Future<void> _showEntryActions(SearchItem item, Track track) async {
+    if (item.origin != OriginType.bili) {
+      _showTrackActions(track);
+      return;
+    }
+    AppLoading.show(msg: "加载中…");
+    final _BiliResolve? r;
     try {
-      tracks = await _fetchCollectionTracks(item);
+      r = await _resolveBiliEntry(item);
     } catch (_) {
-      if (mounted) AppToast.show(context, "合集加载失败，请重试");
+      if (mounted) AppToast.show(context, "加载失败，请重试");
       return;
     } finally {
       AppLoading.dismiss();
     }
+    if (!mounted || r == null) return;
+    if (r.isCollection) {
+      await _showCollectionActions(item, tracks: r.tracks);
+    } else {
+      _showTrackActions(r.single!);
+    }
+  }
+
+  /// 合集更多菜单：先取全曲目再展示整包操作（全部加入待播放 / 全部加入歌单 /
+  /// 全部下载）；[tracks] 传入时免重复拉取（更多菜单分流已取过）
+  Future<void> _showCollectionActions(
+    SearchItem item, {
+    List<Track>? tracks,
+  }) async {
+    if (tracks == null) {
+      AppLoading.show(msg: "加载合集中…");
+      try {
+        tracks = await _fetchCollectionTracks(item);
+      } catch (_) {
+        if (mounted) AppToast.show(context, "合集加载失败，请重试");
+        return;
+      } finally {
+        AppLoading.dismiss();
+      }
+    }
     if (!mounted) return;
-    if (tracks.isEmpty) {
+    // 上方空判断分支内必有赋值或返回，此处 tracks 已被提升为非空
+    final members = tracks;
+    if (members.isEmpty) {
       AppToast.show(context, "该合集暂无曲目");
       return;
     }
@@ -420,9 +487,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       actions: [
         AppSheetAction(
           icon: Icons.playlist_add,
-          label: "全部加入待播放（${tracks.length} 首）",
+          label: "全部加入待播放（${members.length} 首）",
           onTap: () async {
-            for (final track in tracks) {
+            for (final track in members) {
               await TrackRepository().upsert(track);
               await QueueRepository().append(track.id);
             }
@@ -430,23 +497,29 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             if (mounted) AppToast.show(context, "已加入播放队列");
           },
         ),
+        // 整包加入歌单：成员列表已加载，选目标歌单后逐首入库（§3.4-6 去重）
+        AppSheetAction(
+          icon: Icons.library_add_outlined,
+          label: "全部加入歌单（${members.length} 首）",
+          onTap: () => showAddToPlaylistSheet(context, ref, members),
+        ),
         AppSheetAction(
           icon: Icons.download_outlined,
-          label: "全部下载（${tracks.length} 首）",
+          label: "全部下载（${members.length} 首）",
           onTap: () {
             // 走下载任务层静默启动，统一一条汇总提示（逐曲 toast 会刷屏）
             final notifier = ref.read(downloadTasksProvider.notifier);
-            for (final track in tracks) {
+            for (final track in members) {
               notifier.start(track);
             }
-            if (mounted) AppToast.show(context, "已开始下载 ${tracks.length} 首");
+            if (mounted) AppToast.show(context, "已开始下载 ${members.length} 首");
           },
         ),
       ],
     );
   }
 
-  /// 单曲结果操作：插队/追加（播放队列，§3.4-5）
+  /// 单曲结果操作：加入歌单 / 插队 / 追加（播放队列，§3.4-5）
   void _showTrackActions(Track track) {
     AppSheet.show(
       context,
@@ -455,7 +528,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         AppSheetAction(
           icon: Icons.library_add_outlined,
           label: "加入歌单",
-          onTap: () => showAddToPlaylistSheet(context, ref, track),
+          onTap: () => showAddToPlaylistSheet(context, ref, [track]),
         ),
         AppSheetAction(
           icon: Icons.queue_music_outlined,
@@ -696,7 +769,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                                     _OrderResultTile(
                                       item: item,
                                       onTap: () => _openCollection(item),
-                                      onCollect: () => _collectOrder(item),
                                       onMorePressed: () =>
                                           _showCollectionActions(item),
                                     )
@@ -715,12 +787,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                                                   _likedIds.contains(
                                                       track.id),
                                           onHeartTap: (liked) =>
-                                              _toggleLike(track, liked),
+                                              _toggleLike(item, track, liked),
                                           // 对齐 2.7.0：点击先拉详情分流
                                           onTap: () =>
                                               _playWithResolve(item),
                                           onMorePressed: () =>
-                                              _showTrackActions(track),
+                                              _showEntryActions(item, track),
                                         );
                                       },
                                     ),
@@ -825,17 +897,15 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     );
   }
 }
-/// 合集/多P 歌单结果行：封面 + 标题（带合集 tag）+ 收藏 + 更多（整包操作）
+/// 合集/多P 歌单结果行：封面 + 标题（带合集 tag）+ 更多（整包操作）
 class _OrderResultTile extends StatelessWidget {
   final SearchItem item;
   final VoidCallback onTap;
-  final VoidCallback onCollect;
   final VoidCallback? onMorePressed;
 
   const _OrderResultTile({
     required this.item,
     required this.onTap,
-    required this.onCollect,
     this.onMorePressed,
   });
 
@@ -911,13 +981,6 @@ class _OrderResultTile extends StatelessWidget {
               ),
             ),
             IconButton(
-              onPressed: onCollect,
-              icon: const Icon(Icons.bookmark_add_outlined),
-              iconSize: 20,
-              color: t.primary,
-              tooltip: "收藏为歌单",
-            ),
-            IconButton(
               onPressed: onMorePressed,
               icon: const Icon(Icons.more_vert),
               iconSize: 18,
@@ -932,5 +995,33 @@ class _OrderResultTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// B 站详情分流结果：合集（成员曲目与列表页元信息）或真单曲（详情条目，
+/// id 带 cid）。点击播放与心形喜欢共用同一判定结果
+class _BiliResolve {
+  final bool isCollection;
+  final Track? single;
+
+  /// 合集成员曲目与列表页元信息（单曲时为空/空串）
+  final List<Track> tracks;
+  final String name;
+  final String cover;
+  final String id;
+
+  const _BiliResolve.single(this.single)
+      : isCollection = false,
+        tracks = const [],
+        name = "",
+        cover = "",
+        id = "";
+
+  const _BiliResolve.collection({
+    required this.name,
+    required this.cover,
+    required this.id,
+    required this.tracks,
+  })  : isCollection = true,
+        single = null;
 }
 
