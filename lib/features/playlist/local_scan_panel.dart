@@ -268,49 +268,54 @@ class _LocalScanPanelState extends State<LocalScanPanel>
               const SizedBox(height: 10),
               _PhaseBar(controller: controller),
               const SizedBox(height: 6),
-              Row(
-                children: [
-                  Icon(Icons.folder_outlined, size: 14, color: t.fgMute),
-                  const SizedBox(width: 5),
-                  Expanded(
-                    child: Text(
-                      "${controller.indexed} 首已入库",
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11, color: t.fgMute),
-                    ),
-                  ),
-                  if (controller.canCancel)
-                    TextButton(
-                      onPressed: widget.onCancel,
-                      style: TextButton.styleFrom(
-                        foregroundColor: t.primary,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 2,
-                        ),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              // 底部状态行固定高度：「取消扫描」(TextButton)、「正在写入曲库…」、
+              // 「完成」三态行高一致，避免雷达区（Expanded）被突然撑高/压低
+              SizedBox(
+                height: 24,
+                child: Row(
+                  children: [
+                    Icon(Icons.folder_outlined, size: 14, color: t.fgMute),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        "${controller.indexed} 首已入库",
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 11, color: t.fgMute),
                       ),
-                      child: const Text(
-                        "取消扫描",
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    )
-                  else if (controller.phase == LocalScanPhase.syncing)
-                    Text(
-                      "正在写入曲库…",
-                      style: TextStyle(fontSize: 11, color: t.fgDim),
-                    )
-                  else if (controller.phase == LocalScanPhase.done)
-                    Text(
-                      "完成",
-                      style: TextStyle(fontSize: 11, color: t.primary),
                     ),
-                ],
+                    if (controller.canCancel)
+                      TextButton(
+                        onPressed: widget.onCancel,
+                        style: TextButton.styleFrom(
+                          foregroundColor: t.primary,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 2,
+                          ),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text(
+                          "取消扫描",
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      )
+                    else if (controller.phase == LocalScanPhase.syncing)
+                      Text(
+                        "正在写入曲库…",
+                        style: TextStyle(fontSize: 11, color: t.fgDim),
+                      )
+                    else if (controller.phase == LocalScanPhase.done)
+                      Text(
+                        "完成",
+                        style: TextStyle(fontSize: 11, color: t.primary),
+                      ),
+                  ],
+                ),
               ),
             ],
           ),
