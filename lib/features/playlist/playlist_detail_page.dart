@@ -327,9 +327,8 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                         ),
                         PageHeader(
                           title: widget.playlist.name,
-                          subtitle: "播放全部",
                           // 头部按钮：本地 = 重新扫描；我喜欢 = 刷新（重读库）；
-                          // 其余保持随机占位
+                          // 其余类型（自定义歌单/合集）不放占位按钮
                           trailing: _isLocal
                               ? Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -362,10 +361,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                         );
                                       },
                                     )
-                                  : GlassIconButton(
-                                      icon: const Icon(Icons.shuffle_outlined),
-                                      onTap: () {},
-                                    ),
+                                  : null,
                         ),
                         // 喜欢列表有内容时同样提供搜索（空库交给空态引导）
                         if (_isLocal ||
