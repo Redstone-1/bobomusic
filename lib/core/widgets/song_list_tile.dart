@@ -91,42 +91,52 @@ class SongListTile extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             // 尾部操作固定顺序：播放波浪 → 喜欢 → 更多（播放中波浪在心形左侧，
-            // 所有者 2026-10-27 定）。更多按钮始终保留；用它做固定宽度锚点，
-            // 避免喜欢/波浪互相挤压。
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (playing) ...[
-                  const EqBars(),
-                  const SizedBox(width: 8),
-                ],
-                if (likedHeart != null) ...[
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: onHeartTap == null
-                        ? null
-                        : () => onHeartTap!(!likedHeart!),
-                    child: Icon(
-                      likedHeart! ? Icons.favorite : Icons.favorite_border,
-                      size: 18,
+            // 所有者 2026-10-27 定）。心形与更多用同规格 32 触控盒（图标 18 居中，
+            // 两侧各内缩 7）相邻排布，图标视觉间距恒定 14；波浪后补 7 的间隙，
+            // 与右侧首个图标的视觉间距同为 14，保证各组合下间距一致。
+            // 尾部整块用不透明手势吸收盲区点击（图标间隙、图标边缘），只消费不透传，
+            // 避免想点喜欢/更多时落空触发整行 InkWell 误播歌曲。
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {},
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (playing) ...[
+                    const EqBars(),
+                    const SizedBox(width: 7),
+                  ],
+                  if (likedHeart != null)
+                    IconButton(
+                      onPressed: onHeartTap == null
+                          ? null
+                          : () => onHeartTap!(!likedHeart!),
+                      icon: Icon(
+                        likedHeart! ? Icons.favorite : Icons.favorite_border,
+                      ),
+                      iconSize: 18,
                       color: likedHeart! ? t.primary : t.fgMute,
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 32,
+                      ),
+                      padding: EdgeInsets.zero,
                     ),
+                  IconButton(
+                    onPressed: onMorePressed,
+                    icon: const Icon(Icons.more_vert),
+                    iconSize: 18,
+                    color: t.fgMute,
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                    padding: EdgeInsets.zero,
                   ),
-                  const SizedBox(width: 8),
                 ],
-                IconButton(
-                  onPressed: onMorePressed,
-                  icon: const Icon(Icons.more_vert),
-                  iconSize: 18,
-                  color: t.fgMute,
-                  visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints(
-                    minWidth: 32,
-                    minHeight: 32,
-                  ),
-                  padding: EdgeInsets.zero,
-                ),
-              ],
+              ),
             ),
           ],
         ),
