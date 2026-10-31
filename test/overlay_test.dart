@@ -152,8 +152,9 @@ void main() {
     expect(find.text("正在加载…"), findsNothing);
   });
 
-  testWidgets("进度条：点按与拖动回调正确比例", (WidgetTester tester) async {
+  testWidgets("进度条：点按提交、拖动松手才提交一次", (WidgetTester tester) async {
     double? tapped;
+    double? previewed;
     await tester.pumpWidget(
       MaterialApp(
         // 必须用带 AuroraTokens 扩展的主题（AuroraTokens.of 依赖注入）
@@ -165,6 +166,7 @@ void main() {
               child: AuroraProgressBar(
                 value: 0,
                 onChanged: (v) => tapped = v,
+                onPreviewChanged: (v) => previewed = v,
               ),
             ),
           ),
@@ -174,7 +176,10 @@ void main() {
 
     await tester.tap(find.byType(AuroraProgressBar));
     expect(tapped, closeTo(0.5, 0.05));
+    tapped = null;
 
+    // 拖动过程只上报预览、不提交（引擎旧位置会把拖点拉回的根因），
+    // 松手按最后拖动位置提交一次
     final center = tester.getCenter(find.byType(AuroraProgressBar));
     final gesture = await tester.startGesture(center);
     await gesture.moveBy(const Offset(50, 0));
@@ -182,7 +187,10 @@ void main() {
     // 手势竞技场胜出的首个 move 事件只触发 dragStart，补一次 move 触发 dragUpdate
     await gesture.moveBy(const Offset(1, 0));
     await tester.pump();
-    expect(tapped, closeTo(0.755, 0.05));
+    expect(previewed, closeTo(0.755, 0.05));
+    expect(tapped, isNull);
     await gesture.up();
+    await tester.pump();
+    expect(tapped, closeTo(0.755, 0.05));
   });
 }

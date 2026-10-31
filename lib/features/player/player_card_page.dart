@@ -302,16 +302,42 @@ class _MetaRow extends StatelessWidget {
 /// 进度条 + 下方时间（高频进度只重建本行；seek 按真时长换算秒）
 /// 所有者 2026-10-28 定：时间移到条下方两侧，条独占整行且粗细 4→3——
 /// 数字不再与条挤占宽度（此前的行内槽位方案曾把数字挤到换行）
-class _SeekRow extends ConsumerWidget {
+/// 拖拽三段式（2026-10-31）：拖动中只上报预览、不发 seek；松手提交一次，
+/// 提交后钉住预览值直到引擎位置追上（或 2s 超时），旧位置事件不再把进度拉回
+class _SeekRow extends ConsumerStatefulWidget {
   final int durationSec;
 
   const _SeekRow({required this.durationSec});
 
+  @override
+  ConsumerState<_SeekRow> createState() => _SeekRowState();
+}
+
+class _SeekRowState extends ConsumerState<_SeekRow> {
   static String _fmt(int sec) =>
       "${sec ~/ 60}:${(sec % 60).toString().padLeft(2, "0")}";
 
+  /// 拖拽预览值（含提交后的钉住期）：期间显示它而非引擎位置
+  double? _preview;
+  DateTime _previewDeadline = DateTime.fromMillisecondsSinceEpoch(0);
+
+  void _onPreview(double fraction) {
+    setState(() {
+      _preview = fraction;
+      _previewDeadline = DateTime.now().add(const Duration(seconds: 2));
+    });
+  }
+
+  void _commit(double fraction) {
+    // 先钉住预览再 seek：引擎完成前的 position 事件不会把进度条拉回旧值
+    _onPreview(fraction);
+    ref.read(playbackProvider.notifier).seek(
+          Duration(seconds: (widget.durationSec * fraction).round()),
+        );
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final t = AuroraTokens.of(context);
     final (positionMs, durationMs) = ref.watch(
       playbackProvider.select(
@@ -320,6 +346,18 @@ class _SeekRow extends ConsumerWidget {
     );
     final progress =
         durationMs > 0 ? (positionMs / durationMs).clamp(0.0, 1.0) : 0.0;
+    var shown = progress;
+    final preview = _preview;
+    if (preview != null) {
+      // 引擎位置追上预览（留 1.1s 容差覆盖秒级取整）或超时后交还真实进度
+      final caught =
+          durationMs <= 0 || (progress - preview).abs() * durationMs < 1100;
+      if (caught || DateTime.now().isAfter(_previewDeadline)) {
+        _preview = null;
+      } else {
+        shown = preview;
+      }
+    }
     final labelStyle = TextStyle(
       fontSize: 11,
       fontWeight: FontWeight.w600,
@@ -334,18 +372,18 @@ class _SeekRow extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           AuroraProgressBar(
-            value: progress,
+            value: shown,
             height: 3,
-            onChanged: (fraction) => ref
-                .read(playbackProvider.notifier)
-                .seek(Duration(seconds: (durationSec * fraction).round())),
+            onPreviewChanged: _onPreview,
+            onChanged: _commit,
           ),
-          const SizedBox(height: 8),
+          // 进度条自带 28px 命中区（视觉轨道仍 3px 居中），不再另留 8px 间距
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(_fmt((durationSec * progress).round()), style: labelStyle),
-              Text(_fmt(durationSec), style: labelStyle),
+              Text(_fmt((widget.durationSec * shown).round()),
+                  style: labelStyle),
+              Text(_fmt(widget.durationSec), style: labelStyle),
             ],
           ),
         ],

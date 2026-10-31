@@ -87,8 +87,11 @@ Future<void> openBiliSearch(WidgetTester tester, StubBili stub) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 500));
   await tester.enterText(find.byType(TextField), "夜");
-  await tester.pump(const Duration(milliseconds: 400));
   await tester.pump();
+  // 2026-10-31 起搜索改回车触发：模拟键盘搜索键提交
+  await tester.testTextInput.receiveAction(TextInputAction.search);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 100));
 }
 
 void main() {

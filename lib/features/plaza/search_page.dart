@@ -1,5 +1,3 @@
-import "dart:async";
-
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -64,7 +62,8 @@ List<String> updateSearchHistory(List<String> history, String keyword) {
 }
 
 /// 搜索页（S3.3 接真搜索）：单曲/多P歌单结果 + 三态
-/// 防抖 300ms；结果不入库（点歌/收藏动作才落库）
+/// 回车/键盘搜索键才触发请求（2026-10-31 定：输入过程不自动搜，减少各平台风控压力）；
+/// 结果不入库（点歌/收藏动作才落库）
 class SearchPage extends ConsumerStatefulWidget {
   const SearchPage({super.key});
 
@@ -75,7 +74,6 @@ class SearchPage extends ConsumerStatefulWidget {
 class _SearchPageState extends ConsumerState<SearchPage> {
   final _controller = TextEditingController();
   final _focus = FocusNode();
-  Timer? _debounce;
   bool _loading = false;
   Object? _error;
   String _query = "";
@@ -118,7 +116,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   @override
   void dispose() {
-    _debounce?.cancel();
     _focus.dispose();
     _controller.dispose();
     super.dispose();
@@ -130,29 +127,30 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     appPrefs.setStringList(_kSearchHistory, history);
   }
 
+  /// 输入过程不触发搜索（回车/搜索键才请求）；仅处理清空：
+  /// 立即清结果并作废在途请求
   void _onChanged() {
-    final q = _controller.text.trim();
-    if (q == _query) return;
-    _query = q;
-    // 输入变化立即作废旧请求，不能等防抖结束后才隔离旧词响应。
+    if (_controller.text.trim().isNotEmpty) return;
     _seq++;
-    _debounce?.cancel();
-    if (q.isEmpty) {
-      setState(() {
-        _results = [];
-        _loading = false;
-        _loadingMore = false;
-        _error = null;
-      });
-      return;
-    }
-    _debounce = Timer(const Duration(milliseconds: 300), () => _search(q));
+    setState(() {
+      _query = "";
+      _results = [];
+      _loading = false;
+      _loadingMore = false;
+      _error = null;
+    });
+  }
+
+  /// 回车/键盘搜索键触发：一次明确动作一次请求
+  void _submitSearch() {
+    final q = _controller.text.trim();
+    if (q.isEmpty) return;
+    _search(q);
   }
 
   /// 切换音源：清空旧结果并立即重搜当前关键词（默认 B 站）
   void _setSource(_SearchSource source) {
     if (_source == source) return;
-    _debounce?.cancel();
     _seq++;
     setState(() {
       _source = source;
@@ -174,6 +172,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   Future<void> _search(String q) async {
     final seq = ++_seq;
+    // _query 只随已提交的搜索更新：翻页与空态判断都以最后一次请求为准
+    _query = q;
     setState(() {
       _loading = true;
       _error = null;
@@ -595,6 +595,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                             controller: _controller,
                             focusNode: _focus,
                             autofocus: true,
+                            // 回车/搜索键才发起请求（输入过程不自动搜）
+                            textInputAction: TextInputAction.search,
+                            onSubmitted: (_) => _submitSearch(),
                             onChanged: (_) => _onChanged(),
                             style: TextStyle(fontSize: 14.5, color: t.fg),
                             decoration: InputDecoration(
@@ -699,8 +702,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                                     InkWell(
                                       borderRadius: BorderRadius.circular(
                                           t.radiusMd),
-                                      onTap: () =>
-                                          _controller.text = keyword,
+                                      onTap: () {
+                                        _controller.text = keyword;
+                                        _submitSearch();
+                                      },
                                       child: Padding(
                                         padding:
                                             const EdgeInsets.symmetric(

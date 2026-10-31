@@ -59,8 +59,9 @@ void main() {
             hasMore: false));
     await openSearch(tester, api);
     await tester.enterText(find.byType(TextField), "歌");
-    await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pump(const Duration(milliseconds: 100));
     expect(find.text("继续查找"), findsOneWidget);
     await tester.tap(find.text("继续查找"));
     await tester.pump();
@@ -80,8 +81,9 @@ void main() {
         ));
     await openSearch(tester, api);
     await tester.enterText(find.byType(TextField), "歌");
-    await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pump(const Duration(milliseconds: 100));
     expect(find.text("加载更多"), findsOneWidget);
     await tester.tap(find.text("加载更多"));
     await tester.pump();
@@ -98,13 +100,34 @@ void main() {
         ));
     await openSearch(tester, api);
     await tester.enterText(find.byType(TextField), "歌");
-    await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pump(const Duration(milliseconds: 100));
     expect(find.text("搜索失败"), findsOneWidget);
     expect(find.text("QQ 音乐请求被限制，请稍后重试"), findsOneWidget);
   });
 
-  testWidgets("输入变化即使还在防抖也作废旧响应", (tester) async {
+  testWidgets("输入过程不自动搜索，回车才发请求", (tester) async {
+    final api = PagedQq((params) async => QqSearchResponse(
+          current: 1,
+          total: 1,
+          pageSize: 30,
+          data: [song("回车结果")],
+          hasMore: false,
+        ));
+    await openSearch(tester, api);
+    await tester.enterText(find.byType(TextField), "歌");
+    await tester.pump(const Duration(milliseconds: 400));
+    // 输入停顿不产生任何请求（2026-10-31 移除防抖自动搜）
+    expect(api.requests, isEmpty);
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(api.requests.map((p) => p.keyword), ["歌"]);
+    expect(find.text("回车结果"), findsOneWidget);
+  });
+
+  testWidgets("在途旧响应不得覆盖新提交的搜索", (tester) async {
     final pending = Completer<SearchResponse>();
     final api = PagedQq((params) => params.keyword == "旧"
         ? pending.future
@@ -116,15 +139,18 @@ void main() {
             hasMore: false)));
     await openSearch(tester, api);
     await tester.enterText(find.byType(TextField), "旧");
-    await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pump();
+    // 输入变化本身不发请求也不作废在途响应；新提交的搜索才隔离旧词
     await tester.enterText(find.byType(TextField), "新");
+    await tester.pump();
+    await tester.testTextInput.receiveAction(TextInputAction.search);
     pending.complete(BiliSearchResponse(
         current: 1, total: 1, pageSize: 30, data: [song("不应出现的旧结果")]));
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text("不应出现的旧结果"), findsNothing);
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
     expect(find.text("新结果"), findsOneWidget);
   });
 }

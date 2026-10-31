@@ -409,12 +409,69 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     });
   }
 
+  // seek 串行化（同 _queueSpeed 模式）：迟到的旧 seek 不得覆盖新位置；
+  // 连点/快速拖拽只保留最后一次平台调用（真机"拖不动/回弹"的根因之一）
+  Future<void> _seekOperation = Future<void>.value();
+  int _seekSeq = 0;
+
+  /// 缓冲/装载期的 seek 会被引擎 loading 态静默丢弃：先挂起，装载完成后补发
+  Duration? _pendingSeek;
+
+  Future<void> _queueSeek(Future<void> Function() action) {
+    final operation = _seekOperation.then((_) => action());
+    // 调用方处理本次错误；队列保持可继续，失败不能堵死后续 seek。
+    _seekOperation = operation.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {},
+    );
+    return operation;
+  }
+
   Future<void> seek(Duration position) async {
-    await _resolveEngine().seek(position);
-    state = state.copyWith(position: position);
-    _snapshot();
-    _persistDebounced();
-    _syncSystem(force: true);
+    final track = state.track;
+    if (track == null) return;
+    // 切歌缓冲期：挂起待装载完成后补发（此时直发会被引擎 loading 态丢弃）
+    if (state.buffering) {
+      _pendingSeek = position;
+      return;
+    }
+    final trackId = track.id;
+    // 引擎无当前曲（冷启动恢复/装载失败后）：seek 会打到无源引擎被静默丢弃，
+    // 走完整装载并从目标进度续播（对齐 toggle 的恢复链路）
+    if (_loadedKey != trackId) {
+      final queue = state.queue.isEmpty ? [track] : state.queue;
+      final index = state.queueIndex >= 0 ? state.queueIndex : 0;
+      await _load(queue, index,
+          autoplay: state.playing, initialPosition: position);
+      return;
+    }
+    final target = ++_seekSeq;
+    await _queueSeek(() async {
+      // 已有更新的 seek / 已切歌 / 进入缓冲：本次调用直接跳过
+      if (!ref.mounted ||
+          target != _seekSeq ||
+          state.buffering ||
+          state.track?.id != trackId) {
+        return;
+      }
+      try {
+        await _resolveEngine().seek(position);
+      } catch (e) {
+        print("seek 失败：$e");
+        return;
+      }
+      if (!ref.mounted ||
+          target != _seekSeq ||
+          state.buffering ||
+          state.track?.id != trackId) {
+        return;
+      }
+      state = state.copyWith(position: position);
+      _snapshot();
+      _persistDebounced();
+      // 通知栏位置同步有 1s 节流兜底（position 事件会再触发），不再 force 全量推送
+      _syncSystem();
+    });
   }
 
   /// 循环切换播放模式（UI toast 文案取 label）
@@ -553,6 +610,8 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     Duration? initialPosition,
   }) async {
     final track = queue[index];
+    // 新装载会话作废缓冲期挂起的 seek（那是给上一曲目标位置的）
+    _pendingSeek = null;
     // 记住旧会话：装载失败时整态回退（曲目/队列/进度），
     // 不能让"点了但没播出来"的曲占住播放条/播放卡（真机反馈的严重问题）
     final prev = state;
@@ -599,6 +658,10 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       // 切歌后立即写新曲与队列快照：与 queue 表 takeFirst 的删除时序对齐，
       // 避免播放器启动后、下个去抖周期前被杀导致“已出队但快照仍是旧曲”
       _persistNow();
+      // 缓冲期挂起的 seek 在装载完成后补发（引擎 loading 态会静默丢弃 seek）
+      final pending = _pendingSeek;
+      _pendingSeek = null;
+      if (pending != null) await seek(pending);
       return true;
     } catch (e) {
       // 回滚乐观写入的播放历史（recorded=false 时没写过，无需回滚）

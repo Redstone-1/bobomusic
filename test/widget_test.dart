@@ -316,8 +316,9 @@ void main() {
 
     // 过滤：夜 → 单曲（夜航西飞）+ 多P歌单（华语民谣·深夜电台）双分区
     await tester.enterText(find.byType(TextField), "夜");
-    await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pump(const Duration(milliseconds: 100));
     expect(find.text("夜航西飞"), findsOneWidget);
     expect(find.text("华语民谣·深夜电台"), findsOneWidget);
     expect(find.text("没有找到相关的内容"), findsNothing);
@@ -337,8 +338,9 @@ void main() {
     await tester.tap(find.text("酷我"));
     await tester.pump();
     await tester.enterText(find.byType(TextField), "夜");
-    await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text("酷我夜曲"), findsOneWidget);
     expect(find.text("夜航西飞"), findsNothing); // 切到酷我后不走 B 站
