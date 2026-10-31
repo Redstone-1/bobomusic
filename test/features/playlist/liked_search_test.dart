@@ -122,6 +122,38 @@ void main() {
     );
   });
 
+  testWidgets("喜欢列表：刷新重读期间列表保留旧行，不塌缩", (WidgetTester tester) async {
+    final app = await buildTestApp(
+      seedTracks: const [
+        {"id": "bili:1_a", "name": "晴天", "author": "周杰伦"},
+      ],
+    );
+    await TrackRepository().setLiked("bili:1_a", true);
+
+    await tester.pumpWidget(app);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    await tester.tap(find.text("我喜欢的音乐"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text("晴天"), findsOneWidget);
+
+    // 头部刷新失效数据源：重读进行中旧行仍显示
+    // （此前 FutureBuilder + .future 会在重读时打回 waiting，整页塌缩回顶）
+    await tester.tap(find.byIcon(Icons.refresh));
+    await tester.pump();
+    expect(
+      find.descendant(of: find.byType(SongListTile), matching: find.text("晴天")),
+      findsOneWidget,
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(
+      find.descendant(of: find.byType(SongListTile), matching: find.text("晴天")),
+      findsOneWidget,
+    );
+  });
+
   testWidgets("喜欢列表：清除全部需二次确认，确认后清空且曲目保留", (WidgetTester tester) async {
     final app = await buildTestApp(
       seedTracks: const [

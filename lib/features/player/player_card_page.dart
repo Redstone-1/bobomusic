@@ -13,6 +13,7 @@ import "../../core/widgets/empty_state.dart";
 import "../../core/widgets/origin_tag.dart";
 import "../../core/widgets/scale_tap.dart";
 import "../../data/models/track.dart";
+import "../../data/models/playlist.dart" show kBuiltinLikedPlaylist;
 import "../../data/repositories/queue_repository.dart";
 import "../../data/repositories/track_repository.dart";
 import "../../origin_sdk/lyric/lrc.dart";
@@ -113,8 +114,8 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
     await TrackRepository().setLiked(track.id, newLiked);
     if (!mounted) return;
     ref.invalidate(likedCountProvider);
-    // 喜欢列表可能正在后台：失效共享数据源，返回列表即同步
-    ref.invalidate(playlistDetailTracksProvider);
+    // 喜欢列表可能正在后台：精确失效喜欢详情数据源，返回列表即同步
+    ref.invalidate(playlistDetailTracksProvider(kBuiltinLikedPlaylist));
     // 写库期间可能已切歌：只更新当前曲目的覆盖
     if (ref.read(playbackProvider).track?.id == track.id) {
       setState(() => _likedOverride = newLiked);

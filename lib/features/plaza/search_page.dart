@@ -370,7 +370,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     }
     if (!mounted) return;
     ref.invalidate(likedCountProvider);
-    ref.invalidate(playlistDetailTracksProvider);
+    ref.invalidate(playlistDetailTracksProvider(kBuiltinLikedPlaylist));
     setState(() => _likedOverrides[cardId] = true);
     AppToast.show(context, "已将合集 ${r.tracks.length} 首歌曲加入喜欢");
   }
@@ -382,8 +382,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     await TrackRepository().setLiked(track.id, liked);
     if (!mounted) return;
     ref.invalidate(likedCountProvider);
-    // 喜欢列表可能正在后台：失效共享数据源，返回列表即同步
-    ref.invalidate(playlistDetailTracksProvider);
+    // 喜欢列表可能正在后台：精确失效喜欢详情数据源，返回列表即同步
+    ref.invalidate(playlistDetailTracksProvider(kBuiltinLikedPlaylist));
     setState(() => _likedOverrides[heartKey ?? track.id] = liked);
   }
 

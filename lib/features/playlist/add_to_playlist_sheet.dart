@@ -42,7 +42,8 @@ Future<void> showAddToPlaylistSheet(
               }
             }
             ref.invalidate(playlistsProvider);
-            ref.invalidate(playlistDetailTracksProvider);
+            // 精确失效目标歌单详情数据源，不殃及打开中的其它详情页
+            ref.invalidate(playlistDetailTracksProvider(playlist));
             if (context.mounted) {
               final total = tracks.length;
               final String message;

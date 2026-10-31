@@ -142,7 +142,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
         await Future<void>.delayed(const Duration(milliseconds: 600));
         if (!mounted) return;
       }
-      ref.invalidate(playlistDetailTracksProvider);
+      ref.invalidate(playlistDetailTracksProvider(widget.playlist));
       ref.invalidate(localCountProvider);
       if (controller.cancelled) return;
       if (controller.phase == LocalScanPhase.failed) {
@@ -176,7 +176,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
       for (final track in imported) {
         await TrackRepository().upsert(track);
       }
-      ref.invalidate(playlistDetailTracksProvider);
+      ref.invalidate(playlistDetailTracksProvider(widget.playlist));
       ref.invalidate(localCountProvider);
       if (!mounted) return;
       AppToast.show(context, "已导入 ${imported.length} 首");
@@ -234,7 +234,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
     setState(_likedOverrides.clear);
     ref.invalidate(likedCountProvider);
     // 喜欢列表走 family provider：失效后自动重读为空态
-    ref.invalidate(playlistDetailTracksProvider);
+    ref.invalidate(playlistDetailTracksProvider(widget.playlist));
     AppToast.show(context, "已清空喜欢列表");
   }
 
@@ -304,7 +304,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
     }
     try {
       await TrackRepository().delete(track.id);
-      ref.invalidate(playlistDetailTracksProvider);
+      ref.invalidate(playlistDetailTracksProvider(widget.playlist));
       ref.invalidate(localCountProvider);
       ref.invalidate(queueEntriesProvider);
       if (!mounted) return;
@@ -321,10 +321,11 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
     final currentTrackId = ref.watch(
       playbackProvider.select((s) => s.track?.id),
     );
-    // 本地/喜欢走 family provider（扫描、播放卡/搜索页点喜欢 invalidate 后
-    // 列表自动重读）；库/注入模式沿用局部 Future（重试走 _reloadSeq）
-    final detailFuture = (_isLocal || _isLiked)
-        ? ref.watch(playlistDetailTracksProvider(widget.playlist).future)
+    // 本地/喜欢走 family provider AsyncValue：失效重读期间 .value 保留
+    // 旧数据，列表不塌缩回顶（FutureBuilder + .future 会在重读时打回 waiting）；
+    // 库/注入模式沿用局部 Future（重试走 _reloadSeq）
+    final detailAsync = (_isLocal || _isLiked)
+        ? ref.watch(playlistDetailTracksProvider(widget.playlist))
         : null;
     // 外部改变喜欢状态后 provider 重读：清掉行内心形覆盖，统一以库态为准
     if (_isLiked) {
@@ -337,21 +338,34 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
       body: AuroraBackground(
         child: MiniBarPage(
           child: SafeArea(
-            // FutureBuilder 外提：空态走覆盖层（Stack + Positioned.fill 居中于
-            // 列表可视区且不占列表流，透明区域点击穿透到 BackLink/头部按钮）
+            // FutureBuilder 仅承载库/注入模式；本地/喜欢以 AsyncValue 为准
+            // （重读保留旧数据），provider 模式下 FutureBuilder 不参与展示。
+            // 空态走覆盖层（Stack + Positioned.fill 居中于列表可视区且不占
+            // 列表流，透明区域点击穿透到 BackLink/头部按钮）
             child: FutureBuilder(
               key: ValueKey(_reloadSeq),
-              future: detailFuture ?? _future,
+              future: _future,
               builder: (context, snap) {
-                final loading =
-                    snap.connectionState != ConnectionState.done || _scanning;
+                final List<Track>? raw;
+                final bool hasError;
+                final bool pending;
+                if (detailAsync != null) {
+                  // 重读期间 .value 保留上一次数据，列表不塌缩
+                  raw = detailAsync.value;
+                  hasError = detailAsync.hasError;
+                  pending = raw == null && !hasError;
+                } else {
+                  raw = snap.data;
+                  hasError = snap.hasError;
+                  pending = snap.connectionState != ConnectionState.done;
+                }
+                final loading = pending || _scanning;
                 // 扫描/导入进行中让刷新图标持续旋转（即时反馈，按钮同时禁用）
                 if (_scanning) {
                   _spin.repeat();
                 } else {
                   _spin.stop();
                 }
-                final raw = snap.data;
                 // 本地/喜欢列表搜索过滤（歌名/歌手，忽略大小写）；其余模式原样展示。
                 // 空库覆盖层与「没有找到」空态都以 raw 为准，过滤只影响列表行
                 final searchable = _isLocal || _isLiked;
@@ -365,8 +379,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                           )
                           .toList()
                     : raw;
-                final empty =
-                    !loading && !snap.hasError && raw != null && raw.isEmpty;
+                final empty = !loading && !hasError && raw != null && raw.isEmpty;
                 return Stack(
                   children: [
                     ListView(
@@ -421,7 +434,9 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                           onTap: () {
                                             _likedOverrides.clear();
                                             ref.invalidate(
-                                              playlistDetailTracksProvider,
+                                              playlistDetailTracksProvider(
+                                                widget.playlist,
+                                              ),
                                             );
                                           },
                                         ),
@@ -450,13 +465,23 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                               onCancel: () => _scanController?.cancel(),
                             ),
                           )
-                        else if (snap.hasError)
+                        else if (hasError)
                           EmptyState(
                             compact: true,
                             emoji: "⚠️",
                             title: "加载失败",
                             subtitle: "点击重试",
-                            action: GlassChip(label: "重试", onTap: _reload),
+                            action: GlassChip(
+                              label: "重试",
+                              // provider 模式失效重读才有效（_reload 只作用于局部 Future）
+                              onTap: detailAsync != null
+                                  ? () => ref.invalidate(
+                                        playlistDetailTracksProvider(
+                                          widget.playlist,
+                                        ),
+                                      )
+                                  : _reload,
+                            ),
                           )
                         else if (query.isNotEmpty &&
                             raw != null &&

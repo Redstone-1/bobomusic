@@ -1,6 +1,14 @@
 /// 歌单类型（§3.1 playlists.type）
 enum PlaylistType { builtIn, custom, collection }
 
+/// 内置「我喜欢」歌单：播放卡/搜索页的喜欢操作按此精确失效对应详情数据源
+/// （family 相等性按 id，与歌单页/详情页构造的实例天然相等）
+const Playlist kBuiltinLikedPlaylist = Playlist(
+  id: "builtin:liked",
+  name: "我喜欢",
+  type: PlaylistType.builtIn,
+);
+
 /// 歌单元数据（mock 形状 = 重构计划 §3.1 playlists 表）
 class Playlist {
   final String id;
