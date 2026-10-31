@@ -1,88 +1,84 @@
-<a href="https://github.com/Redstone-1/bobomusic">
-  <img src="./assets/readme-image.png" alt="bobomusic" />
-</a>
-
 <div align="center">
-  <br/>
-  <h1>啵啵音乐</h1>
-  <br/>
-  <a>
-    <img
-      alt="Android"
-      src="https://img.shields.io/badge/Android-blue?style=flat-square&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAAXdJREFUSEvt1b1LllEYx/GPTWItgW4OJm29OKhLYFMODqGDL+TS5qhCov4FEmgUlINrNCSIOjQIDw66uZQNlU4uLr0QLoLgoPeRc8Ppwcf7eRCHwAMHbji/6/pe1++ci7vOFa+6K87vGlDocLlFj7CEd5gpjP5X8AKTGMBmflQOGMJHHKMNP6qEtGaJv6Eez/G+EuAGttCBdTypErCKXuzgYSzwLPS8V/QYGzFxH36iG3fQHGP+YDcW0YC1qO9JvisCwsEiBnFSoYi0sVzzCU/LOz6vg/vxHu5VaU8u+45hfE3jygHBihXcrDF5Lj9Ef2pTCuiMzyu8hMusAOnKLv1Lesm38RktMfPfOAfP0F5A28YHTGfz0xi1+3iAg7yDl5hKEk3gVSYYx+sCQBiuWYzhTaJ9i9EACNQ93EoOlzGPhay6uwWAEDsSd5jifB0FRwIgjPjcZUy/IHY8AEo1TGytdZQC4FdmR1OtkVXqf1//cAqd+v8tOgXyozpDh5nrrgAAAABJRU5ErkJggg=="
-    />
-  </a>
-  <a>
-    <img
-      alt="Massive song"
-      src="https://img.shields.io/badge/Massive Songs-green?style=flat-square"
-    />
-  </a>
-  <a>
-    <img
-      alt="Free Download"
-      src="https://img.shields.io/badge/Free Download-orange?style=flat-square"
-    />
-  </a>
-  <a>
-    <img
-      alt="Custom Theme"
-      src="https://img.shields.io/badge/Custom Theme-deeppink?style=flat-square"
-    />
-  </a>
-  <a>
-    <img
-      alt="Local Music Import"
-      src="https://img.shields.io/badge/Local Music Import-aquamarine?style=flat-square"
-    />
-  </a>
-  <a>
-    <img
-      alt="No Ad"
-      src="https://img.shields.io/badge/No Ad-red?style=flat-square"
-    />
-  </a>
+
+<img src="./assets/readme-logo.png" width="180" alt="啵啵音乐 Logo" />
+
+# 啵啵音乐
+
+**听歌自由 —— 无后端的跨平台本地音乐播放器**
+
+<p>
+  <a href="https://github.com/Redstone-1/bobomusic/releases"><img alt="Release" src="https://img.shields.io/badge/Release-v3.0.0-2EC4B6?style=flat-square" /></a>
+  <a href="https://docs.flutter.dev/"><img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.47.7-02569B?style=flat-square&logo=flutter" /></a>
+  <a href="#-平台支持"><img alt="Platform" src="https://img.shields.io/badge/Platform-Android%20%7C%20iOS%20%7C%20Desktop-3FA9CF?style=flat-square" /></a>
+  <a href="#"><img alt="Storage" src="https://img.shields.io/badge/Storage-本地存储-738FDE?style=flat-square" /></a>
+</p>
+
+聚合五大主流公开音源与本地音乐，
+歌单、歌词、下载、播放队列全部数据本地存储，无广告、无账号、无后端。
+
 </div>
 
-<br/>
+## ✨ 功能特色
 
-> **v3 已完成重构**：当前版本见 `pubspec.yaml`，开发与协作入口见 [AGENTS.md](./AGENTS.md)、[安卓开发指南](./安卓开发指南.md) 和 [模块记忆](./memories/README.md)。以下功能介绍与常见问题保留旧发行版背景。
+**音源与播放**
 
-<br/>
+- 🎧 多源聚合搜索：五大主流公开音源一站聚合，搜索页一键切换
+- 📻 广场多源榜单：热歌、飙升等官方榜单直接点播
+- ▶️ 播放队列：待播放插队、合集批量加入、跨启动恢复
+- ⏱️ 定时关闭：计时停止或播完当前再停
+- 🕘 播放历史自动记录
 
-# 下载
+**歌单与数据**
 
-## Android 
+- 🎼 自由创建歌单、批量喜欢、本地音乐扫描导入
+- 💾 全部数据本地保存（SQLite + SharedPreferences），无账号体系
+- 📥 下载离线听：缓存复用边下边播，移动端支持导出到系统文件管理
 
-[Github Release](https://github.com/Redstone-1/bobomusic/releases) | [百度网盘](https://pan.baidu.com/share/init?surl=S0mF6PhN4aXM4VVFPc7PAQ) 提取码：6w7y
+**歌词与体验**
 
-# 功能特色
+- 📝 歌词多级智能检索：站内直连 → 开放歌词库 → 备选源，滚动、时间校准、搜索替换
+- 🌌 沉浸式极光玻璃界面，深空黑等多主题换色
+- 🔍 应用内检查更新
 
-- 🎉 免费
-- 📱 支持本地音乐导入
-- 🎸 支持歌词
-- 🧩 支持自由创建歌单
-- 📝 支持待播放列表
-- 🎨 支持主题更换
-- 🛜 海量网络歌源
-- 🔒 数据本地存储
-- 💎 界面简洁无广
+**系统集成**
 
-# 核心依赖版本
+- 🔔 系统媒体卡：锁屏、控制中心、耳机线控全接入
+- 🖥️ 桌面端可用于开发联调
 
-- JDK 17
+## 📥 下载
 
-- Flutter 3.47.7
+[GitHub Releases](https://github.com/Redstone-1/bobomusic/releases)（推荐，CI 自动打包）
 
-# 开发指南
+## 📱 平台支持
 
-[安卓开发指南](./安卓开发指南.md)
+| 平台 | 状态 |
+| --- | --- |
+| Android | ✅ 正式发布 |
+| iOS | 🧪 功能就绪 |
+| Desktop | 🛠️ 开发联调 |
 
+## 🛠️ 从源码构建
 
-# 历史星标
+```bash
+git clone https://github.com/Redstone-1/bobomusic.git
+cd bobomusic
+flutter pub get
+dart run build_runner build --delete-conflicting-outputs
+flutter run          # 或 flutter build apk
+```
+
+工具链要求：Flutter 3.47.7 / Dart 3.13.5 / JDK 17（移动端构建）。
+更多环境与签名细节见[安卓开发指南](./安卓开发指南.md)。
+
+## 🧱 技术栈
+
+Flutter · Dart · Riverpod 3（codegen）· just_audio · sqflite · Kotlin / Swift 双端系统媒体桥
+
+架构与协作约定见 [AGENTS.md](./AGENTS.md)。
+
+## ⭐ Star 历史
 
 <a href="https://www.star-history.com/#Redstone-1/bobomusic&Date">
-
  <picture>
    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Redstone-1/bobomusic&type=Date&theme=dark" />
    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Redstone-1/bobomusic&type=Date" />
@@ -90,34 +86,14 @@
  </picture>
 </a>
 
-# 常见问题
+## 🤝 欢迎贡献
 
-- 为什么图片左上角有一小块类似马赛克区域？
-  > 在例如 iqoo13 等机型上可见，可以尝试升级系统解决，原因尚不明确
-
-- 为什么重新安装应用后扫描的本地歌曲信息不是之前我编辑后的？
-  > 建议安装新版本时不要卸载旧版本
-
-- 为什么有些本地歌曲没有时长信息？
-  > 从 bilibili 下载的歌曲没有时长信息，你可以编辑信息进行更正
-
-- 为什么搜索出来的合集不能自动播放下一曲？
-  > 因为没有后端，不知道下一曲是哪首，虽然可以临时建个表，但是比较多余，我们有待播放列表，所以你可以把想听的音频添加到待播放列表
-
-# 鸣谢
-
-## [阿炸克斯](https://juejin.cn/user/870468938379272)
-
-本项目播放器、互联网搜索部分基于 [bbmusic](https://github.com/bb-music/flutter-app) 二次开发
-
-## [张风捷特烈](https://juejin.cn/user/149189281194766)
-
-tab 指示器的修改部分使用了 [FlutterUnit](https://github.com/toly1994328/FlutterUnit) 中的代码
-
-# 欢迎贡献
-
-如果你对本项目功能的改进性有建议或者对本项目技术感兴趣，欢迎 PR
+欢迎提交 [Issue](https://github.com/Redstone-1/bobomusic/issues) 与 [PR](https://github.com/Redstone-1/bobomusic/pulls)。
 
 <a href="https://github.com/Redstone-1/bobomusic/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=Redstone-1/bobomusic" />
 </a>
+
+## 📄 声明
+
+本项目为个人学习研究用途，不存储任何音频文件，全部音源来自各平台公开接口聚合。请支持正版，如有侵权请联系删除。
