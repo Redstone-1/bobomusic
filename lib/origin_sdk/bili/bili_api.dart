@@ -126,6 +126,15 @@ class BiliApi implements OriginService {
   @override
   Future<List<ChartHit>?> getChartHits(String chartKey) async => null;
 
+  // 无评论数据源：implements OriginService 须显式实现可选能力
+  @override
+  Future<CommentsPage> fetchComments(
+    String songId, {
+    int page = 1,
+    int rows = 20,
+  }) async =>
+      throw UnsupportedError("该音源不支持评论");
+
   @override
   Future<MusicUrl> getMusicUrl(String id, {bool forceRefresh = false}) async {
     if (forceRefresh) _playurlCache.remove(id);

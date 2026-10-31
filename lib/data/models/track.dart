@@ -21,6 +21,13 @@ class Track {
   /// 歌词时间校准偏移（毫秒；正数 = 歌词延后显示）
   final int lyricOffsetMs;
 
+  /// 显示用歌名覆盖（B 站等音源标题由上传者自定义，支持本地改名；
+  /// null = 未改。原始 name/author 永不被覆盖，歌词匹配与下载文件名不受影响）
+  final String? displayName;
+
+  /// 显示用歌手覆盖（同上）
+  final String? displayAuthor;
+
   const Track({
     required this.id,
     required this.name,
@@ -32,5 +39,11 @@ class Track {
     this.localPath,
     this.lyric,
     this.lyricOffsetMs = 0,
+    this.displayName,
+    this.displayAuthor,
   });
+
+  /// 展示用歌名/歌手（列表行、播放卡、媒体通知等 UI 消费；未改时回退原始值）
+  String get effectiveName => displayName ?? name;
+  String get effectiveAuthor => displayAuthor ?? author;
 }

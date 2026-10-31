@@ -10,6 +10,7 @@ import "../../data/models/track.dart";
 import "../../data/repositories/queue_repository.dart";
 import "../../data/repositories/track_repository.dart";
 import "../playlist/playlists_provider.dart" show queueEntriesProvider;
+import "../playlist/track_edit_dialog.dart";
 import "playback_provider.dart";
 
 void showPlaybackQueueSheet(BuildContext context) {
@@ -65,8 +66,13 @@ class _PlaybackQueueSheetState extends ConsumerState<_PlaybackQueueSheet> {
   void _pendingActions(QueueEntry entry) {
     AppSheet.show(
       context,
-      title: entry.track.name,
+      title: entry.track.effectiveName,
       actions: [
+        AppSheetAction(
+          icon: Icons.edit_outlined,
+          label: "编辑信息",
+          onTap: () => showTrackEditDialog(context, ref, entry.track),
+        ),
         AppSheetAction(
           icon: Icons.queue_music_outlined,
           label: "下一首播放",
@@ -92,8 +98,13 @@ class _PlaybackQueueSheetState extends ConsumerState<_PlaybackQueueSheet> {
     final currentIndex = ref.read(playbackProvider).queueIndex;
     AppSheet.show(
       context,
-      title: track.name,
+      title: track.effectiveName,
       actions: [
+        AppSheetAction(
+          icon: Icons.edit_outlined,
+          label: "编辑信息",
+          onTap: () => showTrackEditDialog(context, ref, track),
+        ),
         AppSheetAction(
           icon: Icons.queue_music_outlined,
           label: "下一首播放",

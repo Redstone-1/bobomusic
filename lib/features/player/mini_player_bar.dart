@@ -80,7 +80,7 @@ class MiniPlayerBar extends ConsumerWidget {
                 children: [
                   CoverPlaceholder(
                     cover: track.cover,
-                    text: track.name,
+                    text: track.effectiveName,
                     size: 44,
                     radius: 13,
                   ),
@@ -115,7 +115,7 @@ class _MiniCenter extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          track.name,
+          track.effectiveName,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(

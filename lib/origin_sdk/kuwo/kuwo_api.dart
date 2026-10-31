@@ -308,6 +308,46 @@ class KuwoApi implements OriginService {
   }
 
   dynamic _json(dynamic data) => parseKuwoJson(data);
+
+  /// 歌曲评论（仅查看；comment.kuwo.cn 免签名免登录，2026-10-31 实测匿名可用）。
+  /// digest=15 为歌曲资源类型（必填，实测 1 返回空）；不传 jpcallback（避免 JSONP）。
+  /// 该端点 2024 年迁移过一次，失败抛类型化错误，UI 按"暂无评论/获取失败"降级，
+  /// 不作稳定性承诺
+  @override
+  Future<CommentsPage> fetchComments(
+    String songId, {
+    int page = 1,
+    int rows = 20,
+  }) async {
+    final rid =
+        songId.startsWith("kuwo:") ? songId.substring("kuwo:".length) : songId;
+    if (rid.isEmpty) throw const KuwoApiError("酷我歌曲 ID 不正确");
+    try {
+      final response = await _dio.get(
+        "https://comment.kuwo.cn/com.s",
+        queryParameters: {
+          "type": "get_comment",
+          "uid": "0",
+          "prod": "newWeb",
+          "digest": "15",
+          "sid": rid,
+          "page": "$page",
+          "rows": "$rows",
+          "f": "web",
+        },
+      );
+      final data = _json(response.data);
+      final result = data is Map ? "${data["result"] ?? ""}" : "";
+      if (result.isNotEmpty && result != "ok") {
+        throw KuwoApiError("酷我评论获取失败（$result）");
+      }
+      return parseKuwoComments(data is Map ? data : const {}, page: page);
+    } on KuwoApiError {
+      rethrow;
+    } catch (e) {
+      throw KuwoApiError("酷我评论获取失败：$e");
+    }
+  }
 }
 
 /// 酷我搜索单条 → 统一 SearchItem（新/旧接口字段兼容；纯函数便于测试）
@@ -352,6 +392,45 @@ List<ChartHit> parseKuwoBangSongs(Map data) {
     if (hits.length >= 30) break;
   }
   return hits;
+}
+
+/// 酷我评论解析（纯函数，特征测试锁定）：rows 平铺字段，数字多为字符串；
+/// reply 为被回复的旧评论（与顶层同构嵌套）；hasMore 按 page/totalPage 推算
+CommentsPage parseKuwoComments(Map data, {required int page}) {
+  final rows = <CommentItem>[];
+  for (final raw in data["rows"] as List? ?? const []) {
+    if (raw is! Map) continue;
+    final item = _kuwoComment(raw);
+    if (item != null) rows.add(item);
+  }
+  return CommentsPage(
+    items: rows,
+    total: _asInt(data["total"]),
+    hasMore: page < _asInt(data["totalPage"]),
+  );
+}
+
+CommentItem? _kuwoComment(Map c) {
+  final content = decodeKuwoText("${c["msg"] ?? ""}").trim();
+  if (content.isEmpty) return null;
+  final reply = c["reply"] is Map ? c["reply"] as Map : null;
+  // 头像统一切 https：安卓默认拦 cleartext，http 图会全部落到占位块
+  final avatar = "${c["u_pic"] ?? ""}".replaceFirst("http://", "https://");
+  final replyAvatar =
+      reply == null ? "" : "${reply["u_pic"] ?? ""}".replaceFirst("http://", "https://");
+  return CommentItem(
+    id: "${c["id"] ?? ""}",
+    userName: decodeKuwoText("${c["u_name"] ?? ""}").trim(),
+    avatarUrl: avatar,
+    content: content,
+    replyTo: reply == null ? "" : decodeKuwoText("${reply["msg"] ?? ""}").trim(),
+    replyToUser:
+        reply == null ? "" : decodeKuwoText("${reply["u_name"] ?? ""}").trim(),
+    replyToAvatarUrl: replyAvatar,
+    likedCount: _asInt(c["like_num"]),
+    timeLabel: "${c["time"] ?? ""}".trim(),
+    isHot: false,
+  );
 }
 
 /// 旧接口文本清洗：HTML 实体、标签、首尾空白

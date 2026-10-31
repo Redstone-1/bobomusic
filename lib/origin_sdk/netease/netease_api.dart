@@ -151,6 +151,39 @@ class NeteaseApi implements OriginService {
     }
     return data;
   }
+
+  /// 歌曲评论（仅查看，免签名老接口；2026-10-31 实测匿名可用）：
+  /// R_SO_4_{songId}，limit/offset 分页（按 page/rows 换算），首页含
+  /// hotComments，后续页仅 comments。匿名高频翻页有 429 前科——
+  /// 调用方按"点开才拉一页"设计
+  @override
+  Future<CommentsPage> fetchComments(
+    String songId, {
+    int page = 1,
+    int rows = 20,
+  }) async {
+    final rid = songId.startsWith(chartKeyPrefix)
+        ? songId.substring(chartKeyPrefix.length)
+        : songId;
+    if (rid.isEmpty || int.tryParse(rid) == null) {
+      throw const NeteaseApiError("网易云歌曲 ID 不正确");
+    }
+    try {
+      final response = await _dio.get(
+        "https://music.163.com/api/v1/resource/comments/R_SO_4_$rid",
+        queryParameters: {"limit": "$rows", "offset": "${(page - 1) * rows}"},
+      );
+      final data = _map(response.data);
+      if (data is Map && data["code"] is num && (data["code"] as num) != 200) {
+        throw NeteaseApiError("网易云评论获取失败（code ${data["code"]}）");
+      }
+      return parseNeteaseComments(data is Map ? data : const {});
+    } on NeteaseApiError {
+      rethrow;
+    } catch (e) {
+      throw NeteaseApiError("网易云评论获取失败：$e");
+    }
+  }
 }
 
 int _asInt(dynamic value) {
@@ -217,6 +250,53 @@ List<ChartHit> parseNeteaseChartHits(List tracks) {
     if (hits.length >= 30) break;
   }
   return hits;
+}
+
+/// 网易评论解析（纯函数，特征测试锁定）：hotComments（仅首页有）+ comments，
+/// hasMore 用响应的 more 字段；脏数据（无内容）跳过
+CommentsPage parseNeteaseComments(Map data) {
+  final hot = parseNeteaseCommentList(data["hotComments"], isHot: true);
+  final latest = parseNeteaseCommentList(data["comments"]);
+  return CommentsPage(
+    items: [...hot, ...latest],
+    total: _asInt(data["total"]),
+    hasMore: data["more"] == true,
+  );
+}
+
+/// 网易评论列表解析：content 为空的脏数据返回 null 由调用方过滤
+List<CommentItem> parseNeteaseCommentList(List? list, {bool isHot = false}) {
+  final items = <CommentItem>[];
+  for (final raw in list ?? const []) {
+    if (raw is! Map) continue;
+    final item = _neteaseComment(raw, isHot: isHot);
+    if (item != null) items.add(item);
+  }
+  return items;
+}
+
+CommentItem? _neteaseComment(Map c, {required bool isHot}) {
+  final content = "${c["content"] ?? ""}".trim();
+  if (content.isEmpty) return null;
+  final user = c["user"] is Map ? c["user"] as Map : const {};
+  final replies = c["beReplied"] as List? ?? const [];
+  final replyTo =
+      replies.isNotEmpty && replies.first is Map ? replies.first as Map : null;
+  final replyUser = replyTo?["user"];
+  return CommentItem(
+    id: "${c["commentId"] ?? ""}",
+    userName: "${user["nickname"] ?? ""}".trim(),
+    avatarUrl: "${user["avatarUrl"] ?? ""}",
+    content: content,
+    replyTo: "${replyTo?["content"] ?? ""}".trim(),
+    replyToUser:
+        replyUser is Map ? "${replyUser["nickname"] ?? ""}".trim() : "",
+    replyToAvatarUrl:
+        replyUser is Map ? "${replyUser["avatarUrl"] ?? ""}" : "",
+    likedCount: _asInt(c["likedCount"]),
+    timeLabel: "${c["timeStr"] ?? ""}".trim(),
+    isHot: isHot,
+  );
 }
 
 /// 搜索响应（OriginService 只要求 SearchResponse 抽象，提供具体实现）

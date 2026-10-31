@@ -644,6 +644,15 @@ class _FakeKuwoApi implements sdk.OriginService {
   @override
   Future<List<sdk.ChartHit>?> getChartHits(String chartKey) async => null;
 
+  // 无评论数据源：implements OriginService 须显式实现可选能力
+  @override
+  Future<sdk.CommentsPage> fetchComments(
+    String songId, {
+    int page = 1,
+    int rows = 20,
+  }) async =>
+      throw UnsupportedError("该音源不支持评论");
+
   @override
   Future<sdk.SearchItem> searchDetail(String id) async =>
       throw UnimplementedError();

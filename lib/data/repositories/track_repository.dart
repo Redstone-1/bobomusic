@@ -23,6 +23,8 @@ class TrackRepository {
         localPath: row["local_path"] as String?,
         lyric: row["lyric"] as String?,
         lyricOffsetMs: (row["lyric_offset"] as int?) ?? 0,
+        displayName: row["display_name"] as String?,
+        displayAuthor: row["display_author"] as String?,
       );
 
   /// 插入或更新：新曲全字段写入；已存在只更新内容字段
@@ -222,6 +224,31 @@ class TrackRepository {
       "tracks",
       {
         "lyric_offset": offsetMs,
+        "updated_at": DateTime.now().millisecondsSinceEpoch,
+      },
+      where: "id = ?",
+      whereArgs: [id],
+    );
+  }
+
+  /// 更新显示用歌名/歌手（B 站等音源标题可编辑；空串 = 恢复原始值存 null）。
+  /// 只写 display_* 两列：原始 name/author 不动，播放/入队的网络 upsert
+  /// 也不含这两列，覆盖不会被网络数据冲掉（与 liked_at/lyric 同类保护语义）
+  Future<void> updateDisplayInfo(
+    String id, {
+    String? name,
+    String? author,
+  }) async {
+    String? normalize(String? value) {
+      final text = value?.trim();
+      return (text == null || text.isEmpty) ? null : text;
+    }
+
+    await db.update(
+      "tracks",
+      {
+        "display_name": normalize(name),
+        "display_author": normalize(author),
         "updated_at": DateTime.now().millisecondsSinceEpoch,
       },
       where: "id = ?",

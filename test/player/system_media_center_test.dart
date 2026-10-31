@@ -81,6 +81,29 @@ void main() {
     expect(map["durationMs"], 252000);
   });
 
+  test("mediaStateMap：显示名覆盖优先（本地改名后通知栏同步）", () {
+    final map = mediaStateMap(
+      SystemPlaybackSnapshot(
+        track: Track(
+          id: "bili:1_BV1_2",
+          name: "原始标题",
+          author: "原始歌手",
+          duration: 252,
+          cover: "https://example.com/cover.jpg",
+          displayName: "改后标题",
+        ),
+        playing: true,
+        buffering: false,
+        position: const Duration(seconds: 30),
+        duration: const Duration(seconds: 252),
+        mode: PlayMode.listLoop,
+        queueIndex: 2,
+      ),
+    );
+    expect(map["title"], "改后标题");
+    expect(map["artist"], "原始歌手");
+  });
+
   test("原生命令分发：转发给状态机命令", () async {
     final center = SystemMediaCenter(const MethodChannel("test"));
     final commands = _RecordingCommands();

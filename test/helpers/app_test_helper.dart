@@ -79,6 +79,15 @@ class FakeBiliApi implements sdk.OriginService {
   @override
   Future<List<sdk.ChartHit>?> getChartHits(String chartKey) async => null;
 
+  // 无评论数据源：implements OriginService 须显式实现可选能力
+  @override
+  Future<sdk.CommentsPage> fetchComments(
+    String songId, {
+    int page = 1,
+    int rows = 20,
+  }) async =>
+      throw UnsupportedError("该音源不支持评论");
+
   /// 单曲点击先拉详情分流（对齐 2.7.0）：测试固定返回真单曲（非合集）
   @override
   Future<sdk.SearchItem> searchDetail(String id) async => bili.BiliSearchItem(
@@ -169,6 +178,15 @@ class FakeKuwoApi implements sdk.OriginService {
   @override
   Future<sdk.MusicUrl> getMusicUrl(String id) async =>
       sdk.MusicUrl(url: "https://kuwo.example/999.mp3");
+
+  // 无评论数据源：implements OriginService 须显式实现可选能力
+  @override
+  Future<sdk.CommentsPage> fetchComments(
+    String songId, {
+    int page = 1,
+    int rows = 20,
+  }) async =>
+      throw UnsupportedError("该音源不支持评论");
 }
 
 /// 测试用网易源：搜索固定返回「网易夜曲」，榜单卡返回「网易热歌」
@@ -233,6 +251,15 @@ class FakeNeteaseApi implements sdk.OriginService {
         url: "https://netease.example/888.mp3",
         contentType: "audio/mpeg",
       );
+
+  // 无评论数据源：implements OriginService 须显式实现可选能力
+  @override
+  Future<sdk.CommentsPage> fetchComments(
+    String songId, {
+    int page = 1,
+    int rows = 20,
+  }) async =>
+      throw UnsupportedError("该音源不支持评论");
 }
 
 /// 测试用 QQ 源：搜索固定返回「QQ 夜曲」；榜单未上线返回 null
@@ -277,6 +304,15 @@ class FakeQqApi implements sdk.OriginService {
         url: "https://qq.example/777.mp3",
         contentType: "audio/mpeg",
       );
+
+  // 无评论数据源：implements OriginService 须显式实现可选能力
+  @override
+  Future<sdk.CommentsPage> fetchComments(
+    String songId, {
+    int page = 1,
+    int rows = 20,
+  }) async =>
+      throw UnsupportedError("该音源不支持评论");
 }
 
 /// 测试用千千源：搜索固定返回「千千夜曲」，榜单卡返回「千千热歌」
@@ -341,6 +377,15 @@ class FakeQianqianApi implements sdk.OriginService {
         url: "https://qianqian.example/T666.mp3",
         contentType: "audio/mpeg",
       );
+
+  // 无评论数据源：implements OriginService 须显式实现可选能力
+  @override
+  Future<sdk.CommentsPage> fetchComments(
+    String songId, {
+    int page = 1,
+    int rows = 20,
+  }) async =>
+      throw UnsupportedError("该音源不支持评论");
 }
 
 /// 测试用歌词服务：返回固定 LRC，避免真实网络；保留播放卡歌词视图断言用行

@@ -21,6 +21,7 @@ import "../../origin_sdk/lyric/lyric_types.dart";
 import "../download/download_actions.dart";
 import "../playlist/playlists_provider.dart"
     show likedCountProvider, playlistDetailTracksProvider, queueEntriesProvider;
+import "../playlist/track_edit_dialog.dart";
 import "lyric_provider.dart";
 import "open_bilibili.dart";
 import "play_mode.dart";
@@ -29,6 +30,7 @@ import "playback_speed.dart";
 import "playback_speed_sheet.dart";
 import "sleep_timer_sheet.dart";
 import "queue_sheet.dart";
+import "comment_page.dart";
 
 /// 全屏播放卡片（对齐原型 .player：歌词 + seek + 控制区 + 动作行）
 /// 所有者 2026-10-26 反馈：移除黑胶，播放卡默认只显示歌词
@@ -162,6 +164,7 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
               const SizedBox(height: 12),
               // 参考酷狗：动作行在进度条上方，主控制行在进度条下方
               _ActionsRow(
+                track: track,
                 liked: _likedOverride ?? track.liked,
                 onToggleLike: () => _toggleLike(track),
               ),
@@ -231,6 +234,12 @@ class _TopBar extends ConsumerWidget {
       context,
       title: "更多",
       actions: [
+        if (track != null)
+          AppSheetAction(
+            icon: Icons.edit_outlined,
+            label: "编辑信息",
+            onTap: () => showTrackEditDialog(context, ref, track),
+          ),
         AppSheetAction(
           icon: Icons.timer_outlined,
           label: "定时关闭（${sleepTimerLabel(state)}）",
@@ -270,7 +279,7 @@ class _MetaRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  track.name,
+                  track.effectiveName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -283,7 +292,7 @@ class _MetaRow extends StatelessWidget {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        track.author,
+                        track.effectiveAuthor,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: 13, color: t.fgDim),
@@ -462,12 +471,17 @@ class _ControlsRow extends ConsumerWidget {
 
 }
 
-/// 动作行（喜欢 / 下载 / 稍后 / 倍速），位于进度条上方
+/// 动作行（喜欢 / 下载 / 稍后 / 评论 / 倍速），位于进度条上方
 class _ActionsRow extends ConsumerWidget {
+  final Track track;
   final bool liked;
   final VoidCallback onToggleLike;
 
-  const _ActionsRow({required this.liked, required this.onToggleLike});
+  const _ActionsRow({
+    required this.track,
+    required this.liked,
+    required this.onToggleLike,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -511,6 +525,15 @@ class _ActionsRow extends ConsumerWidget {
         // 列表播放字形留白较多，单独放大补齐可见尺寸，不改变对齐槽位。
         30.0,
       ),
+      // 评论仅网易/酷我源开放（其它音源无评论数据源，入口隐藏）
+      if (track.origin == OriginType.netease || track.origin == OriginType.kuwo)
+        (
+          Icons.comment_outlined,
+          "评论",
+          false,
+          () => CommentPage.open(context, track),
+          22.0,
+        ),
     ];
 
     return Padding(

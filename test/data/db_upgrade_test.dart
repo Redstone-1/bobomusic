@@ -1,6 +1,7 @@
 import "dart:io";
 
 import "package:bobomusic/data/db/app_database.dart";
+import "package:bobomusic/data/repositories/track_repository.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:sqflite_common_ffi/sqflite_ffi.dart";
 
@@ -108,5 +109,60 @@ void main() {
     expect(playlists.map((r) => r["name"]), ["我的歌单"]);
     final items = await appDb.query("playlist_items");
     expect(items.map((r) => r["track_id"]), ["t2"]);
+  });
+
+  test("v4 旧库升级 v5：新增 display 列，旧数据完整且覆盖可写", () async {
+    final dir = await Directory.systemTemp.createTemp("bobomusic_upgrade5");
+    final dbPath = "${dir.path}/upgrade5.db";
+    addTearDown(() async {
+      await appDb.close();
+      await dir.delete(recursive: true);
+    });
+
+    // 手工搭一个 v4 形状旧库（无 display 列，tracks 表与 v3 形状相同）
+    final old = await databaseFactory.openDatabase(
+      dbPath,
+      options: OpenDatabaseOptions(
+        version: 4,
+        onCreate: (db, _) async {
+          await db.execute("""
+            CREATE TABLE tracks (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              author TEXT NOT NULL DEFAULT '',
+              cover TEXT,
+              duration INTEGER NOT NULL DEFAULT 0,
+              origin TEXT NOT NULL,
+              local_path TEXT,
+              lyric TEXT,
+              lyric_offset INTEGER NOT NULL DEFAULT 0,
+              liked_at INTEGER,
+              downloaded_at INTEGER,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            )
+          """);
+        },
+      ),
+    );
+    await old.insert("tracks", {
+      "id": "t1",
+      "name": "曲1",
+      "origin": "bili",
+      "created_at": 1,
+      "updated_at": 1,
+    });
+    await old.close();
+
+    // 用应用入口重开 → 触发 v4→v5 升级加列
+    await initAppDatabase(path: dbPath);
+
+    // 旧数据完整
+    final stored = await TrackRepository().getById("t1");
+    expect(stored!.name, "曲1");
+    expect(stored.displayName, isNull);
+    // v5 能力可用：写入显示覆盖并读回
+    await TrackRepository().updateDisplayInfo("t1", name: "改后名");
+    expect((await TrackRepository().getById("t1"))!.effectiveName, "改后名");
   });
 }

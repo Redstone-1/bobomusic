@@ -11,7 +11,7 @@ late Database appDb;
 Future<void> initAppDatabase({String? path}) async {
   appDb = await openDatabase(
     path ?? "bobomusic3.db",
-    version: 4,
+    version: 5,
     singleInstance: false,
     onConfigure: (db) async {
       // 级联删除依赖外键开关（sqflite 默认关闭）
@@ -25,6 +25,7 @@ Future<void> initAppDatabase({String? path}) async {
 /// v1 → v2：歌词时间校准偏移（S4.4 手动校准需要跨启动保留）
 /// v2 → v3：播放历史（歌单页「最近播放」，track_id 主键保证同曲只留最新一条）
 /// v3 → v4：清除收藏合集歌单（功能已删除，playlist_items 由外键级联清理）
+/// v4 → v5：曲目显示用歌名/歌手覆盖（B 站等音源标题可编辑，null = 未改）
 Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
   if (oldVersion < 2) {
     await db.execute(
@@ -45,6 +46,10 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
       ["collection"],
     );
   }
+  if (oldVersion < 5) {
+    await db.execute("ALTER TABLE tracks ADD COLUMN display_name TEXT");
+    await db.execute("ALTER TABLE tracks ADD COLUMN display_author TEXT");
+  }
 }
 
 Future<void> _onCreate(Database db, int _) async {
@@ -59,6 +64,8 @@ Future<void> _onCreate(Database db, int _) async {
       local_path TEXT,
       lyric TEXT,
       lyric_offset INTEGER NOT NULL DEFAULT 0,
+      display_name TEXT,
+      display_author TEXT,
       liked_at INTEGER,
       downloaded_at INTEGER,
       created_at INTEGER NOT NULL,

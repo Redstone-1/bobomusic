@@ -176,8 +176,9 @@ Map<String, Object?> mediaStateMap(
       ? snap.duration.inMilliseconds
       : (track?.duration != null ? track!.duration! * 1000 : 0);
   return {
-    "title": track?.name ?? "",
-    "artist": track?.author ?? "",
+    // 显示名优先：曲目被本地改名后通知栏/锁屏同步生效
+    "title": track?.effectiveName ?? "",
+    "artist": track?.effectiveAuthor ?? "",
     "coverPath": coverPath,
     "durationMs": durationMs,
     "positionMs": snap.position.inMilliseconds,

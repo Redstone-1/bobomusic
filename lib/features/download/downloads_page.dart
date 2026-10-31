@@ -23,6 +23,7 @@ import "../player/mini_player_bar.dart";
 import "../player/playback_provider.dart";
 import "../player/player_card_page.dart";
 import "../playlist/add_to_playlist_sheet.dart";
+import "../playlist/track_edit_dialog.dart";
 import "download_tasks.dart";
 
 enum _DownloadTab { done, active }
@@ -193,8 +194,13 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
   void _showDoneActions(Track track) {
     AppSheet.show(
       context,
-      title: track.name,
+      title: track.effectiveName,
       actions: [
+        AppSheetAction(
+          icon: Icons.edit_outlined,
+          label: "编辑信息",
+          onTap: () => showTrackEditDialog(context, ref, track),
+        ),
         AppSheetAction(
           icon: Icons.library_add_outlined,
           label: "加入歌单",
@@ -262,7 +268,7 @@ class _TaskTile extends ConsumerWidget {
             children: [
               CoverPlaceholder(
                 cover: task.track.cover,
-                text: task.track.name,
+                text: task.track.effectiveName,
                 size: 44,
                 radius: t.radiusSm,
               ),
@@ -272,7 +278,7 @@ class _TaskTile extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      task.track.name,
+                      task.track.effectiveName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -283,7 +289,7 @@ class _TaskTile extends ConsumerWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      task.track.author,
+                      task.track.effectiveAuthor,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 11.5, color: t.fgDim),

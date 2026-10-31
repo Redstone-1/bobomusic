@@ -37,6 +37,7 @@ import "playlists_provider.dart"
         playlistsProvider,
         queueEntriesProvider;
 import "scan_failures_dialog.dart";
+import "track_edit_dialog.dart";
 
 /// 歌单详情（对齐原型 renderSub/playlist）
 /// 两种数据模式：
@@ -374,8 +375,8 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                     ? raw
                           .where(
                             (t) =>
-                                t.name.toLowerCase().contains(query) ||
-                                t.author.toLowerCase().contains(query),
+                                t.effectiveName.toLowerCase().contains(query) ||
+                                t.effectiveAuthor.toLowerCase().contains(query),
                           )
                           .toList()
                     : raw;
@@ -536,8 +537,17 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                   ),
                                   onMorePressed: () => AppSheet.show(
                                     context,
-                                    title: track.name,
+                                    title: track.effectiveName,
                                     actions: [
+                                      AppSheetAction(
+                                        icon: Icons.edit_outlined,
+                                        label: "编辑信息",
+                                        onTap: () => showTrackEditDialog(
+                                          context,
+                                          ref,
+                                          track,
+                                        ),
+                                      ),
                                       AppSheetAction(
                                         icon: Icons.library_add_outlined,
                                         label: "加入歌单",

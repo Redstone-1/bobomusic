@@ -409,6 +409,25 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     });
   }
 
+  /// 曲目显示信息编辑后热更新当前会话：迷你条/播放卡/系统通知立即换新名。
+  /// [updated] 为库内最新完整 Track（含覆盖后的显示字段）
+  void applyDisplayEdit(Track updated) {
+    final hitCurrent = state.track?.id == updated.id;
+    final hitQueue = state.queue.any((item) => item.id == updated.id);
+    if (!hitCurrent && !hitQueue) return;
+    state = state.copyWith(
+      track: hitCurrent ? updated : null,
+      queue: hitQueue
+          ? [
+              for (final item in state.queue)
+                if (item.id == updated.id) updated else item,
+            ]
+          : null,
+    );
+    _snapshot();
+    _syncSystem(force: true);
+  }
+
   // seek 串行化（同 _queueSpeed 模式）：迟到的旧 seek 不得覆盖新位置；
   // 连点/快速拖拽只保留最后一次平台调用（真机"拖不动/回弹"的根因之一）
   Future<void> _seekOperation = Future<void>.value();

@@ -295,6 +295,57 @@ class MusicUrl {
   });
 }
 
+/// 歌曲评论（仅查看）：跨源归一形状；网易/酷我已接入，
+/// QQ/千千/B 站/本地无评论数据源，UI 按 origin 判空降级
+class CommentItem {
+  final String id;
+  final String userName;
+  final String avatarUrl;
+  final String content;
+
+  /// 被回复评论摘要（酷我 reply / 网易 beReplied），空 = 无
+  final String replyTo;
+
+  /// 被回复者昵称（引用行展示「@昵称」），空 = 无
+  final String replyToUser;
+
+  /// 被回复者头像（引用区迷你评论用），空 = 用首字占位
+  final String replyToAvatarUrl;
+  final int likedCount;
+
+  /// 已格式化的展示时间（网易 timeStr「YYYY-MM-DD」/ 酷我「YYYY-MM-DD HH:mm:ss」）
+  final String timeLabel;
+
+  /// 热门评论（网易首页 hotComments 置顶分区；酷我恒 false）
+  final bool isHot;
+
+  const CommentItem({
+    required this.id,
+    required this.userName,
+    required this.avatarUrl,
+    required this.content,
+    required this.replyTo,
+    required this.replyToUser,
+    required this.replyToAvatarUrl,
+    required this.likedCount,
+    required this.timeLabel,
+    required this.isHot,
+  });
+}
+
+/// 评论分页结果（total 供标题计数；hasMore 决定能否继续翻页）
+class CommentsPage {
+  final List<CommentItem> items;
+  final int total;
+  final bool hasMore;
+
+  const CommentsPage({
+    required this.items,
+    required this.total,
+    required this.hasMore,
+  });
+}
+
 /// 歌单源服务
 abstract class OriginService {
   /// 搜索
@@ -315,4 +366,14 @@ abstract class OriginService {
   /// 跨源榜单卡条目（可选能力；key 约定 "<源 value>:<源内榜单标识>"，见广场定义表）。
   /// null = 本源不支持该 key；拉取失败抛类型化错误，由调用方按单卡降级
   Future<List<ChartHit>?> getChartHits(String chartKey) async => null;
+
+  /// 歌曲评论（可选能力，仅查看；网易/酷我实现）。
+  /// [page] 1 起页码，[rows] 每页条数；不支持评论的源默认抛
+  /// UnsupportedError——UI 按 Track.origin 判空隐藏入口，不会触达
+  Future<CommentsPage> fetchComments(
+    String songId, {
+    int page = 1,
+    int rows = 20,
+  }) async =>
+      throw UnsupportedError("该音源不支持评论");
 }

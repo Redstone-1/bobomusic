@@ -85,6 +85,8 @@ class PlaylistRepository {
           localPath: r["local_path"] as String?,
           lyric: r["lyric"] as String?,
           lyricOffsetMs: (r["lyric_offset"] as int?) ?? 0,
+          displayName: r["display_name"] as String?,
+          displayAuthor: r["display_author"] as String?,
         ),
     ];
   }

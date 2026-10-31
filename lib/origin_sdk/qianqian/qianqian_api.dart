@@ -147,6 +147,15 @@ class QianqianApi implements OriginService {
   @override
   Future<List<SearchItem>> hotSongs() async => const [];
 
+  // 无评论数据源：implements OriginService 须显式实现可选能力
+  @override
+  Future<CommentsPage> fetchComments(
+    String songId, {
+    int page = 1,
+    int rows = 20,
+  }) async =>
+      throw UnsupportedError("该音源不支持评论");
+
   @override
   Future<SearchItem> searchDetail(String id) async {
     // 千千条目即单曲，无多 P/合集详情；搜索页不会调用（同酷我/网易约定）

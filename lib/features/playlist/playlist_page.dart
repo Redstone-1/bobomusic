@@ -24,6 +24,7 @@ import "../player/player_card_page.dart";
 import "add_to_playlist_sheet.dart";
 import "playlist_detail_page.dart";
 import "playlists_provider.dart";
+import "track_edit_dialog.dart";
 
 /// 歌单页（对齐原型 renderOrder；S3.3 接真数据：歌单 CRUD / 我喜欢 / 播放队列）
 class PlaylistPage extends ConsumerWidget {
@@ -231,8 +232,13 @@ class PlaylistPage extends ConsumerWidget {
   void _showRecentActions(BuildContext context, WidgetRef ref, Track track) {
     AppSheet.show(
       context,
-      title: track.name,
+      title: track.effectiveName,
       actions: [
+        AppSheetAction(
+          icon: Icons.edit_outlined,
+          label: "编辑信息",
+          onTap: () => showTrackEditDialog(context, ref, track),
+        ),
         AppSheetAction(
           icon: Icons.library_add_outlined,
           label: "加入歌单",

@@ -49,7 +49,7 @@ class SongListTile extends StatelessWidget {
           children: [
             CoverPlaceholder(
               cover: coverOverride ?? track.cover,
-              text: track.name,
+              text: track.effectiveName,
               size: 48,
               radius: t.radiusSm,
             ),
@@ -59,7 +59,7 @@ class SongListTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    track.name,
+                    track.effectiveName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -78,7 +78,7 @@ class SongListTile extends StatelessWidget {
                       ],
                       Expanded(
                         child: Text(
-                          track.author,
+                          track.effectiveAuthor,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(fontSize: 12, color: t.fgDim),
