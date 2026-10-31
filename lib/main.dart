@@ -28,14 +28,17 @@ Future<void> main() async {
   final cacheRoot = await getApplicationCacheDirectory();
   RangeProxySource.cacheDir = Directory("${cacheRoot.path}/bobomusic_audio")
     ..createSync(recursive: true);
-  // Android 自研媒体中心：通知栏/锁屏/耳机键/原子岛（其他平台跳过；失败不阻塞启动）
-  if (Platform.isAndroid) {
+  // 自研媒体中心：Android=通知栏/耳机键/原子岛，iOS=锁屏/控制中心/线控
+  // （桌面跳过；失败不阻塞启动）
+  if (Platform.isAndroid || Platform.isIOS) {
     await initSystemMediaCenter();
-    // Android 13+ 通知权限：没有它媒体通知不显示
-    try {
-      await Permission.notification.request();
-    } catch (_) {
-      // 权限插件失败不影响播放
+    if (Platform.isAndroid) {
+      // Android 13+ 通知权限：没有它媒体通知不显示（iOS 正在播放卡不需要权限）
+      try {
+        await Permission.notification.request();
+      } catch (_) {
+        // 权限插件失败不影响播放
+      }
     }
   }
   runApp(const ProviderScope(child: App()));

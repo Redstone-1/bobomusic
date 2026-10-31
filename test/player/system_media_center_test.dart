@@ -1,3 +1,6 @@
+import "dart:async";
+import "dart:io";
+
 import "package:bobomusic/data/models/track.dart";
 import "package:bobomusic/features/player/play_mode.dart";
 import "package:bobomusic/features/player/system_media_center.dart";
@@ -30,22 +33,29 @@ class _RecordingCommands implements SystemPlaybackCommands {
   Future<void> systemStop() async => calls.add("stop");
 }
 
-/// 自研媒体中心桥：通道载荷序列化 + 原生命令分发（纯逻辑，不依赖平台通道）
+/// 冲刷事件队列：sync 内部的封面解析/补推均为未等待的异步链，需要数个事件轮转落地
+Future<void> drain() async {
+  await Future<void>.delayed(Duration.zero);
+  await Future<void>.delayed(Duration.zero);
+}
+
+/// 自研媒体中心桥：通道载荷序列化 + 原生命令分发 + 封面竞态守卫
 void main() {
-  const track = Track(
-    id: "bili:1_BV1_2",
-    name: "夜航西飞",
-    author: "陈鸿宇",
-    duration: 252,
-    cover: "https://example.com/cover.jpg",
-  );
+  TestWidgetsFlutterBinding.ensureInitialized();
 
   SystemPlaybackSnapshot snap({
     bool playing = true,
     Duration duration = const Duration(seconds: 252),
+    String cover = "https://example.com/cover.jpg",
   }) =>
       SystemPlaybackSnapshot(
-        track: track,
+        track: Track(
+          id: "bili:1_BV1_2",
+          name: "夜航西飞",
+          author: "陈鸿宇",
+          duration: 252,
+          cover: cover,
+        ),
         playing: playing,
         buffering: false,
         position: const Duration(seconds: 30),
@@ -96,5 +106,94 @@ void main() {
     center.commands = commands;
     await center.onNativeCall(const MethodCall("unknown"));
     expect(commands.calls, isEmpty);
+  });
+
+  test("封面解析完成后补推 update（首推无封面）", () async {
+    const channel = MethodChannel("media_center_test.a");
+    final updates = <Map<String, Object?>>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      if (call.method == "update") {
+        updates.add(Map<String, Object?>.from(call.arguments as Map));
+      }
+      return null;
+    });
+    final center = SystemMediaCenter(channel);
+    final gate = Completer<File>();
+    center.coverFetcher = (url) => gate.future.then((_) => File("/cache/ready.jpg"));
+    addTearDown(() =>
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null));
+
+    center.sync(snap());
+    await drain();
+    expect(updates, hasLength(1));
+    expect(updates.first["coverPath"], isNull); // 首推：封面未就绪
+
+    gate.complete(File("/cache/ready.jpg"));
+    await drain();
+    expect(updates, hasLength(2)); // 就绪补推
+    expect(updates.last["coverPath"], "/cache/ready.jpg");
+  });
+
+  test("换歌竞态：旧封面迟到不回推也不覆盖当前封面路径", () async {
+    const channel = MethodChannel("media_center_test.b");
+    final updates = <Map<String, Object?>>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      if (call.method == "update") {
+        updates.add(Map<String, Object?>.from(call.arguments as Map));
+      }
+      return null;
+    });
+    final center = SystemMediaCenter(channel);
+    final gateA = Completer<File>();
+    center.coverFetcher = (url) => url.contains("a.jpg")
+        ? gateA.future
+        : Future<File>.value(File("/cache/b.jpg"));
+    addTearDown(() =>
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null));
+
+    center.sync(snap(cover: "http://x/a.jpg")); // a：拉取挂起
+    await drain();
+    center.sync(snap(cover: "http://x/b.jpg")); // 换 b：立即就绪
+    await drain();
+    // b 的首推与补推在同一个事件轮转内完成
+    expect(updates, hasLength(3));
+    expect(updates.last["coverPath"], "/cache/b.jpg");
+
+    gateA.complete(File("/cache/stale_a.jpg")); // a 迟到
+    await drain();
+    expect(updates, hasLength(3)); // 旧封面不得回推
+
+    center.sync(snap(cover: "http://x/b.jpg")); // 同曲下一 tick
+    await drain();
+    expect(updates, hasLength(4));
+    expect(updates.last["coverPath"], "/cache/b.jpg"); // 路径未被旧封面覆盖
+  });
+
+  test("同一封面 URL 不重复拉取", () async {
+    const channel = MethodChannel("media_center_test.c");
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async => null);
+    final center = SystemMediaCenter(channel);
+    var fetches = 0;
+    center.coverFetcher = (url) {
+      fetches++;
+      return Future<File>.value(File("/cache/c.jpg"));
+    };
+    addTearDown(() =>
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null));
+
+    center.sync(snap(cover: "https://x/same.jpg"));
+    await drain();
+    final firstPassFetches = fetches;
+    expect(firstPassFetches, 1);
+
+    center.sync(snap(cover: "https://x/same.jpg")); // 同曲同封面
+    await drain();
+    expect(fetches, firstPassFetches); // 命中 _coverKey 去重
   });
 }

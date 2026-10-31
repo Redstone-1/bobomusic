@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:io";
 
 import "package:flutter/services.dart";
 import "package:flutter_cache_manager/flutter_cache_manager.dart";
@@ -42,12 +43,12 @@ class SystemPlaybackSnapshot {
   });
 }
 
-/// 全局桥接实例；非 Android（桌面/测试）保持 null，相关调用全部跳过
+/// 全局桥接实例；非 Android/iOS（桌面/测试）保持 null，相关调用全部跳过
 SystemMediaCenter? systemMediaCenter;
 
 const MethodChannel _mediaCenterChannel = MethodChannel("com.bobomusic/media_center");
 
-/// 初始化自研媒体中心桥（仅 Android；失败不阻塞 App 启动）
+/// 初始化自研媒体中心桥（仅 Android/iOS；失败不阻塞 App 启动）
 Future<void> initSystemMediaCenter() async {
   if (systemMediaCenter != null) return;
   final center = SystemMediaCenter(_mediaCenterChannel);
@@ -56,7 +57,8 @@ Future<void> initSystemMediaCenter() async {
 }
 
 /// 自研媒体中心 Dart 桥：快照单向推入原生服务，原生命令转发回状态机。
-/// 通道协议见 android 端 MediaCenterBridge / MediaCenterService。
+/// 通道协议两端同形——android 端 MediaCenterBridge/MediaCenterService，
+/// iOS 端 AppDelegate.swift 的 MediaCenterBridge。
 class SystemMediaCenter {
   SystemMediaCenter(this._channel);
 
@@ -64,6 +66,11 @@ class SystemMediaCenter {
 
   /// 状态机命令实现（原生命令的转发目标）
   SystemPlaybackCommands? commands;
+
+  /// 封面取数函数：默认走全局磁盘缓存（含浏览器 UA）；入参为已升 https 的 URL，
+  /// 测试注入替身以覆盖换歌竞态分支
+  Future<File> Function(String url) coverFetcher =
+      (url) => DefaultCacheManager().getSingleFile(url, headers: coverFetchHeaders);
 
   SystemPlaybackSnapshot? _lastSnapshot;
 
@@ -145,10 +152,9 @@ class SystemMediaCenter {
     try {
       // 部分音源给 http 直链，统一升 https；网易等封面 CDN 拦 Dart 默认 UA，
       // 必须带浏览器 UA（实测无 UA 403，见 coverFetchHeaders 注释）
-      final file = await DefaultCacheManager().getSingleFile(
-        url.replaceFirst("http://", "https://"),
-        headers: coverFetchHeaders,
-      );
+      final file = await coverFetcher(url.replaceFirst("http://", "https://"));
+      // 迟到的旧封面：换歌竞态守卫——既不覆盖当前路径也不回推
+      if (url != _coverKey) return;
       _coverPath = file.path;
       final last = _lastSnapshot;
       if (last != null && last.track?.cover == url) {
