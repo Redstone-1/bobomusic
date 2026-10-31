@@ -50,7 +50,8 @@ class PlaylistPage extends ConsumerWidget {
       children: [
         PageHeader(
           title: "我的歌单",
-          subtitle: "本地 ${localCount.value ?? 0} 首 · 网络收藏 0 首",
+          // 上游「网络收藏」占位已删：v3 无后端，该计数没有数据源
+          subtitle: "本地 ${localCount.value ?? 0} 首",
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
