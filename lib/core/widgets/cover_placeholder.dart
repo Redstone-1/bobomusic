@@ -3,6 +3,13 @@ import "package:flutter/material.dart";
 
 import "../theme/aurora_tokens.dart";
 
+/// 封面统一请求头：网易等封面 CDN 拦截 Dart 默认 UA（实测 403），
+/// 必须带浏览器 UA（与 origin_sdk 各源一致）；UI 与媒体中心封面拉取共用
+const Map<String, String> coverFetchHeaders = <String, String>{
+  "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+};
+
 /// 封面：有 [cover] URL 用网络图（CachedNetworkImage，失败回退占位）；
 /// 无封面用主题色纯色占位（带透明度，2026-10-27 所有者定稿，弃渐变方案）
 class CoverPlaceholder extends StatelessWidget {
@@ -62,6 +69,7 @@ class CoverPlaceholder extends StatelessWidget {
       decoration: BoxDecoration(borderRadius: BorderRadius.circular(radius)),
       child: CachedNetworkImage(
         imageUrl: cover!,
+        httpHeaders: coverFetchHeaders,
         fit: BoxFit.cover,
         placeholder: (context, url) => fallback,
         errorWidget: (context, url, error) => fallback,

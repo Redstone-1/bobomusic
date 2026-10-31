@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  收起槽位（紧凑单行，线稿折叠态）：标题/歌手 + 播放暂停键。
+  折叠高度装不下三行布局（会被裁成半截，曾表现为只剩标题/歌手+半截进度线），
+  紧凑单行刚好放下完整渲染（OriginOS 实机验证）。
+  控件 id 与展开布局同名（notification_title/artist/action_toggle），绑定代码共用。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingStart="4dp"
+    android:paddingTop="6dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="6dp">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <!-- 歌名（粗体，单行省略） -->
+        <TextView
+            android:id="@+id/notification_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification.Title" />
+
+        <!-- 歌手（单行省略） -->
+        <TextView
+            android:id="@+id/notification_artist"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification.Line2" />
+    </LinearLayout>
+
+    <!-- 播放/暂停（图标随播放态切换） -->
+    <ImageView
+        android:id="@+id/notification_action_toggle"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_marginStart="12dp"
+        android:padding="7dp"
+        android:contentDescription="@string/media_center_toggle"
+        android:src="@drawable/play_circle" />
+</LinearLayout>

@@ -4,7 +4,7 @@ import "package:bobomusic/core/prefs/app_prefs.dart";
 import "package:bobomusic/data/db/app_database.dart";
 import "package:bobomusic/data/models/track.dart";
 import "package:bobomusic/features/player/audio_engine.dart";
-import "package:bobomusic/features/player/playback_audio_handler.dart";
+import "package:bobomusic/features/player/system_media_center.dart";
 import "package:bobomusic/features/player/playback_provider.dart";
 import "package:bobomusic/features/player/playback_speed.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -60,7 +60,7 @@ void main() {
   tearDown(() async {
     container.dispose();
     playbackDepsTestOverride = null;
-    playbackAudioHandler = null;
+    systemMediaCenter = null;
     await flush();
     await appDb.close();
   });

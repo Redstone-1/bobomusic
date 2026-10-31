@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  自研媒体中心通知（RemoteViews 三行）：标题/歌手 → 时间+进度条 → 居中三按钮。
+  不绘制封面位：OriginOS 对自定义通知强制在左侧渲染 App 图标列（不可移除），
+  让它充当封面角色（酷狗卡 K 头像同款角色），避免双图标并排。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="4dp"
+    android:paddingTop="11.6dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="12dp">
+
+    <!-- 歌名（粗体，单行省略） -->
+    <TextView
+        android:id="@+id/notification_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textAppearance="@android:style/TextAppearance.Material.Notification.Title" />
+
+    <!-- 歌手（单行省略） -->
+    <TextView
+        android:id="@+id/notification_artist"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textAppearance="@android:style/TextAppearance.Material.Notification.Line2" />
+
+    <!-- 进度行：已播时间 ─ 进度条 ─ 总时长 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="10dp">
+
+        <TextView
+            android:id="@+id/notification_time_elapsed"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification.Time" />
+
+        <ProgressBar
+            android:id="@+id/notification_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="10dp"
+            android:layout_marginEnd="10dp"
+            android:max="1000"
+            android:progress="0" />
+
+        <TextView
+            android:id="@+id/notification_time_total"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification.Time" />
+    </LinearLayout>
+
+    <!-- 控制行：上一曲 / 播放暂停 / 下一曲，整体居中 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginTop="6dp">
+
+        <ImageView
+            android:id="@+id/notification_action_previous"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:padding="10dp"
+            android:contentDescription="@string/media_center_previous"
+            android:src="@drawable/skip_previous" />
+
+        <ImageView
+            android:id="@+id/notification_action_toggle"
+            android:layout_width="54dp"
+            android:layout_height="54dp"
+            android:layout_marginStart="28dp"
+            android:layout_marginEnd="28dp"
+            android:padding="5dp"
+            android:contentDescription="@string/media_center_toggle"
+            android:src="@drawable/play_circle" />
+
+        <ImageView
+            android:id="@+id/notification_action_next"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:padding="10dp"
+            android:contentDescription="@string/media_center_next"
+            android:src="@drawable/skip_next" />
+    </LinearLayout>
+</LinearLayout>

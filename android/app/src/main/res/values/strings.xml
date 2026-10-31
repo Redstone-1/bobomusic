@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 媒体中心通知按钮的无障碍描述 -->
+<resources>
+    <string name="media_center_previous">上一曲</string>
+    <string name="media_center_toggle">播放或暂停</string>
+    <string name="media_center_next">下一曲</string>
+</resources>

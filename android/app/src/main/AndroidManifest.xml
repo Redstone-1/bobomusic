@@ -5,7 +5,7 @@
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
         <activity
-            android:name="com.ryanheise.audioservice.AudioServiceActivity"
+            android:name="com.bobomusic.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:theme="@style/LaunchTheme"
@@ -30,15 +30,16 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
-        <service android:name="com.ryanheise.audioservice.AudioService"
+        <!-- 自研媒体中心：前台服务承载 MediaSession 与自绘通知 -->
+        <service android:name="com.bobomusic.MediaCenterService"
             android:foregroundServiceType="mediaPlayback"
-            android:exported="true" tools:ignore="Instantiatable">
+            android:exported="true">
             <intent-filter>
-                <action android:name="android.media.browse.MediaBrowserService" />
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </service>
-        <receiver android:name="com.ryanheise.audioservice.MediaButtonReceiver"
-            android:exported="true" tools:ignore="Instantiatable">
+        <receiver android:name="androidx.media.session.MediaButtonReceiver"
+            android:exported="true">
         <intent-filter>
             <action android:name="android.intent.action.MEDIA_BUTTON" />
         </intent-filter>

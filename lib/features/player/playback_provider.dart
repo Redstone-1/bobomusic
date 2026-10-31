@@ -16,7 +16,7 @@ import "../playlist/playlists_provider.dart" show queueEntriesProvider;
 import "audio_engine.dart";
 import "just_audio_engine.dart";
 import "play_mode.dart";
-import "playback_audio_handler.dart";
+import "system_media_center.dart";
 import "playback_speed.dart";
 
 part "playback_provider.g.dart";
@@ -159,7 +159,7 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
   PlaybackState build() {
     ref.onDispose(_dispose);
     // 通知栏/耳机键命令接到本状态机（Android 才有 handler）
-    playbackAudioHandler?.commands = this;
+    systemMediaCenter?.commands = this;
     _restoreFromPrefs();
     return PlaybackState(
       speed: restorePlaybackSpeed(appPrefs.get(playbackSpeedPreferenceKey)),
@@ -200,15 +200,15 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
 
   /// 状态机 → 系统会话；position 高频更新按 1s 节流（通知栏自身会推算进度）
   void _syncSystem({bool force = false}) {
-    final handler = playbackAudioHandler;
-    if (handler == null) return;
+    final center = systemMediaCenter;
+    if (center == null) return;
     final now = DateTime.now();
     if (!force &&
         now.difference(_lastSystemSync) < const Duration(seconds: 1)) {
       return;
     }
     _lastSystemSync = now;
-    handler.sync(
+    center.sync(
       SystemPlaybackSnapshot(
         track: state.track,
         playing: state.playing,
@@ -837,7 +837,7 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
 
   void _dispose() {
     _persistNow();
-    playbackAudioHandler?.detach();
+    systemMediaCenter?.detach();
     _onPosition?.cancel();
     _onDuration?.cancel();
     _onPlaying?.cancel();

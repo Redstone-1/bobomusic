@@ -81,3 +81,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // 自研媒体中心：MediaSessionCompat + MediaButtonReceiver（androidx 官方底座）
+    implementation("androidx.media:media:1.7.0")
+}
