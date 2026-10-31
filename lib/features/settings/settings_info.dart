@@ -3,12 +3,12 @@ import "package:package_info_plus/package_info_plus.dart";
 
 import "../player/range_proxy_source.dart";
 
-/// 应用版本（PackageInfo；测试/桌面异常时回退 pubspec 版本）
+/// 应用版本（PackageInfo 的 versionName；构建号只作打包标识不进 UI，
+/// 检查更新按 versionName 比较。测试/桌面异常时回退 pubspec 版本）
 final appVersionProvider = FutureProvider<String>((ref) async {
   try {
     final info = await PackageInfo.fromPlatform();
-    final build = info.buildNumber;
-    return build.isEmpty ? info.version : "${info.version}+$build";
+    return info.version;
   } catch (_) {
     return "3.0.0";
   }

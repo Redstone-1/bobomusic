@@ -40,9 +40,23 @@ class UpdateResult {
   });
 }
 
-/// 检查更新（GitHub Releases）。网络失败抛异常，由 UI 提示。
+/// 检查更新（D5：按版本号比较，避免旧 tag 误判）。
+/// 主链 gitee Releases（国内免登录稳定；由所有者在 gitee 手动发版），
+/// 失败回退 GitHub Releases——匿名 API 每 IP 60 次/时限流，403 是常态
 class UpdateChecker {
-  static final Dio _dio = Dio(
+  static const _giteeRepo = "redstone-1/bobomusic";
+  static const _githubRepo = "Redstone-1/bobomusic";
+  static const _giteeReleasesPage = "https://gitee.com/$_giteeRepo/releases";
+
+  static final Dio _giteeDio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 15),
+      headers: {"User-Agent": "bobomusic"},
+    ),
+  );
+
+  static final Dio _githubDio = Dio(
     BaseOptions(
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 15),
@@ -54,19 +68,15 @@ class UpdateChecker {
   );
 
   Future<UpdateResult> check(String currentVersion) async {
-    final response = await _dio.get(
-      "https://api.github.com/repos/Redstone-1/bobomusic/releases",
-      queryParameters: {"per_page": "20"},
-    );
-    final raw = response.data is List ? response.data as List : const [];
-    final releases = <AppRelease>[];
-    for (final item in raw) {
-      if (item is! Map) continue;
-      if (item["draft"] == true || item["prerelease"] == true) continue;
-      final release = AppRelease.fromJson(item.cast<String, dynamic>());
-      if (release.version.isEmpty || release.url.isEmpty) continue;
-      releases.add(release);
+    try {
+      return _pick(currentVersion, await _fetchGitee());
+    } catch (e) {
+      print("gitee 检查更新失败，回退 GitHub：$e");
     }
+    return _pick(currentVersion, await _fetchGithub());
+  }
+
+  UpdateResult _pick(String currentVersion, List<AppRelease> releases) {
     final latest = pickLatestRelease(releases);
     return UpdateResult(
       currentVersion: currentVersion,
@@ -75,10 +85,68 @@ class UpdateChecker {
           latest != null && compareVersions(latest.version, currentVersion) > 0,
     );
   }
+
+  /// gitee releases 列表（尚无正式版时返回空列表，按"已是最新"处理）
+  Future<List<AppRelease>> _fetchGitee() async {
+    final response = await _giteeDio.get(
+      "https://gitee.com/api/v5/repos/$_giteeRepo/releases",
+      queryParameters: {"per_page": "20"},
+    );
+    final raw = response.data is List ? response.data as List : const [];
+    final releases = <AppRelease>[];
+    for (final item in raw) {
+      if (item is! Map) continue;
+      if (item["draft"] == true || item["prerelease"] == true) continue;
+      final release = appReleaseFromGiteeJson(
+        item.cast<String, dynamic>(),
+        fallbackUrl: _giteeReleasesPage,
+      );
+      if (release.version.isEmpty || release.url.isEmpty) continue;
+      releases.add(release);
+    }
+    return releases;
+  }
+
+  Future<List<AppRelease>> _fetchGithub() async {
+    final response = await _githubDio.get(
+      "https://api.github.com/repos/$_githubRepo/releases",
+      queryParameters: {"per_page": "20"},
+    );
+    final raw = response.data is List ? response.data as List : const [];
+    return parseGithubReleases(raw);
+  }
 }
 
 /// 全局可替换（测试注入固定版本/跳过网络）
 UpdateChecker updateChecker = UpdateChecker();
+
+/// gitee release JSON → AppRelease（纯函数便于测试）。
+/// gitee 对象没有 html_url 字段：为空时回填 [fallbackUrl]（releases 列表页）
+AppRelease appReleaseFromGiteeJson(Map json, {String fallbackUrl = ""}) {
+  final tag = "${json["tag_name"] ?? ""}".trim();
+  final htmlUrl = "${json["html_url"] ?? ""}".trim();
+  return AppRelease(
+    version: normalizeVersion(tag),
+    tag: tag,
+    url: htmlUrl.isEmpty ? fallbackUrl : htmlUrl,
+    notes: "${json["body"] ?? ""}",
+    publishedAt: "${json["published_at"] ?? json["created_at"] ?? ""}",
+  );
+}
+
+/// GitHub releases 响应 → 稳定版列表（纯函数便于测试：
+/// 过滤 draft/prerelease 与无 tag/无跳转地址的脏数据）
+List<AppRelease> parseGithubReleases(List raw) {
+  final releases = <AppRelease>[];
+  for (final item in raw) {
+    if (item is! Map) continue;
+    if (item["draft"] == true || item["prerelease"] == true) continue;
+    final release = AppRelease.fromJson(item.cast<String, dynamic>());
+    if (release.version.isEmpty || release.url.isEmpty) continue;
+    releases.add(release);
+  }
+  return releases;
+}
 
 /// 取版本号最高的稳定 release（同版本保留先出现项）
 AppRelease? pickLatestRelease(List<AppRelease> releases) {

@@ -50,6 +50,41 @@ void main() {
     });
   });
 
+  group("gitee release 解析（检查更新主链）", () {
+    test("html_url 缺失回填 releases 列表页，时间回退 created_at", () {
+      final release = appReleaseFromGiteeJson({
+        "tag_name": "v3.1.0",
+        "body": "gitee notes",
+        "created_at": "2026-11-01T10:00:00+08:00",
+      }, fallbackUrl: "https://gitee.com/redstone-1/bobomusic/releases");
+      expect(release.version, "3.1.0");
+      expect(release.tag, "v3.1.0");
+      expect(release.url, "https://gitee.com/redstone-1/bobomusic/releases");
+      expect(release.notes, "gitee notes");
+      expect(release.publishedAt, "2026-11-01T10:00:00+08:00");
+    });
+
+    test("带 html_url 时优先使用", () {
+      final release = appReleaseFromGiteeJson({
+        "tag_name": "3.2.0",
+        "html_url": "https://gitee.com/redstone-1/bobomusic/releases/1",
+      }, fallbackUrl: "ignored");
+      expect(release.url, "https://gitee.com/redstone-1/bobomusic/releases/1");
+    });
+  });
+
+  test("GitHub 列表解析：过滤 draft/prerelease 与脏数据", () {
+    final releases = parseGithubReleases([
+      {"tag_name": "v3.1.0", "html_url": "https://x/1"},
+      {"tag_name": "v3.2.0-rc", "prerelease": true, "html_url": "https://x/2"},
+      {"tag_name": "v3.3.0", "draft": true, "html_url": "https://x/3"},
+      {"tag_name": "", "html_url": "https://x/4"},
+      "junk",
+    ]);
+    expect(releases, hasLength(1));
+    expect(releases.single.version, "3.1.0");
+  });
+
   group("formatBytes", () {
     test("B / KB / MB / GB", () {
       expect(formatBytes(0), "0 B");

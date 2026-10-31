@@ -184,12 +184,12 @@ class SettingsPage extends ConsumerWidget {
     );
   }
 
-  /// 检查 GitHub Releases（D5：按版本号比较，避免旧 tag 误判为更新）
+  /// 检查更新（D5：按版本号比较，避免旧 tag 误判为更新）
   Future<void> _checkUpdate(BuildContext context, WidgetRef ref) async {
     AppLoading.show(msg: "检查更新…");
     try {
       final version = await ref.read(appVersionProvider.future);
-      final result = await updateChecker.check(version.split("+").first);
+      final result = await updateChecker.check(version);
       if (!context.mounted) return;
       if (!result.hasUpdate || result.latest == null) {
         AppToast.show(context, "已是最新版本 $version");
@@ -203,7 +203,7 @@ class SettingsPage extends ConsumerWidget {
           height: 200,
           child: SingleChildScrollView(
             child: Text(
-              latest.notes.trim().isEmpty ? "前往 GitHub 查看更新内容" : latest.notes,
+              latest.notes.trim().isEmpty ? "前往发布页查看更新内容" : latest.notes,
               style: const TextStyle(fontSize: 13, height: 1.5),
             ),
           ),
@@ -228,7 +228,7 @@ class SettingsPage extends ConsumerWidget {
       }
     } catch (e) {
       print("检查更新失败：$e");
-      if (context.mounted) AppToast.show(context, "检查更新失败，请检查网络");
+      if (context.mounted) AppToast.show(context, "检查更新失败，请稍后再试");
     } finally {
       AppLoading.dismiss();
     }
