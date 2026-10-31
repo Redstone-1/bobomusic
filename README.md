@@ -7,16 +7,33 @@
 **听歌自由 —— 无后端的跨平台本地音乐播放器**
 
 <p>
-  <a href="https://github.com/Redstone-1/bobomusic/releases"><img alt="Release" src="https://img.shields.io/badge/Release-v3.0.0-2EC4B6?style=flat-square" /></a>
-  <a href="https://docs.flutter.dev/"><img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.47.7-02569B?style=flat-square&logo=flutter" /></a>
-  <a href="#-平台支持"><img alt="Platform" src="https://img.shields.io/badge/Platform-Android%20%7C%20iOS%20%7C%20Desktop-3FA9CF?style=flat-square" /></a>
-  <a href="#"><img alt="Storage" src="https://img.shields.io/badge/Storage-本地存储-738FDE?style=flat-square" /></a>
+  <a href="https://github.com/Redstone-1/bobomusic/releases"><img alt="Release" src="https://img.shields.io/badge/Release-v3.0.0-2EC4B6?style=flat-square" /></a><a href="https://docs.flutter.dev/"><img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.47.7-02569B?style=flat-square&logo=flutter" /></a><a href="#-平台支持"><img alt="Platform" src="https://img.shields.io/badge/Platform-Android%20%7C%20iOS%20%7C%20Desktop-3FA9CF?style=flat-square" /></a><a href="#"><img alt="Storage" src="https://img.shields.io/badge/Storage-本地存储-738FDE?style=flat-square" /></a>
 </p>
 
 聚合五大主流公开音源与本地音乐，
 歌单、歌词、下载、播放队列全部数据本地存储，无广告、无账号、无后端。
 
 </div>
+
+## 📸 应用预览
+
+<div align="center">
+
+  <p align="center">
+    <img src="./screen_shot/list.jpg" width="260" />
+    <img src="./screen_shot/scanning_local.jpg" width="260" />
+    <img src="./screen_shot/setting.jpg" width="260" />
+  </p>
+
+  <p align="center">
+    <img src="./screen_shot/search.jpg" width="260" />
+    <img src="./screen_shot/playing.jpg" width="260" />
+    <img src="./screen_shot/notice.jpg" width="260" />
+  </p>
+
+</div>
+
+
 
 ## ✨ 功能特色
 
