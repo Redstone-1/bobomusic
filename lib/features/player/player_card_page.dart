@@ -80,7 +80,8 @@ class PlayerCardPage extends ConsumerStatefulWidget {
   ConsumerState<PlayerCardPage> createState() => _PlayerCardPageState();
 }
 
-class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
+class _PlayerCardPageState extends ConsumerState<PlayerCardPage>
+    with SingleTickerProviderStateMixin {
   /// 喜欢态覆盖：打开/切歌时从库同步，卡内写库后即时更新；
   /// 播放状态里的 Track 是入队快照，不能直接作为心形依据
   bool? _likedOverride;
@@ -88,6 +89,15 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
   @override
   void initState() {
     super.initState();
+    // 滑动切歌动画：单一控制器驱动全程（前半滑出、切歌藏于预览全覆盖
+    // 的一瞬、后半新内容滑入）。不可拆成 postFrame 链式两段动画——
+    // 帧末回调里启动的第二段 ticker 首帧不推进时间，滑入会停在起点
+    _swipeAnim.addListener(_onSwipeTick);
+    _swipeAnim.addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) {
+        setState(() => _swipeCommitting = false);
+      }
+    });
     // 打开播放卡即预加载歌词（库内有则直接显示；无则自动匹配三顺位）
     final track = ref.read(playbackProvider).track;
     if (track != null) {
@@ -98,6 +108,12 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
         }
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _swipeAnim.dispose();
+    super.dispose();
   }
 
   /// 快照上的 liked 可能已被别处改写：以库态校正，避免取消喜欢后重开仍是红心
@@ -123,6 +139,97 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
     if (ref.read(playbackProvider).track?.id == track.id) {
       setState(() => _likedOverride = newLiked);
     }
+  }
+
+  // ---- 滑动切歌（汽水式翻页，2026-11-01 定）----
+  // 跟手：内容页随手指位移（视口高度倍数，负 = 上移），中间态不渲染
+  // 邻曲信息；松手过阈值（视口高 18% 或快速轻扫）滑出并切歌、
+  // 新内容自对侧滑入，未过阈值回弹。歌词区纵向滚动由列表自身消费，
+  // 切歌手势只在非滚动区生效
+  double _swipeFraction = 0;
+
+  /// 松手动画进行中（期间忽略新的滑动手势）
+  bool _swipeCommitting = false;
+  bool _swipeCommitUp = false;
+  bool _swipeSwitched = false;
+  bool _swipeSpringing = false;
+  double _swipeFrom = 0;
+  double _swipeTarget = 0;
+  late final AnimationController _swipeAnim = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 360), // 滑出 + 滑入全程
+  );
+
+  void _onSwipeStart(DragStartDetails details) {
+    if (_swipeCommitting) return;
+    _swipeFraction = 0;
+  }
+
+  void _onSwipeUpdate(DragUpdateDetails details) {
+    if (_swipeCommitting) return;
+    setState(() {
+      _swipeFraction += details.delta.dy / MediaQuery.sizeOf(context).height;
+    });
+  }
+
+  void _onSwipeEnd(DragEndDetails details) {
+    if (_swipeCommitting) return;
+    const kCommitDistance = 0.18; // 视口高度的 18%
+    const kFlingVelocity = 900.0;
+    final velocity = details.primaryVelocity ?? 0;
+    final up = _swipeFraction < -kCommitDistance || velocity < -kFlingVelocity;
+    final down = _swipeFraction > kCommitDistance || velocity > kFlingVelocity;
+    // 未达阈值 / 队列不足两首（翻页无意义）：回弹不切歌
+    if ((!up && !down) || ref.read(playbackProvider).queue.length <= 1) {
+      _swipeSpringBack();
+      return;
+    }
+    setState(() {
+      _swipeCommitting = true;
+      _swipeCommitUp = up;
+      _swipeSwitched = false;
+      _swipeSpringing = false;
+      _swipeFrom = _swipeFraction;
+      _swipeTarget = up ? -1.0 : 1.0;
+    });
+    _swipeAnim.forward(from: 0);
+  }
+
+  void _swipeSpringBack() {
+    if (_swipeFraction == 0) return;
+    setState(() {
+      _swipeCommitting = true;
+      _swipeSpringing = true;
+      _swipeFrom = _swipeFraction;
+    });
+    _swipeAnim.forward(from: 0);
+  }
+
+  /// 全程动画：前半段当前页滑向目标（切歌动作藏在预览完全覆盖的一瞬），
+  /// 后半段新内容自对侧滑入；回弹则全程从起点回 0
+  void _onSwipeTick() {
+    final t = _swipeAnim.value;
+    double fraction;
+    if (_swipeSpringing) {
+      fraction = _swipeFrom * (1.0 - Curves.easeOutCubic.transform(t));
+    } else if (!_swipeSwitched) {
+      final out = Curves.easeOutCubic
+          .transform((t / 0.5).clamp(0.0, 1.0).toDouble());
+      fraction = _swipeFrom + (_swipeTarget - _swipeFrom) * out;
+      if (t >= 0.5) {
+        _swipeSwitched = true;
+        if (_swipeCommitUp) {
+          ref.read(playbackProvider.notifier).next();
+        } else {
+          ref.read(playbackProvider.notifier).previous();
+        }
+      }
+    } else {
+      final inn = Curves.easeOutCubic
+          .transform(((t - 0.5) / 0.5).clamp(0.0, 1.0).toDouble());
+      fraction = -_swipeTarget * (1.0 - inn);
+    }
+    setState(() => _swipeFraction = fraction);
   }
 
   @override
@@ -153,8 +260,19 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
     return Scaffold(
       // 背景与主壳一致（极光光球，所有者 2026-10-27 指定：不再单独设封面色背景）
       body: AuroraBackground(
-        child: SafeArea(
-          child: Column(
+        // 上滑下一曲 / 下滑上一曲（汽水式翻页）：内容随手指位移，松手过阈值
+        // 滑出并切歌、新内容自对侧滑入，未过阈值回弹。歌词区纵向滚动由列表
+        // 自身消费，切歌手势只在非滚动区生效；中间态不渲染任何邻曲信息
+        // （所有者 2026-11-01 反馈）
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onVerticalDragStart: _onSwipeStart,
+          onVerticalDragUpdate: _onSwipeUpdate,
+          onVerticalDragEnd: _onSwipeEnd,
+          child: FractionalTranslation(
+            translation: Offset(0, _swipeFraction),
+            child: SafeArea(
+              child: Column(
             children: [
               _TopBar(onClose: () => Navigator.of(context).pop()),
               // 播放卡只保留歌词视图（所有者 2026-10-26 反馈：不要黑胶）
@@ -178,7 +296,9 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
             ],
           ),
         ),
+        ),
       ),
+    ),
     );
   }
 }
@@ -535,7 +655,7 @@ class _ActionsRow extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(30, 4, 30, 4),
       child: Row(
-        // 四个等宽单元决定中心间距，图标大小仅做光学校正。
+        // 等宽单元决定中心间距，图标大小仅做光学校正；各源不超过 5 格
         children: [
           for (final (icon, label, active, onTap, size) in actions)
             Expanded(
