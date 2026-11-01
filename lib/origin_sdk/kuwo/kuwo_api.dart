@@ -288,7 +288,7 @@ class KuwoApi implements OriginService {
           contentType: "audio/mpeg",
         );
       }
-      throw const KuwoApiError("酷我未返回可用播放地址");
+      throw const KuwoApiError("酷我未返回可用播放地址（歌曲可能需要 VIP）");
     } on KuwoApiError {
       rethrow;
     } catch (e) {

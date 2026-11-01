@@ -9,6 +9,7 @@ import "../../core/widgets/aurora_background.dart";
 import "../player/mini_player_bar.dart";
 import "../player/playback_provider.dart";
 import "../playlist/playlist_page.dart";
+import "../plaza/hot_songs_provider.dart";
 import "../plaza/plaza_page.dart";
 import "../settings/settings_page.dart";
 import "home_tab.dart";
@@ -31,6 +32,12 @@ class AppShell extends ConsumerWidget {
         }
       },
     );
+    // 酷我 VIP 试听登记提示（播放期探测到试听片段时由状态机登记）
+    ref.listen(vipLimitedTrackIdsProvider, (previous, next) {
+      if (next.length > (previous?.length ?? 0)) {
+        AppToast.show(context, "该歌曲需要酷我 VIP，仅提供试听片段");
+      }
+    });
 
     return Scaffold(
       // extendBody：内容延伸到 Dock 之下，Dock 自带渐隐+模糊

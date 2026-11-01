@@ -102,3 +102,19 @@ Future<Track?> resolveChartHit(ChartHit hit, OriginType origin) async {
     return null;
   }
 }
+
+/// 酷我 VIP 试听片段登记（会话内有效，app 重启清零）：播放期探测到
+/// 「引擎实际时长明显短于曲目标注」的曲目 id 集合，广场榜单据此
+/// 灰显 + 打 VIP 角标；app 壳监听集合新增弹提示
+class VipLimitedTrackIds extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  void add(String trackId) {
+    if (state.contains(trackId)) return;
+    state = {...state, trackId};
+  }
+}
+
+final vipLimitedTrackIdsProvider =
+    NotifierProvider<VipLimitedTrackIds, Set<String>>(VipLimitedTrackIds.new);

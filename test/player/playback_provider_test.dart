@@ -10,6 +10,7 @@ import "package:bobomusic/data/repositories/track_repository.dart";
 import "package:bobomusic/features/player/audio_engine.dart";
 import "package:bobomusic/features/player/play_mode.dart";
 import "package:bobomusic/features/player/playback_provider.dart";
+import "package:bobomusic/features/plaza/hot_songs_provider.dart";
 import "package:bobomusic/origin_sdk/bili/bili_api_error.dart";
 import "package:bobomusic/origin_sdk/bili/bili_api.dart";
 import "package:bobomusic/origin_sdk/origin_types.dart" as sdk;
@@ -184,6 +185,51 @@ void main() {
     await flush();
     expect(engine.seeks.single, const Duration(seconds: 30));
     expect(st().position, const Duration(seconds: 30));
+  });
+
+  test("酷我 VIP 试听探测：实际时长 <70% 登记灰显集", () async {
+    engine.duration = const Duration(seconds: 60); // 试听片段
+    await pb().play(
+      Track(
+        id: "kuwo:vip1",
+        name: "VIP曲",
+        author: "歌手",
+        duration: 200,
+        origin: OriginType.kuwo,
+      ),
+    );
+    await flush();
+    expect(
+      container.read(vipLimitedTrackIdsProvider).contains("kuwo:vip1"),
+      isTrue,
+    );
+
+    // 非酷我源不启用探测（同比例时长不登记，避免元数据不准误伤）
+    engine.duration = const Duration(seconds: 60);
+    await pb().play(t("bili_vip", "B站曲"));
+    await flush();
+    expect(
+      container.read(vipLimitedTrackIdsProvider).contains("bili_vip"),
+      isFalse,
+    );
+  });
+
+  test("酷我正常时长不登记 VIP", () async {
+    engine.duration = const Duration(seconds: 180); // ≥70%
+    await pb().play(
+      Track(
+        id: "kuwo:ok1",
+        name: "正常曲",
+        author: "歌手",
+        duration: 200,
+        origin: OriginType.kuwo,
+      ),
+    );
+    await flush();
+    expect(
+      container.read(vipLimitedTrackIdsProvider).contains("kuwo:ok1"),
+      isFalse,
+    );
   });
 
   test("装载失败：error 上抛 state、不挂死不自动重试", () async {
