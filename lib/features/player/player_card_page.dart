@@ -19,6 +19,7 @@ import "../../data/repositories/track_repository.dart";
 import "../../origin_sdk/lyric/lrc.dart";
 import "../../origin_sdk/lyric/lyric_types.dart";
 import "../download/download_actions.dart";
+import "../playlist/add_to_playlist_sheet.dart";
 import "../playlist/playlists_provider.dart"
     show likedCountProvider, playlistDetailTracksProvider, queueEntriesProvider;
 import "../playlist/track_edit_dialog.dart";
@@ -182,7 +183,7 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
   }
 }
 
-/// 顶栏：收起 / 正在播放 / 更多（更多 = 定时关闭；歌词工具在歌词视图内）
+/// 顶栏：收起 / 正在播放 / 更多（更多 = 加入歌单 / 编辑信息 / 定时关闭）
 class _TopBar extends ConsumerWidget {
   final VoidCallback onClose;
 
@@ -234,28 +235,23 @@ class _TopBar extends ConsumerWidget {
       context,
       title: "更多",
       actions: [
-        if (track != null)
+        if (track != null) ...[
+          AppSheetAction(
+            icon: Icons.library_add_outlined,
+            label: "加入歌单",
+            onTap: () => showAddToPlaylistSheet(context, ref, [track]),
+          ),
           AppSheetAction(
             icon: Icons.edit_outlined,
             label: "编辑信息",
             onTap: () => showTrackEditDialog(context, ref, track),
           ),
+        ],
         AppSheetAction(
           icon: Icons.timer_outlined,
           label: "定时关闭（${sleepTimerLabel(state)}）",
           onTap: () => showSleepTimerSheet(context, ref),
         ),
-        if (track != null && track.origin == OriginType.bili)
-          AppSheetAction(
-            icon: Icons.open_in_new,
-            label: "去 B 站看视频",
-            onTap: () async {
-              final opened = await openBilibiliVideo(track);
-              if (!opened && context.mounted) {
-                AppToast.show(context, "无法打开 B 站");
-              }
-            },
-          ),
       ],
     );
   }
@@ -471,7 +467,7 @@ class _ControlsRow extends ConsumerWidget {
 
 }
 
-/// 动作行（喜欢 / 下载 / 稍后 / 评论 / 倍速），位于进度条上方
+/// 动作行（喜欢 / 下载 / 稍后 / 评论 / 倍速 / B站），位于进度条上方
 class _ActionsRow extends ConsumerWidget {
   final Track track;
   final bool liked;
@@ -552,9 +548,28 @@ class _ActionsRow extends ConsumerWidget {
               ),
             ),
           const Expanded(child: _SpeedAction()),
+          // 去 B 站看视频：仅 B 站源展示（所有者 2026-11-01 定：放倍速后面）
+          if (track.origin == OriginType.bili)
+            Expanded(
+              child: _PlayerActionButton(
+                icon: Icons.smart_display_outlined,
+                label: "B站",
+                active: false,
+                onTap: () => _openBilibili(context, track),
+                iconSize: 24,
+              ),
+            ),
         ],
       ),
     );
+  }
+
+  /// 跳转 B 站视频页；打不开时提示（失败由 openBilibiliVideo 返回）
+  Future<void> _openBilibili(BuildContext context, Track track) async {
+    final opened = await openBilibiliVideo(track);
+    if (!opened && context.mounted) {
+      AppToast.show(context, "无法打开 B 站");
+    }
   }
 }
 
