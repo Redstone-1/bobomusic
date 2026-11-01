@@ -27,9 +27,12 @@ class NeteaseApi implements OriginService {
   /// 榜单卡 key 前缀（广场定义表与 OriginService.getChartHits 共用约定）
   static const chartKeyPrefix = "netease:";
 
-  /// 官方榜 playlist id（免加密 playlist/detail 拉取；飙升/热歌为 2026-10 实测值）
+  /// 官方榜 playlist id（免加密 playlist/detail 拉取；飙升/热歌为 2026-10
+  /// 实测值，原创/电音为 2026-11 实测值）
   static const surgeChartId = "19723756";
   static const hotChartId = "3779629";
+  static const originalChartId = "2884035";
+  static const electroChartId = "1978921795";
 
   final Dio _dio = Dio(
     BaseOptions(

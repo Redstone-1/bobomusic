@@ -96,8 +96,8 @@ void main() {
     await tester.tap(find.text("广场"));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500)); // 榜单加载
-    expect(find.text("酷我热歌榜"), findsOneWidget); // Tab
-    await tester.tap(find.text("酷我热歌").first);
+    expect(find.text("网易云热歌榜"), findsOneWidget); // Tab（默认选中）
+    await tester.tap(find.text("网易热歌").first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
 
@@ -105,7 +105,7 @@ void main() {
     expect(find.byKey(const Key("mini_player")), findsOneWidget);
     expect(find.byKey(const Key("mini_prev")), findsOneWidget);
     expect(find.byKey(const Key("mini_next")), findsOneWidget);
-    expect(container.read(playbackProvider).track?.id, "kuwo:hot_1");
+    expect(container.read(playbackProvider).track?.id, "netease:chart_1");
     // 单句歌词按播放位置取当前行（6s → 第二行），验证刷新同步
     fakePlaybackEngine!.emitPosition(const Duration(seconds: 6));
     await tester.pump();
@@ -146,7 +146,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.text("酷我热歌榜"), findsOneWidget);
+    expect(find.text("网易云热歌榜"), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -157,11 +157,11 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
-    // 五张榜单 Tab（酷我 x2 + 网易 x2 + 千千 x1；B 站音乐榜已下线，QQ 榜未上）
-    expect(find.text("酷我热歌榜"), findsOneWidget);
-    expect(find.text("酷我飙升榜"), findsOneWidget);
+    // 五张榜单 Tab（网易 x4 + 千千 x1；B 站音乐榜、酷我双榜已下线，QQ 榜未上）
     expect(find.text("网易云热歌榜"), findsOneWidget);
     expect(find.text("网易云飙升榜"), findsOneWidget);
+    expect(find.text("网易云原创榜"), findsOneWidget);
+    expect(find.text("网易云电音榜"), findsOneWidget);
     expect(find.text("千千新歌榜"), findsOneWidget);
 
     // 切到网易热歌榜：列表换为网易 Fake 数据（Tab 动画 + provider 重建需多帧）
@@ -354,7 +354,7 @@ void main() {
     await tester.tap(find.text("广场"));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-    await tester.tap(find.text("酷我热歌").first);
+    await tester.tap(find.text("网易热歌").first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
     await tester.tap(find.byKey(const Key("mini_player")));
