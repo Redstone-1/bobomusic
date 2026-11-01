@@ -79,7 +79,7 @@ class MiniPlayerBar extends ConsumerWidget {
               child: Row(
                 children: [
                   CoverPlaceholder(
-                    cover: track.cover,
+                    cover: track.effectiveCover,
                     text: track.effectiveName,
                     size: 44,
                     radius: 13,

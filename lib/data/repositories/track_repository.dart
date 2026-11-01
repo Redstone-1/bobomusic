@@ -25,6 +25,7 @@ class TrackRepository {
         lyricOffsetMs: (row["lyric_offset"] as int?) ?? 0,
         displayName: row["display_name"] as String?,
         displayAuthor: row["display_author"] as String?,
+        displayCover: row["display_cover"] as String?,
       );
 
   /// 插入或更新：新曲全字段写入；已存在只更新内容字段
@@ -231,13 +232,14 @@ class TrackRepository {
     );
   }
 
-  /// 更新显示用歌名/歌手（B 站等音源标题可编辑；空串 = 恢复原始值存 null）。
-  /// 只写 display_* 两列：原始 name/author 不动，播放/入队的网络 upsert
-  /// 也不含这两列，覆盖不会被网络数据冲掉（与 liked_at/lyric 同类保护语义）
+  /// 更新显示用歌名/歌手/封面（B 站等音源标题可编辑；空串 = 恢复原始值存 null）。
+  /// 只写 display_* 三列：原始 name/author/cover 不动，播放/入队的网络 upsert
+  /// 也不含这三列，覆盖不会被网络数据冲掉（与 liked_at/lyric 同类保护语义）
   Future<void> updateDisplayInfo(
     String id, {
     String? name,
     String? author,
+    String? cover,
   }) async {
     String? normalize(String? value) {
       final text = value?.trim();
@@ -249,6 +251,7 @@ class TrackRepository {
       {
         "display_name": normalize(name),
         "display_author": normalize(author),
+        "display_cover": normalize(cover),
         "updated_at": DateTime.now().millisecondsSinceEpoch,
       },
       where: "id = ?",

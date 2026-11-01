@@ -165,4 +165,64 @@ void main() {
     await TrackRepository().updateDisplayInfo("t1", name: "改后名");
     expect((await TrackRepository().getById("t1"))!.effectiveName, "改后名");
   });
+
+  test("v5 旧库升级 v6：新增 display_cover 列，旧数据与封面覆盖可用", () async {
+    final dir = await Directory.systemTemp.createTemp("bobomusic_upgrade6");
+    final dbPath = "${dir.path}/upgrade6.db";
+    addTearDown(() async {
+      await appDb.close();
+      await dir.delete(recursive: true);
+    });
+
+    // 手工搭一个 v5 形状旧库（有 display_name/display_author，无 display_cover）
+    final old = await databaseFactory.openDatabase(
+      dbPath,
+      options: OpenDatabaseOptions(
+        version: 5,
+        onCreate: (db, _) async {
+          await db.execute("""
+            CREATE TABLE tracks (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              author TEXT NOT NULL DEFAULT '',
+              cover TEXT,
+              duration INTEGER NOT NULL DEFAULT 0,
+              origin TEXT NOT NULL,
+              local_path TEXT,
+              lyric TEXT,
+              lyric_offset INTEGER NOT NULL DEFAULT 0,
+              display_name TEXT,
+              display_author TEXT,
+              liked_at INTEGER,
+              downloaded_at INTEGER,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            )
+          """);
+        },
+      ),
+    );
+    await old.insert("tracks", {
+      "id": "t1",
+      "name": "曲1",
+      "cover": "https://original.example/c.jpg",
+      "origin": "bili",
+      "created_at": 1,
+      "updated_at": 1,
+    });
+    await old.close();
+
+    // 用应用入口重开 → 触发 v5→v6 升级加列
+    await initAppDatabase(path: dbPath);
+
+    // 旧数据完整（含原始封面）
+    final stored = await TrackRepository().getById("t1");
+    expect(stored!.name, "曲1");
+    expect(stored.effectiveCover, "https://original.example/c.jpg");
+    // v6 能力可用：写入封面覆盖并读回，原始 cover 保留
+    await TrackRepository().updateDisplayInfo("t1", cover: "https://new.example/c.jpg");
+    final edited = (await TrackRepository().getById("t1"))!;
+    expect(edited.displayCover, "https://new.example/c.jpg");
+    expect(edited.effectiveCover, "https://new.example/c.jpg");
+  });
 }

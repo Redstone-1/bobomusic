@@ -15,9 +15,9 @@ import "playlists_provider.dart"
         recentTracksProvider;
 
 /// 编辑曲目显示信息：B 站等音源的标题/歌手由上传者自定义（长、奇葩名），
-/// 支持本地覆盖显示。原始 name/author 保留——歌词匹配与下载文件名不受影响。
-/// 保存后失效相关列表数据源（详情页保数据不塌缩）；正在播放的曲目热更新
-/// 迷你条/播放卡/系统通知
+/// 封面可替换（URL，允许为空恢复原始）。原始 name/author/cover 保留——
+/// 歌词匹配与下载文件名不受影响。保存后失效相关列表数据源（详情页保数据
+/// 不塌缩）；正在播放的曲目热更新迷你条/播放卡/系统通知
 Future<void> showTrackEditDialog(
   BuildContext context,
   WidgetRef ref,
@@ -26,6 +26,7 @@ Future<void> showTrackEditDialog(
   final t = AuroraTokens.of(context);
   final nameController = TextEditingController(text: track.effectiveName);
   final authorController = TextEditingController(text: track.effectiveAuthor);
+  final coverController = TextEditingController(text: track.effectiveCover);
 
   final ok = await AppDialog.show<bool>(
     context,
@@ -37,6 +38,8 @@ Future<void> showTrackEditDialog(
         _field(t, controller: nameController, label: "歌名"),
         const SizedBox(height: 10),
         _field(t, controller: authorController, label: "歌手"),
+        const SizedBox(height: 10),
+        _field(t, controller: coverController, label: "封面 URL"),
       ],
     ),
     actions: [
@@ -65,6 +68,8 @@ Future<void> showTrackEditDialog(
       track.id,
       name: name,
       author: authorController.text.trim(),
+      // 封面 URL 允许为空：留空 = 清除覆盖、恢复原始封面
+      cover: coverController.text.trim(),
     );
     // 各列表数据源重读（详情页重读期间保留旧数据）；下载完成列表同步
     ref.invalidate(playlistDetailTracksProvider);
