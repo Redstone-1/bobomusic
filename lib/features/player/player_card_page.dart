@@ -909,15 +909,6 @@ class _LyricViewState extends ConsumerState<_LyricView> {
     }
   }
 
-  Future<void> _adjust(Track track, int deltaMs) async {
-    await ref
-        .read(lyricControllerProvider.notifier)
-        .adjustOffset(track, deltaMs);
-    if (!mounted) return;
-    final offset = ref.read(lyricControllerProvider).offsetMs;
-    AppToast.show(context, _offsetLabel(offset));
-  }
-
   Future<void> _deleteLyric(Track track) async {
     final ok = await AppDialog.confirm(
       context,
@@ -931,50 +922,91 @@ class _LyricViewState extends ConsumerState<_LyricView> {
     if (mounted) AppToast.show(context, "已删除歌词");
   }
 
+  /// 歌词工具面板：六项两列三行瓷贴（删除居第三行第二列），弹层高度
+  /// 由七行列表压到三行瓷贴（所有者 2026-11-01 反馈弹层过高难交互；
+  /// 滑杆方案对比后收益不足回退）；文案省略「歌词」前缀，标题已给上下文
   void _openTools(Track track) {
     AppSheet.show(
       context,
       title: "歌词设置",
-      actions: [
-        AppSheetAction(
-          icon: Icons.fast_rewind_outlined,
-          label: "歌词提前 0.5s",
-          onTap: () => _adjust(track, -500),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(22, 2, 22, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: _LyricToolTile(
+                    icon: Icons.fast_rewind_outlined,
+                    label: "提前 0.5s",
+                    onTap: () => _adjust(track, -500),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _LyricToolTile(
+                    icon: Icons.fast_forward_outlined,
+                    label: "延后 0.5s",
+                    onTap: () => _adjust(track, 500),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _LyricToolTile(
+                    icon: Icons.fast_rewind,
+                    label: "提前 2s",
+                    onTap: () => _adjust(track, -2000),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _LyricToolTile(
+                    icon: Icons.fast_forward,
+                    label: "延后 2s",
+                    onTap: () => _adjust(track, 2000),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _LyricToolTile(
+                    icon: Icons.search,
+                    label: "搜索替换",
+                    onTap: () => _searchLyrics(track),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _LyricToolTile(
+                    icon: Icons.delete_outline,
+                    label: "删除歌词",
+                    danger: true,
+                    onTap: () => _deleteLyric(track),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
-        AppSheetAction(
-          icon: Icons.fast_forward_outlined,
-          label: "歌词延后 0.5s",
-          onTap: () => _adjust(track, 500),
-        ),
-        AppSheetAction(
-          icon: Icons.fast_rewind,
-          label: "歌词提前 2s",
-          onTap: () => _adjust(track, -2000),
-        ),
-        AppSheetAction(
-          icon: Icons.fast_forward,
-          label: "歌词延后 2s",
-          onTap: () => _adjust(track, 2000),
-        ),
-        AppSheetAction(
-          icon: Icons.restart_alt,
-          label: "重置校准",
-          onTap: () =>
-              ref.read(lyricControllerProvider.notifier).resetOffset(track),
-        ),
-        AppSheetAction(
-          icon: Icons.search,
-          label: "搜索替换歌词",
-          onTap: () => _searchLyrics(track),
-        ),
-        AppSheetAction(
-          icon: Icons.delete_outline,
-          label: "删除歌词",
-          danger: true,
-          onTap: () => _deleteLyric(track),
-        ),
-      ],
+      ),
     );
+  }
+
+  Future<void> _adjust(Track track, int deltaMs) async {
+    await ref
+        .read(lyricControllerProvider.notifier)
+        .adjustOffset(track, deltaMs);
+    if (!mounted) return;
+    final offset = ref.read(lyricControllerProvider).offsetMs;
+    AppToast.show(context, _offsetLabel(offset));
   }
 
   @override
@@ -1087,6 +1119,61 @@ class _LyricViewState extends ConsumerState<_LyricView> {
                     ),
         ),
       ],
+    );
+  }
+}
+
+/// 歌词工具双列瓷贴（图标 + 文案居中；[danger] 染错误色）：
+/// 点击后先收面板再执行动作，与 AppSheetAction 的收起语义一致
+class _LyricToolTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool danger;
+
+  const _LyricToolTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.danger = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AuroraTokens.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final color = danger ? scheme.error : t.primary;
+    return InkWell(
+      onTap: () {
+        Navigator.of(context).pop();
+        onTap();
+      },
+      borderRadius: BorderRadius.circular(t.radiusMd),
+      splashColor: t.surface2,
+      highlightColor: t.surface,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: t.surface,
+          borderRadius: BorderRadius.circular(t.radiusMd),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 20, color: color),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: danger ? scheme.error : t.fg,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
