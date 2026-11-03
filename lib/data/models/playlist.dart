@@ -15,12 +15,14 @@ class Playlist {
   final String name;
   final PlaylistType type;
   final int count; // mock 用：曲目数（真数据由 playlist_items 聚合）
+  final String? cover;
 
   const Playlist({
     required this.id,
     required this.name,
     required this.type,
     this.count = 0,
+    this.cover,
   });
 
   /// 相等性按 id（family provider 参数缓存与刷新依赖它）

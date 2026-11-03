@@ -60,8 +60,8 @@ Future<List<Track>> recentTracks(Ref ref) async => HistoryRepository().recent();
 
 /// 歌单/我喜欢/本地音乐详情曲目（family 按Playlist 取数）
 @riverpod
-Future<List<Track>> playlistDetailTracks(Ref ref, Playlist playlist) async {
-  if (playlist.id == "builtin:liked") return TrackRepository().likedTracks();
-  if (playlist.id == "builtin:local") return TrackRepository().localTracks();
-  return PlaylistRepository().items(playlist.id);
+Future<List<Track>> playlistDetailTracks(Ref ref, String playlistId) async {
+  if (playlistId == "builtin:liked") return TrackRepository().likedTracks();
+  if (playlistId == "builtin:local") return TrackRepository().localTracks();
+  return PlaylistRepository().items(playlistId);
 }

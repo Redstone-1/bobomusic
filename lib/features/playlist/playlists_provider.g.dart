@@ -224,7 +224,7 @@ final class PlaylistDetailTracksProvider extends $FunctionalProvider<
   /// 歌单/我喜欢/本地音乐详情曲目（family 按Playlist 取数）
   PlaylistDetailTracksProvider._(
       {required PlaylistDetailTracksFamily super.from,
-      required Playlist super.argument})
+      required String super.argument})
       : super(
           retry: null,
           name: r'playlistDetailTracksProvider',
@@ -251,7 +251,7 @@ final class PlaylistDetailTracksProvider extends $FunctionalProvider<
 
   @override
   FutureOr<List<Track>> create(Ref ref) {
-    final argument = this.argument as Playlist;
+    final argument = this.argument as String;
     return playlistDetailTracks(
       ref,
       argument,
@@ -270,12 +270,12 @@ final class PlaylistDetailTracksProvider extends $FunctionalProvider<
 }
 
 String _$playlistDetailTracksHash() =>
-    r'7a8de976e5fa29525cb8a9e953ea399c9185f558';
+    r'fc53a6311a7f2afee8de6a0bf172ae88315e164f';
 
 /// 歌单/我喜欢/本地音乐详情曲目（family 按Playlist 取数）
 
 final class PlaylistDetailTracksFamily extends $Family
-    with $FunctionalFamilyOverride<FutureOr<List<Track>>, Playlist> {
+    with $FunctionalFamilyOverride<FutureOr<List<Track>>, String> {
   PlaylistDetailTracksFamily._()
       : super(
           retry: null,
@@ -288,9 +288,9 @@ final class PlaylistDetailTracksFamily extends $Family
   /// 歌单/我喜欢/本地音乐详情曲目（family 按Playlist 取数）
 
   PlaylistDetailTracksProvider call(
-    Playlist playlist,
+    String playlistId,
   ) =>
-      PlaylistDetailTracksProvider._(argument: playlist, from: this);
+      PlaylistDetailTracksProvider._(argument: playlistId, from: this);
 
   @override
   String toString() => r'playlistDetailTracksProvider';

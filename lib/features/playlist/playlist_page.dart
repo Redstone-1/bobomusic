@@ -5,10 +5,12 @@ import "../../core/overlays/app_dialog.dart";
 import "../../core/overlays/app_sheet.dart";
 import "../../core/overlays/app_toast.dart";
 import "../../core/theme/aurora_tokens.dart";
+import "../../core/navigation/desktop_navigation.dart";
 import "../../core/widgets/app_buttons.dart";
 import "../../core/widgets/cover_placeholder.dart";
 import "../../core/widgets/empty_state.dart";
 import "../../core/widgets/page_header.dart";
+import "../../core/widgets/desktop_content.dart";
 import "../../core/widgets/scale_tap.dart";
 import "../../core/widgets/skeleton.dart";
 import "../../core/widgets/song_list_tile.dart";
@@ -25,6 +27,7 @@ import "add_to_playlist_sheet.dart";
 import "playlist_detail_page.dart";
 import "playlists_provider.dart";
 import "track_edit_dialog.dart";
+import "playlist_commands.dart" as commands;
 
 /// 歌单页（对齐原型 renderOrder；S3.3 接真数据：歌单 CRUD / 我喜欢 / 播放队列）
 class PlaylistPage extends ConsumerWidget {
@@ -40,13 +43,9 @@ class PlaylistPage extends ConsumerWidget {
     final currentTrackId = ref.watch(
       playbackProvider.select((s) => s.track?.id),
     );
-    // 播放状态机在切歌前已写入 history；track 变化后刷新最近播放
-    ref.listen(playbackProvider.select((s) => s.track?.id), (_, __) {
-      ref.invalidate(recentTracksProvider);
-    });
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 150),
+      padding: EdgeInsets.fromLTRB(DesktopContent.of(context) ? 30 : 20, DesktopContent.of(context) ? 30 : 16, DesktopContent.of(context) ? 30 : 20, DesktopContent.of(context) ? 30 : 150),
       children: [
         PageHeader(
           title: "我的歌单",
@@ -134,13 +133,17 @@ class PlaylistPage extends ConsumerWidget {
                   title: "还没有歌单",
                   subtitle: "点右上角 + 创建第一个歌单",
                 )
-              : Column(
+              : DesktopContent.of(context)
+                ? LayoutBuilder(builder: (context, constraints) => Wrap(spacing: 18, runSpacing: 20, children: [
+                  for (final pl in playlists) SizedBox(width: (constraints.maxWidth - 18 * 3) / 4, child: _PlaylistRow(name: pl.name, count: pl.count, cover: pl.cover, onTap: () => _openPlaylist(context, ref, pl), onMorePressed: () => _showRowActions(context, ref, pl))),
+                ]))
+                : Column(
                   children: [
                     for (final pl in playlists)
                       _PlaylistRow(
                         name: pl.name,
                         count: pl.count,
-                        onTap: () => _openPlaylist(context, pl),
+                        onTap: () => _openPlaylist(context, ref, pl),
                         onMorePressed: () =>
                             _showRowActions(context, ref, pl),
                       ),
@@ -195,26 +198,7 @@ class PlaylistPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _createPlaylist(BuildContext context, WidgetRef ref) async {
-    final existing = ref.read(playlistsProvider).value?.length ?? 0;
-    if (existing >= 20) {
-      AppToast.show(context, "最多创建 20 个歌单");
-      return;
-    }
-    final name = await AppDialog.input(
-      context,
-      title: "新建歌单",
-      hint: "歌单名（1~20 字）",
-      validator: _validateName,
-    );
-    if (name == null || !context.mounted) return;
-    try {
-      await ref.read(playlistsProvider.notifier).create(name.trim());
-      if (context.mounted) AppToast.show(context, "已创建「$name」");
-    } catch (_) {
-      if (context.mounted) AppToast.show(context, "歌单名已存在");
-    }
-  }
+  Future<void> _createPlaylist(BuildContext context, WidgetRef ref) => commands.createPlaylist(context, ref);
 
   Future<void> _clearRecent(BuildContext context, WidgetRef ref) async {
     final ok = await AppDialog.confirm(
@@ -273,7 +257,11 @@ class PlaylistPage extends ConsumerWidget {
     return null;
   }
 
-  void _openPlaylist(BuildContext context, Playlist playlist) {
+  void _openPlaylist(BuildContext context, WidgetRef ref, Playlist playlist) {
+    if (DesktopContent.of(context)) {
+      ref.read(desktopNavigationProvider.notifier).open(DesktopDestination("playlist", playlist.name, playlistId: playlist.id));
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => PlaylistDetailPage(playlist: playlist)),
     );
@@ -338,7 +326,7 @@ class PlaylistPage extends ConsumerWidget {
 }
 
 /// 快捷入口卡（原型 .qa .qi：大 emoji 沉底 + 标签/计数）
-class _QuickCard extends StatelessWidget {
+class _QuickCard extends ConsumerWidget {
   final String emoji;
   final String label;
   final String count;
@@ -352,14 +340,18 @@ class _QuickCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final t = AuroraTokens.of(context);
     return ScaleTap(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => PlaylistDetailPage(playlist: playlist),
-        ),
-      ),
+      onTap: () {
+        if (DesktopContent.of(context)) {
+          ref.read(desktopNavigationProvider.notifier).open(
+            DesktopDestination(playlist.id == "builtin:local" ? "local" : "liked", playlist.name),
+          );
+        } else {
+          Navigator.of(context).push(MaterialPageRoute(builder: (_) => PlaylistDetailPage(playlist: playlist)));
+        }
+      },
       pressedScale: 0.97,
       child: Container(
         height: 92,
@@ -406,12 +398,14 @@ class _QuickCard extends StatelessWidget {
 class _PlaylistRow extends StatelessWidget {
   final String name;
   final int count;
+  final String? cover;
   final VoidCallback onTap;
   final VoidCallback onMorePressed;
 
   const _PlaylistRow({
     required this.name,
     required this.count,
+    this.cover,
     required this.onTap,
     required this.onMorePressed,
   });
@@ -419,6 +413,14 @@ class _PlaylistRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = AuroraTokens.of(context);
+    if (DesktopContent.of(context)) {
+      return LayoutBuilder(builder: (context, constraints) => InkWell(onTap: onTap, borderRadius: BorderRadius.circular(t.radiusMd), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        CoverPlaceholder(cover: cover, text: name, size: constraints.maxWidth, radius: t.radiusMd),
+        const SizedBox(height: 8),
+        Row(children: [Expanded(child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: t.fg, fontSize: 12, fontWeight: FontWeight.w600))), SizedBox(width: 26, height: 26, child: IconButton(padding: EdgeInsets.zero, tooltip: "歌单操作", iconSize: 16, onPressed: onMorePressed, icon: const Icon(Icons.more_horiz)))]),
+        Text("$count 首", style: TextStyle(color: t.fgMute, fontSize: 10)),
+      ])));
+    }
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(t.radiusMd),

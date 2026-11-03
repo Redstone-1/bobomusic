@@ -3,6 +3,9 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../features/home/app_shell.dart";
+import "../core/platform/app_platform.dart";
+import "desktop/desktop_shell.dart";
+import "../features/player/player_presentation_coordinator.dart";
 import "../core/theme/theme_mode_provider.dart";
 import "../core/theme/theme_providers.dart";
 
@@ -12,6 +15,7 @@ class App extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(playerPresentationCoordinatorProvider);
     final themeMode = ref.watch(appThemeModeProvider);
     final light = ref.watch(appLightThemeProvider);
     final dark = ref.watch(appDarkThemeProvider);
@@ -21,7 +25,9 @@ class App extends ConsumerWidget {
       theme: light,
       darkTheme: dark,
       themeMode: themeMode,
-      home: const AppShell(),
+      home: ref.watch(appPlatformProvider).usesDesktopLayout
+          ? const DesktopShell()
+          : const AppShell(),
       // BotToast 全局挂载（Toast / 加载态入口，S1.3）
       navigatorObservers: [BotToastNavigatorObserver()],
       builder: BotToastInit(),

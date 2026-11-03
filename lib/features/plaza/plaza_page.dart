@@ -10,6 +10,7 @@ import "../../core/widgets/empty_state.dart";
 import "../../core/widgets/eq_bars.dart";
 import "../../core/widgets/glass_card.dart";
 import "../../core/widgets/page_header.dart";
+import "../../core/widgets/desktop_content.dart";
 import "../../core/widgets/scale_tap.dart";
 import "../../core/widgets/skeleton.dart";
 import "../../data/repositories/track_repository.dart";
@@ -60,9 +61,21 @@ class _PlazaPageState extends ConsumerState<PlazaPage>
                 ),
               ),
               const SizedBox(height: 10),
+              if (DesktopContent.of(context))
+                LayoutBuilder(builder: (context, constraints) {
+                  final columns = constraints.maxWidth >= 720 ? 3 : 2;
+                  final width = (constraints.maxWidth - (columns - 1) * 12) / columns;
+                  return Padding(padding: const EdgeInsets.only(bottom: 18), child: Wrap(spacing: 12, runSpacing: 12, children: [
+                    for (final (index, definition) in plazaChartDefs.indexed)
+                      SizedBox(width: width, child: Material(color: _tab.index == index ? t.primary.withValues(alpha: .12) : t.surface, borderRadius: BorderRadius.circular(t.radiusLg), child: InkWell(borderRadius: BorderRadius.circular(t.radiusLg), onTap: () => setState(() => _tab.animateTo(index)), child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(definition.$2, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: _tab.index == index ? t.primary : t.fg, fontSize: 16, fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 12), Text("发现值得循环的好歌", style: TextStyle(color: t.fgMute, fontSize: 11)),
+                      ]))))),
+                  ]));
+                }),
               // 榜单 Tab（family provider 各榜独立缓存，切换零等待）。
               // 无指示条；榜单随源扩展，超宽自动出横向滚动
-              Theme(
+              if (!DesktopContent.of(context)) Theme(
                 data: Theme.of(context).copyWith(
                   splashFactory: NoSplash.splashFactory,
                 ),
@@ -133,7 +146,7 @@ class _ChartListViewState extends ConsumerState<_ChartListView>
     );
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 150),
+      padding: EdgeInsets.fromLTRB(20, 4, 20, DesktopContent.of(context) ? 24 : 150),
       children: [
         chartAsync.when(
           loading: () => const SkeletonListView(rows: 8),

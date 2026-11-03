@@ -14,19 +14,20 @@ import "../playlist/track_edit_dialog.dart";
 import "playback_provider.dart";
 
 void showPlaybackQueueSheet(BuildContext context) {
-  AppSheet.show(context, child: const _PlaybackQueueSheet());
+  AppSheet.show(context, sidePanel: true, child: const PlaybackQueuePanel());
 }
 
 /// 待播条目和当前会话分别操作，歌曲身份不能替代一次排队记录的身份。
-class _PlaybackQueueSheet extends ConsumerStatefulWidget {
-  const _PlaybackQueueSheet();
+class PlaybackQueuePanel extends ConsumerStatefulWidget {
+  const PlaybackQueuePanel({super.key, this.closeOnPlay = true});
+  final bool closeOnPlay;
 
   @override
-  ConsumerState<_PlaybackQueueSheet> createState() =>
-      _PlaybackQueueSheetState();
+  ConsumerState<PlaybackQueuePanel> createState() =>
+      PlaybackQueuePanelState();
 }
 
-class _PlaybackQueueSheetState extends ConsumerState<_PlaybackQueueSheet> {
+class PlaybackQueuePanelState extends ConsumerState<PlaybackQueuePanel> {
   bool _busy = false;
 
   Future<void> _play(Future<bool> Function(Playback) command) async {
@@ -35,7 +36,7 @@ class _PlaybackQueueSheetState extends ConsumerState<_PlaybackQueueSheet> {
     setState(() => _busy = true);
     try {
       final success = await command(playback);
-      if (mounted && success) Navigator.of(context).pop();
+      if (mounted && success && widget.closeOnPlay) Navigator.of(context).pop();
     } catch (e) {
       print("队列点播失败：$e");
       if (mounted) AppToast.show(context, "播放失败，请重试");

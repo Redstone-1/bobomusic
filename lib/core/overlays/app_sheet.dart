@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 
 import "../theme/aurora_tokens.dart";
+import "../widgets/desktop_content.dart";
 
 /// 底部操作面板的一项（图标 + 文案 + 回调）
 class AppSheetAction {
@@ -27,7 +28,32 @@ class AppSheet {
     String? title,
     List<AppSheetAction> actions = const [],
     Widget? child,
+    bool sidePanel = false,
   }) {
+    if (DesktopContent.of(context)) {
+      final t = AuroraTokens.of(context);
+      return showGeneralDialog<T>(
+        context: context, barrierDismissible: true, barrierLabel: "关闭面板",
+        barrierColor: t.maskBg, transitionDuration: t.motionFast,
+        pageBuilder: (dialogContext, animation, secondaryAnimation) => SafeArea(
+          child: Align(alignment: sidePanel ? Alignment.centerRight : Alignment.center,
+            child: Padding(padding: const EdgeInsets.all(18), child: Material(
+              color: t.bg2, borderRadius: BorderRadius.circular(t.radiusLg),
+              clipBehavior: Clip.antiAlias,
+              child: ConstrainedBox(constraints: BoxConstraints(maxWidth: sidePanel ? 380 : 460, maxHeight: MediaQuery.sizeOf(dialogContext).height - 100),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  if (title != null) Padding(padding: const EdgeInsets.fromLTRB(22, 16, 8, 6), child: Row(children: [Expanded(child: Text(title, maxLines: 2, style: TextStyle(color: t.fg, fontSize: 18, fontWeight: FontWeight.w700))), IconButton(tooltip: "关闭", onPressed: () => Navigator.of(dialogContext).pop(), icon: const Icon(Icons.close))])),
+                  if (child != null) Flexible(child: child),
+                  if (actions.isNotEmpty) Flexible(child: SingleChildScrollView(padding: const EdgeInsets.symmetric(vertical: 10), child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    for (final action in actions) ListTile(leading: Icon(action.icon, color: action.danger ? Theme.of(context).colorScheme.error : t.primary, size: 20), title: Text(action.label, style: TextStyle(color: t.fg, fontSize: 13)), onTap: () { Navigator.of(dialogContext).pop(); action.onTap(); }),
+                  ]))),
+                ]),
+              ),
+            )),
+          ),
+        ),
+      );
+    }
     return showModalBottomSheet<T>(
       context: context,
       isScrollControlled: true,

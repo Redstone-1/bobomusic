@@ -7,6 +7,8 @@ import "../../core/overlays/app_loading.dart";
 import "../../core/overlays/app_sheet.dart";
 import "../../core/overlays/app_toast.dart";
 import "../../core/prefs/app_prefs.dart";
+import "../../core/navigation/desktop_navigation.dart";
+import "../../core/widgets/desktop_content.dart";
 import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/app_buttons.dart";
 import "../../core/widgets/aurora_background.dart";
@@ -102,6 +104,14 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       if (mounted) setState(() {});
     });
     _loadLikedIds();
+    ref.listenManual(desktopSearchProvider, (_, request) {
+      if (request == null) return;
+      Future.microtask(() {
+        if (!mounted) return;
+        _controller.text = request.query;
+        if (request.query.isNotEmpty) _submitSearch();
+      });
+    }, fireImmediately: true);
   }
 
   Future<void> _loadLikedIds() async {
@@ -370,7 +380,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     }
     if (!mounted) return;
     ref.invalidate(likedCountProvider);
-    ref.invalidate(playlistDetailTracksProvider(kBuiltinLikedPlaylist));
+    ref.invalidate(playlistDetailTracksProvider(kBuiltinLikedPlaylist.id));
     setState(() => _likedOverrides[cardId] = true);
     AppToast.show(context, "已将合集 ${r.tracks.length} 首歌曲加入喜欢");
   }
@@ -383,7 +393,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     if (!mounted) return;
     ref.invalidate(likedCountProvider);
     // 喜欢列表可能正在后台：精确失效喜欢详情数据源，返回列表即同步
-    ref.invalidate(playlistDetailTracksProvider(kBuiltinLikedPlaylist));
+    ref.invalidate(playlistDetailTracksProvider(kBuiltinLikedPlaylist.id));
     setState(() => _likedOverrides[heartKey ?? track.id] = liked);
   }
 
@@ -569,7 +579,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     );
     final queryEmpty = _controller.text.trim().isEmpty;
     // 聚焦且无关键词且历史非空 → 展示历史面板（否则走空态覆盖层）
-    final showHistory = _focus.hasFocus && queryEmpty && _history.isNotEmpty;
+    final desktop = DesktopContent.of(context);
+    final showHistory = (desktop || _focus.hasFocus) && queryEmpty && _history.isNotEmpty;
 
     return Scaffold(
       body: AuroraBackground(
@@ -591,7 +602,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                             child: BackLink(),
                           ),
                           const SizedBox(height: 4),
-                          TextField(
+                          if (!desktop) TextField(
                             controller: _controller,
                             focusNode: _focus,
                             autofocus: true,
@@ -665,8 +676,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                               return false;
                             },
                             child: ListView(
-                              padding: const EdgeInsets.fromLTRB(
-                                  20, 10, 20, 110),
+                              padding: EdgeInsets.fromLTRB(
+                                  20, 10, 20, desktop ? 24 : 110),
                               children: [
                                 // 搜索历史：聚焦且无关键词时展示（可单条删/清空）
                                 if (showHistory) ...[

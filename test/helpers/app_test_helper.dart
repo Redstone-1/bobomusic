@@ -1,5 +1,6 @@
 import "package:bobomusic/app/app.dart";
 import "package:bobomusic/core/prefs/app_prefs.dart";
+import "package:bobomusic/core/platform/app_platform.dart";
 import "package:bobomusic/data/db/app_database.dart";
 import "package:bobomusic/data/models/track.dart" as models;
 import "package:bobomusic/data/origin_service.dart";
@@ -420,6 +421,7 @@ class FakeLyricService implements LyricService {
 FakeEngine? fakePlaybackEngine;
 
 Future<Widget> buildTestApp({
+  AppPlatform platform = AppPlatform.android,
   Map<String, Object> prefs = const {},
   List<Map<String, Object>> seedTracks = const [],
 }) async {
@@ -452,5 +454,8 @@ Future<Widget> buildTestApp({
       ),
     );
   }
-  return ProviderScope(child: const App());
+  return ProviderScope(
+    overrides: [appPlatformProvider.overrideWithValue(platform)],
+    child: const App(),
+  );
 }

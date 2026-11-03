@@ -4,6 +4,7 @@ import "package:flutter/material.dart";
 import "package:flutter/scheduler.dart";
 
 import "../theme/aurora_tokens.dart";
+import "desktop_content.dart";
 
 /// 极光背景：三枚主题色系光斑缓慢漂移（原型 .aurora，画在内容底层）
 ///
@@ -15,11 +16,13 @@ class AuroraBackground extends StatefulWidget {
 
   /// false = 光斑定格（调试与性能对比用）
   final bool animated;
+  final bool desktop;
 
   const AuroraBackground({
     super.key,
     required this.child,
     this.animated = true,
+    this.desktop = false,
   });
 
   @override
@@ -47,6 +50,7 @@ class _AuroraBackgroundState extends State<AuroraBackground>
 
   @override
   Widget build(BuildContext context) {
+    if (DesktopContent.of(context)) return widget.child;
     final t = AuroraTokens.of(context);
     // 光斑色相：主题色 / +55 / -45（原型 nth-child 定义）
     final base = HSLColor.fromColor(t.glow);
@@ -68,7 +72,7 @@ class _AuroraBackgroundState extends State<AuroraBackground>
         // 高度用窗口全屏尺寸（MediaQuery 不随输入法压缩）：键盘弹出/收起
         // 光斑纹丝不动，被压缩掉的底部区域由 ClipRect 裁剪（本就在键盘下方）
         final h = MediaQuery.sizeOf(context).height;
-        final s = w / 375;
+        final s = widget.desktop ? (w / 1100).clamp(0.7, 1.5) : w / 375;
         final blobs = [
           (510.0 * s, Offset(-180 * s, -135 * s), Offset(0, 130 * s), 22.0, 9.0),
           (450.0 * s, Offset(w - 285 * s, 180 * s), Offset(0, 160 * s), 26.0, 11.0),

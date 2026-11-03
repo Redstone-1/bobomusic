@@ -5,6 +5,7 @@ import "../theme/aurora_tokens.dart";
 import "cover_placeholder.dart";
 import "eq_bars.dart";
 import "origin_tag.dart";
+import "desktop_content.dart";
 
 /// 歌曲行（原型 .songrow）
 /// [playing] = 当前曲目高亮（§3.4-3：按曲目身份全局判定，由调用方传入）
@@ -37,6 +38,35 @@ class SongListTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = AuroraTokens.of(context);
+    if (DesktopContent.of(context)) {
+      return LayoutBuilder(builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 560;
+        return GestureDetector(onSecondaryTapUp: (_) => onMorePressed?.call(), child: Material(
+          color: playing ? t.primary.withValues(alpha: .10) : t.bg.withValues(alpha: 0),
+          borderRadius: BorderRadius.circular(t.radiusMd),
+          child: InkWell(onTap: onTap, borderRadius: BorderRadius.circular(t.radiusMd), child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            child: Row(children: [
+              CoverPlaceholder(cover: coverOverride ?? track.cover, text: track.effectiveName, size: 40, radius: t.radiusSm),
+              const SizedBox(width: 12),
+              Expanded(flex: 3, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(track.effectiveName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: playing ? t.primary : t.fg)),
+                if (!wide) Text(track.effectiveAuthor, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: t.fgDim)),
+              ])),
+              if (wide) ...[
+                const SizedBox(width: 16),
+                Expanded(flex: 2, child: Text(track.effectiveAuthor, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: t.fgDim))),
+                if (showOriginTag) SizedBox(width: 62, child: Align(alignment: Alignment.centerLeft, child: OriginTag(origin: track.origin))),
+                SizedBox(width: 46, child: Text(track.duration == null ? "—" : "${track.duration! ~/ 60}:${(track.duration! % 60).toString().padLeft(2, "0")}", style: TextStyle(fontSize: 11, color: t.fgMute))),
+              ],
+              if (playing) const Padding(padding: EdgeInsets.only(right: 10), child: EqBars()),
+              if (likedHeart != null) IconButton(tooltip: likedHeart! ? "取消喜欢" : "喜欢", visualDensity: VisualDensity.compact, iconSize: 18, onPressed: onHeartTap == null ? null : () => onHeartTap!(!likedHeart!), icon: Icon(likedHeart! ? Icons.favorite : Icons.favorite_border, color: likedHeart! ? t.primary : t.fgMute)),
+              IconButton(tooltip: "更多操作", visualDensity: VisualDensity.compact, iconSize: 18, onPressed: onMorePressed, icon: Icon(Icons.more_horiz, color: t.fgMute)),
+            ]),
+          )),
+        ));
+      });
+    }
 
     return InkWell(
       onTap: onTap,

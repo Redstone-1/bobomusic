@@ -8,6 +8,7 @@ import "../../core/overlays/app_sheet.dart";
 import "../../core/overlays/app_toast.dart";
 import "../../core/permissions/audio_permission.dart";
 import "../../core/permissions/file_delete_permission.dart";
+import "../../core/platform/app_platform.dart";
 import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/app_buttons.dart";
 import "../../core/widgets/aurora_background.dart";
@@ -15,8 +16,10 @@ import "../../core/widgets/back_link.dart";
 import "../../core/widgets/empty_state.dart";
 import "../../core/widgets/glass_card.dart";
 import "../../core/widgets/page_header.dart";
+import "../../core/widgets/desktop_content.dart";
 import "../../core/widgets/song_list_tile.dart";
 import "../../data/local_audio_importer.dart";
+import "../../data/local_audio_scanner.dart";
 import "../../data/models/playlist.dart";
 import "../../data/models/track.dart";
 import "../../data/repositories/playlist_repository.dart";
@@ -28,6 +31,7 @@ import "../player/mini_player_bar.dart";
 import "../player/playback_provider.dart";
 import "../player/player_card_page.dart";
 import "local_scan_controller.dart";
+import "local_library_directories.dart";
 import "local_scan_panel.dart";
 import "playlists_provider.dart"
     show
@@ -62,8 +66,6 @@ class PlaylistDetailPage extends ConsumerStatefulWidget {
 
 class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
     with SingleTickerProviderStateMixin {
-  late Future<List<Track>> _future;
-  int _reloadSeq = 0;
   bool _scanning = false;
 
   /// 流式扫描状态；非空时列表区域显示扫描舱
@@ -88,13 +90,6 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
   bool get _isLiked => widget.playlist.id == "builtin:liked";
 
   @override
-  void initState() {
-    super.initState();
-    // 本地/喜欢由 family provider 供数，其余模式才建局部 Future
-    _future = (_isLocal || _isLiked) ? Future.value(const <Track>[]) : _load();
-  }
-
-  @override
   void dispose() {
     // 扫描中离开页面：停止 isolate；写库由 _scan 的 finally 收尾
     _scanController?.cancel();
@@ -103,24 +98,13 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
     super.dispose();
   }
 
-  Future<List<Track>> _load() async {
-    if (widget.tracks != null) return widget.tracks!;
-    if (widget.playlist.id == "builtin:liked") {
-      return TrackRepository().likedTracks();
-    }
-    if (_isLocal) {
-      return TrackRepository().localTracks();
-    }
-    return PlaylistRepository().items(widget.playlist.id);
-  }
-
-  /// 重读本页列表（错误重试 / 移出歌单等库内变更后共用；
-  /// 本地/喜欢走 family provider 自动重读，不走这里）
+  /// 库内详情统一失效同一个 family，注入的合集列表保持内存数据源。
   void _reload() {
-    setState(() {
-      _reloadSeq++;
-      _future = _load();
-    });
+    if (widget.tracks == null) {
+      ref.invalidate(playlistDetailTracksProvider(widget.playlist.id));
+    } else {
+      setState(() {});
+    }
   }
 
   /// 本地扫描（C3）：权限 → 流式扫描/入库 → 失效 provider → 失败弹窗
@@ -130,7 +114,21 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
       if (mounted) AppToast.show(context, "未获得音频读取权限");
       return;
     }
-    final controller = LocalScanController();
+    List<String>? directories;
+    if (ref.read(appPlatformProvider).usesDesktopLayout) {
+      var selectedDirectories = ref.read(localLibraryDirectoriesProvider);
+      if (selectedDirectories.isEmpty) {
+        await _chooseDirectory();
+        if (!mounted) return;
+        selectedDirectories = ref.read(localLibraryDirectoriesProvider);
+        if (selectedDirectories.isEmpty) return;
+      }
+      directories = selectedDirectories;
+    }
+    final roots = directories?.map(Directory.new).toList();
+    final controller = LocalScanController(
+        taskFactory:
+            roots == null ? null : () => scanLocalLibraryTask(roots: roots));
     setState(() {
       _scanning = true;
       _scanController = controller;
@@ -143,7 +141,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
         await Future<void>.delayed(const Duration(milliseconds: 600));
         if (!mounted) return;
       }
-      ref.invalidate(playlistDetailTracksProvider(widget.playlist));
+      ref.invalidate(playlistDetailTracksProvider(widget.playlist.id));
       ref.invalidate(localCountProvider);
       if (controller.cancelled) return;
       if (controller.phase == LocalScanPhase.failed) {
@@ -177,7 +175,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
       for (final track in imported) {
         await TrackRepository().upsert(track);
       }
-      ref.invalidate(playlistDetailTracksProvider(widget.playlist));
+      ref.invalidate(playlistDetailTracksProvider(widget.playlist.id));
       ref.invalidate(localCountProvider);
       if (!mounted) return;
       AppToast.show(context, "已导入 ${imported.length} 首");
@@ -189,11 +187,52 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
     }
   }
 
+  Future<void> _chooseDirectory() async {
+    try {
+      final path = await ref.read(musicDirectoryPickerProvider)();
+      if (path == null || !mounted) return;
+      await ref.read(localLibraryDirectoriesProvider.notifier).add(path);
+      if (mounted) AppToast.show(context, "已添加音乐文件夹");
+    } catch (error) {
+      print("添加扫描目录失败：$error");
+      if (mounted) AppToast.show(context, "添加目录失败，请重试");
+    }
+  }
+
+  void _manageDirectories() {
+    final directories = ref.read(localLibraryDirectoriesProvider);
+    AppSheet.show(context, title: "扫描目录", actions: [
+      AppSheetAction(
+          icon: Icons.create_new_folder_outlined,
+          label: "添加音乐文件夹",
+          onTap: _chooseDirectory),
+      for (final path in directories)
+        AppSheetAction(
+            icon: Icons.folder_off_outlined,
+            label: "移除：$path",
+            onTap: () async {
+              final confirmed = await AppDialog.confirm(context,
+                  title: "移除扫描目录",
+                  message: "停止扫描此目录，已入库音乐和原文件都会保留。\n$path",
+                  confirmText: "移除");
+              if (confirmed != true || !mounted) return;
+              try {
+                await ref
+                    .read(localLibraryDirectoriesProvider.notifier)
+                    .remove(path);
+              } catch (error) {
+                print("移除目录失败：$error");
+                if (mounted) AppToast.show(context, "目录设置保存失败");
+              }
+            }),
+    ]);
+  }
+
   /// 删除本地曲目：默认仅移出曲库（外键级联清队列/歌单引用），
   /// 复选框勾选时先删源文件再移出曲库；文件删不掉则保留曲目，可重试
   /// 移出歌单（自定义歌单行内操作）：删除关联后重读本页列表并刷新目录计数；
   /// 曲目本身保留，可再次通过「加入歌单」加回。
-  /// 自定义歌单与注入模式共用局部 Future（不走 family provider），须手动重载
+  /// 移出歌单后精确失效该 ID 对应的详情数据源。
   Future<void> _removeFromPlaylist(Track track) async {
     await PlaylistRepository().removeTrack(widget.playlist.id, track.id);
     if (!mounted) return;
@@ -235,7 +274,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
     setState(_likedOverrides.clear);
     ref.invalidate(likedCountProvider);
     // 喜欢列表走 family provider：失效后自动重读为空态
-    ref.invalidate(playlistDetailTracksProvider(widget.playlist));
+    ref.invalidate(playlistDetailTracksProvider(widget.playlist.id));
     AppToast.show(context, "已清空喜欢列表");
   }
 
@@ -305,7 +344,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
     }
     try {
       await TrackRepository().delete(track.id);
-      ref.invalidate(playlistDetailTracksProvider(widget.playlist));
+      ref.invalidate(playlistDetailTracksProvider(widget.playlist.id));
       ref.invalidate(localCountProvider);
       ref.invalidate(queueEntriesProvider);
       if (!mounted) return;
@@ -322,15 +361,13 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
     final currentTrackId = ref.watch(
       playbackProvider.select((s) => s.track?.id),
     );
-    // 本地/喜欢走 family provider AsyncValue：失效重读期间 .value 保留
-    // 旧数据，列表不塌缩回顶（FutureBuilder + .future 会在重读时打回 waiting）；
-    // 库/注入模式沿用局部 Future（重试走 _reloadSeq）
-    final detailAsync = (_isLocal || _isLiked)
-        ? ref.watch(playlistDetailTracksProvider(widget.playlist))
-        : null;
+    // 统一按歌单 ID 取数，重读期间保留上一份 AsyncValue 数据。
+    final detailAsync = widget.tracks == null
+        ? ref.watch(playlistDetailTracksProvider(widget.playlist.id))
+        : AsyncData<List<Track>>(widget.tracks!);
     // 外部改变喜欢状态后 provider 重读：清掉行内心形覆盖，统一以库态为准
     if (_isLiked) {
-      ref.listen(playlistDetailTracksProvider(widget.playlist), (_, __) {
+      ref.listen(playlistDetailTracksProvider(widget.playlist.id), (_, __) {
         if (_likedOverrides.isNotEmpty) setState(_likedOverrides.clear);
       });
     }
@@ -339,27 +376,11 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
       body: AuroraBackground(
         child: MiniBarPage(
           child: SafeArea(
-            // FutureBuilder 仅承载库/注入模式；本地/喜欢以 AsyncValue 为准
-            // （重读保留旧数据），provider 模式下 FutureBuilder 不参与展示。
-            // 空态走覆盖层（Stack + Positioned.fill 居中于列表可视区且不占
-            // 列表流，透明区域点击穿透到 BackLink/头部按钮）
-            child: FutureBuilder(
-              key: ValueKey(_reloadSeq),
-              future: _future,
-              builder: (context, snap) {
-                final List<Track>? raw;
-                final bool hasError;
-                final bool pending;
-                if (detailAsync != null) {
-                  // 重读期间 .value 保留上一次数据，列表不塌缩
-                  raw = detailAsync.value;
-                  hasError = detailAsync.hasError;
-                  pending = raw == null && !hasError;
-                } else {
-                  raw = snap.data;
-                  hasError = snap.hasError;
-                  pending = snap.connectionState != ConnectionState.done;
-                }
+            child: Builder(
+              builder: (context) {
+                final raw = detailAsync.value;
+                final hasError = detailAsync.hasError;
+                final pending = raw == null && !hasError;
                 final loading = pending || _scanning;
                 // 扫描/导入进行中让刷新图标持续旋转（即时反馈，按钮同时禁用）
                 if (_scanning) {
@@ -373,18 +394,20 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                 final query = _query.trim().toLowerCase();
                 final tracks = (searchable && query.isNotEmpty && raw != null)
                     ? raw
-                          .where(
-                            (t) =>
-                                t.effectiveName.toLowerCase().contains(query) ||
-                                t.effectiveAuthor.toLowerCase().contains(query),
-                          )
-                          .toList()
+                        .where(
+                          (t) =>
+                              t.effectiveName.toLowerCase().contains(query) ||
+                              t.effectiveAuthor.toLowerCase().contains(query),
+                        )
+                        .toList()
                     : raw;
-                final empty = !loading && !hasError && raw != null && raw.isEmpty;
+                final empty =
+                    !loading && !hasError && raw != null && raw.isEmpty;
                 return Stack(
                   children: [
                     ListView(
-                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 110),
+                      padding: EdgeInsets.fromLTRB(
+                          20, 8, 20, DesktopContent.of(context) ? 24 : 110),
                       children: [
                         const Align(
                           alignment: Alignment.centerLeft,
@@ -392,15 +415,26 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                         ),
                         PageHeader(
                           title: widget.playlist.name,
+                          subtitle: _isLocal && DesktopContent.of(context)
+                              ? "${ref.watch(localLibraryDirectoriesProvider).length} 个扫描目录"
+                              : null,
                           // 头部按钮：本地 = 重新扫描；我喜欢 = 刷新（重读库）；
                           // 其余类型（自定义歌单/合集）不放占位按钮
                           trailing: _isLocal
                               ? Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
+                                    if (DesktopContent.of(context))
+                                      GlassIconButton(
+                                          icon: const Icon(
+                                              Icons.folder_open_outlined),
+                                          onTap: _scanning
+                                              ? null
+                                              : _manageDirectories),
                                     GlassIconButton(
                                       key: const Key("local_import"),
-                                      icon: const Icon(Icons.file_open_outlined),
+                                      icon:
+                                          const Icon(Icons.file_open_outlined),
                                       onTap: _scanning ? null : _importFiles,
                                     ),
                                     const SizedBox(width: 8),
@@ -436,7 +470,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                             _likedOverrides.clear();
                                             ref.invalidate(
                                               playlistDetailTracksProvider(
-                                                widget.playlist,
+                                                widget.playlist.id,
                                               ),
                                             );
                                           },
@@ -457,10 +491,9 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                         const SizedBox(height: 14),
                         if (_scanController != null)
                           SizedBox(
-                            height:
-                                (MediaQuery.sizeOf(context).height - 310)
-                                    .clamp(300.0, 560.0)
-                                    .toDouble(),
+                            height: (MediaQuery.sizeOf(context).height - 310)
+                                .clamp(300.0, 560.0)
+                                .toDouble(),
                             child: LocalScanPanel(
                               controller: _scanController!,
                               onCancel: () => _scanController?.cancel(),
@@ -474,14 +507,8 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                             subtitle: "点击重试",
                             action: GlassChip(
                               label: "重试",
-                              // provider 模式失效重读才有效（_reload 只作用于局部 Future）
-                              onTap: detailAsync != null
-                                  ? () => ref.invalidate(
-                                        playlistDetailTracksProvider(
-                                          widget.playlist,
-                                        ),
-                                      )
-                                  : _reload,
+                              // 按当前歌单 ID 精确失效后重读。
+                              onTap: _reload,
                             ),
                           )
                         else if (query.isNotEmpty &&
@@ -588,7 +615,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                       // 仅自定义歌单提供移出（我喜欢用行内心形取消，
                                       // 本地音乐用删除，合集详情无持久化）
                                       if (widget.playlist.type ==
-                                        PlaylistType.custom)
+                                          PlaylistType.custom)
                                         AppSheetAction(
                                           icon: Icons.playlist_remove,
                                           label: "移出歌单",
@@ -640,7 +667,8 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                 ),
                               )
                             : const EmptyState(
-                                asset: "assets/illustrations/empty_collection.svg",
+                                asset:
+                                    "assets/illustrations/empty_collection.svg",
                                 title: "歌单还是空的",
                                 subtitle: "从广场搜索或本地扫描添加歌曲",
                               ),

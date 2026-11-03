@@ -17,6 +17,7 @@ class PlaylistRepository {
         name: row["name"] as String,
         type: PlaylistType.values.byName(row["type"] as String),
         count: (row["track_count"] as int?) ?? 0,
+        cover: row["cover"] as String?,
       );
 
   /// 新建歌单（名称唯一，重复抛异常由 UI 提示）；返回带 id 的歌单
@@ -56,10 +57,15 @@ class PlaylistRepository {
     final rows = await db.rawQuery("""
       SELECT p.*, (
         SELECT COUNT(*) FROM playlist_items i WHERE i.playlist_id = p.id
-      ) AS track_count
+      ) AS track_count, (
+        SELECT t.cover FROM playlist_items i
+        JOIN tracks t ON t.id = i.track_id
+        WHERE i.playlist_id = p.id AND t.cover IS NOT NULL AND t.cover != ?
+        ORDER BY i.sort_index LIMIT 1
+      ) AS cover
       FROM playlists p
       ORDER BY p.sort_index, p.created_at
-    """);
+    """, [""]);
     return [for (final r in rows) _fromRow(r)];
   }
 

@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 
 import "../theme/aurora_tokens.dart";
 import "scale_tap.dart";
+import "desktop_content.dart";
 
 /// 返回行（原型 .backlink：‹ 返回，次级文字色）
 class BackLink extends StatelessWidget {
@@ -11,6 +12,7 @@ class BackLink extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (DesktopContent.of(context)) return const SizedBox.shrink();
     final t = AuroraTokens.of(context);
     return ScaleTap(
       pressedScale: 0.95,

@@ -6,6 +6,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/cover_placeholder.dart";
 import "../../core/widgets/scale_tap.dart";
+import "../../core/widgets/desktop_content.dart";
 import "../../data/models/track.dart";
 import "../../origin_sdk/lyric/lrc.dart";
 import "lyric_provider.dart";
@@ -20,6 +21,7 @@ class MiniBarPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (DesktopContent.of(context)) return child;
     return Stack(
       children: [
         child,

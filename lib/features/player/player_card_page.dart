@@ -9,7 +9,10 @@ import "../../core/widgets/app_buttons.dart";
 import "../../core/widgets/aurora_background.dart";
 import "../../core/widgets/aurora_progress_bar.dart";
 import "../../core/theme/aurora_tokens.dart";
+import "../../core/navigation/desktop_navigation.dart";
+import "../../core/platform/app_platform.dart";
 import "../../core/widgets/empty_state.dart";
+import "../../core/widgets/desktop_content.dart";
 import "../../core/widgets/origin_tag.dart";
 import "../../core/widgets/scale_tap.dart";
 import "../../data/models/track.dart";
@@ -55,6 +58,10 @@ class PlayerCardPage extends ConsumerStatefulWidget {
   static void open(BuildContext context, WidgetRef ref, Track track) {
     if (ref.read(playbackProvider).track?.id != track.id) {
       start(context, ref, track);
+    }
+    if (ref.read(appPlatformProvider).usesDesktopLayout) {
+      ref.read(desktopNavigationProvider.notifier).open(const DesktopDestination("player", "正在播放"));
+      return;
     }
     final t = AuroraTokens.of(context);
     Navigator.of(context).push(
@@ -117,7 +124,7 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
     if (!mounted) return;
     ref.invalidate(likedCountProvider);
     // 喜欢列表可能正在后台：精确失效喜欢详情数据源，返回列表即同步
-    ref.invalidate(playlistDetailTracksProvider(kBuiltinLikedPlaylist));
+    ref.invalidate(playlistDetailTracksProvider(kBuiltinLikedPlaylist.id));
     // 写库期间可能已切歌：只更新当前曲目的覆盖
     if (ref.read(playbackProvider).track?.id == track.id) {
       setState(() => _likedOverride = newLiked);
@@ -135,9 +142,8 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
         _syncLikedFromDb(next);
       }
     });
-    // 高频 position 不进本层：只订阅曲目/播放态/总时长，进度由 _SeekRow/_LyricView 各自 select
+    // 高频 position 不进本层，播放内容组件按需订阅各自状态。
     final track = ref.watch(playbackProvider.select((s) => s.track));
-    final duration = ref.watch(playbackProvider.select((s) => s.duration));
     // 理论不可达（打开前必 play）；防御：无曲直接回退
     if (track == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -145,36 +151,15 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
       });
       return const SizedBox.shrink();
     }
-    // 引擎真时长优先，未就绪回退曲目元数据（避免除零）
-    final durationSec =
-        duration.inSeconds > 0 ? duration.inSeconds : track.duration ?? 240;
-
     return Scaffold(
       // 背景与主壳一致（极光光球，所有者 2026-10-27 指定：不再单独设封面色背景）
       body: AuroraBackground(
         child: SafeArea(
-          child: Column(
-            children: [
-              _TopBar(onClose: () => Navigator.of(context).pop()),
-              // 播放卡只保留歌词视图（所有者 2026-10-26 反馈：不要黑胶）
-              const Expanded(
-                child: _LyricView(key: Key("player_lyrics")),
-              ),
-              _MetaRow(track: track),
-              const SizedBox(height: 12),
-              // 参考酷狗：动作行在进度条上方，主控制行在进度条下方
-              _ActionsRow(
-                track: track,
-                liked: _likedOverride ?? track.liked,
-                onToggleLike: () => _toggleLike(track),
-              ),
-              // 进度块（条+时间）上下留白对称：上 14 / 下 14（_ControlsRow 顶部
-              // padding），条与时间间距 8——整块节奏一致（所有者 2026-10-28 定）
-              const SizedBox(height: 14),
-              _SeekRow(durationSec: durationSec),
-              _ControlsRow(),
-              const SizedBox(height: 16),
-            ],
+          child: PlayerCardContent(
+            track: track,
+            liked: _likedOverride ?? track.liked,
+            onToggleLike: () => _toggleLike(track),
+            onHeaderAction: () => Navigator.of(context).pop(),
           ),
         ),
       ),
@@ -182,11 +167,51 @@ class _PlayerCardPageState extends ConsumerState<PlayerCardPage> {
   }
 }
 
+/// 手机播放页与桌面右栏共用歌词、曲目信息和动作行；桌面播放控制由常驻底栏承接。
+class PlayerCardContent extends ConsumerWidget {
+  const PlayerCardContent(
+      {super.key,
+      required this.track,
+      required this.liked,
+      required this.onToggleLike,
+      required this.onHeaderAction,
+      this.sidePanel = false});
+
+  final Track track;
+  final bool liked;
+  final VoidCallback onToggleLike;
+  final VoidCallback onHeaderAction;
+  final bool sidePanel;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final duration =
+        ref.watch(playbackProvider.select((state) => state.duration));
+    final durationSec =
+        duration.inSeconds > 0 ? duration.inSeconds : track.duration ?? 240;
+    return Column(children: [
+      _TopBar(onClose: onHeaderAction, sidePanel: sidePanel),
+      const Expanded(child: PlayerLyricsView(key: Key("player_lyrics"))),
+      _MetaRow(track: track),
+      const SizedBox(height: 12),
+      _ActionsRow(track: track, liked: liked, onToggleLike: onToggleLike),
+      if (!sidePanel) ...[
+        // 进度块沿用 App 的上下留白与控制行间距。
+        const SizedBox(height: 14),
+        PlayerSeekBar(durationSec: durationSec),
+        const _ControlsRow(),
+      ],
+      const SizedBox(height: 16),
+    ]);
+  }
+}
+
 /// 顶栏：收起 / 正在播放 / 更多（更多 = 定时关闭；歌词工具在歌词视图内）
 class _TopBar extends ConsumerWidget {
   final VoidCallback onClose;
 
-  const _TopBar({required this.onClose});
+  const _TopBar({required this.onClose, this.sidePanel = false});
+  final bool sidePanel;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -196,10 +221,14 @@ class _TopBar extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 8),
       child: Row(
         children: [
-          GlassIconButton(
-            key: const Key("player_close"),
-            icon: const Icon(Icons.keyboard_arrow_down),
-            onTap: onClose,
+          Tooltip(
+            message: sidePanel ? "展开播放页" : "收起播放页",
+            child: GlassIconButton(
+              key: const Key("player_close"),
+              icon: Icon(
+                  sidePanel ? Icons.open_in_full : Icons.keyboard_arrow_down),
+              onTap: onClose,
+            ),
           ),
           Expanded(
             child: Column(
@@ -217,10 +246,13 @@ class _TopBar extends ConsumerWidget {
               ],
             ),
           ),
-          GlassIconButton(
-            key: const Key("player_more"),
-            icon: const Icon(Icons.more_horiz),
-            onTap: () => _openMore(context, ref),
+          Tooltip(
+            message: "更多",
+            child: GlassIconButton(
+              key: const Key("player_more"),
+              icon: const Icon(Icons.more_horiz),
+              onTap: () => _openMore(context, ref),
+            ),
           ),
         ],
       ),
@@ -314,16 +346,17 @@ class _MetaRow extends StatelessWidget {
 /// 数字不再与条挤占宽度（此前的行内槽位方案曾把数字挤到换行）
 /// 拖拽三段式（2026-10-31）：拖动中只上报预览、不发 seek；松手提交一次，
 /// 提交后钉住预览值直到引擎位置追上（或 2s 超时），旧位置事件不再把进度拉回
-class _SeekRow extends ConsumerStatefulWidget {
+class PlayerSeekBar extends ConsumerStatefulWidget {
   final int durationSec;
 
-  const _SeekRow({required this.durationSec});
+  const PlayerSeekBar({super.key, required this.durationSec, this.compact = false});
+  final bool compact;
 
   @override
-  ConsumerState<_SeekRow> createState() => _SeekRowState();
+  ConsumerState<PlayerSeekBar> createState() => PlayerSeekBarState();
 }
 
-class _SeekRowState extends ConsumerState<_SeekRow> {
+class PlayerSeekBarState extends ConsumerState<PlayerSeekBar> {
   static String _fmt(int sec) =>
       "${sec ~/ 60}:${(sec % 60).toString().padLeft(2, "0")}";
 
@@ -373,6 +406,15 @@ class _SeekRowState extends ConsumerState<_SeekRow> {
       fontWeight: FontWeight.w600,
       color: t.fgDim,
     );
+
+    if (widget.compact) {
+      return Row(children: [
+        Text(_fmt((widget.durationSec * shown).round()), style: labelStyle.copyWith(fontSize: 10)),
+        const SizedBox(width: 10),
+        Expanded(child: AuroraProgressBar(value: shown, height: 3, onPreviewChanged: _onPreview, onChanged: _commit)),
+        const SizedBox(width: 10), Text(_fmt(widget.durationSec), style: labelStyle.copyWith(fontSize: 10)),
+      ]);
+    }
 
     return Padding(
       // 34 = 控制行左右 26 + IconButton 视觉内边 8：进度块与按钮区等宽对齐
@@ -643,17 +685,27 @@ class _SpeedAction extends ConsumerWidget {
 
 /// 歌词视图（真 LRC）：滚动定位 + 校准 + 搜索替换/删除
 /// 高频 position 只在本层订阅；自动匹配/手动搜索由 LyricController 负责
-class _LyricView extends ConsumerStatefulWidget {
-  const _LyricView({super.key});
+class PlayerLyricsView extends ConsumerStatefulWidget {
+  const PlayerLyricsView(
+      {super.key, this.expanded = false, this.showTools = true});
+  final bool expanded;
+  final bool showTools;
 
   @override
-  ConsumerState<_LyricView> createState() => _LyricViewState();
+  ConsumerState<PlayerLyricsView> createState() => PlayerLyricsViewState();
 }
 
-class _LyricViewState extends ConsumerState<_LyricView> {
+class PlayerLyricsViewState extends ConsumerState<PlayerLyricsView> {
   final _scroll = ScrollController();
-  int _lastActive = -1;
-  static const _rowExtent = 56.0;
+  ({
+    int active,
+    double viewportHeight,
+    double padding,
+    double rowExtent,
+    String? trackId,
+    List<LyricLine> lines
+  })? _lastScrollTarget;
+  double get _rowExtent => widget.expanded ? 76 : 56;
 
   @override
   void dispose() {
@@ -661,21 +713,45 @@ class _LyricViewState extends ConsumerState<_LyricView> {
     super.dispose();
   }
 
-  String _offsetLabel(int ms) => ms == 0
-      ? "未校准"
-      : "${ms > 0 ? "延后" : "提前"} ${(ms.abs() / 1000).toStringAsFixed(1)}s";
-
-  /// 当前行变化时把该行滚到视口中央（手工滚动后仍会被下一次换行拉回）
-  void _autoScroll(int active) {
-    if (active < 0 || active == _lastActive) return;
-    _lastActive = active;
+  /// 定位包含首尾留白；换歌词与缩放也重新对齐，普通进度更新保留手动滚动位置。
+  void _autoScroll(
+    int active,
+    LyricState lyric, {
+    required double padding,
+    required double viewportHeight,
+  }) {
+    if (active < 0) return;
+    final request = (
+      active: active,
+      viewportHeight: viewportHeight,
+      padding: padding,
+      rowExtent: _rowExtent,
+      trackId: lyric.trackId,
+      lines: lyric.lines
+    );
+    final previous = _lastScrollTarget;
+    if (request == previous) return;
+    _lastScrollTarget = request;
+    final animate = previous != null &&
+        previous.viewportHeight == viewportHeight &&
+        previous.padding == padding &&
+        previous.rowExtent == request.rowExtent &&
+        previous.trackId == lyric.trackId &&
+        identical(previous.lines, lyric.lines);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scroll.hasClients) return;
+      if (!mounted || !_scroll.hasClients || _lastScrollTarget != request) {
+        return;
+      }
       final position = _scroll.position;
-      final target = (active * _rowExtent -
+      final target = (padding +
+              active * request.rowExtent -
               position.viewportDimension / 2 +
-              _rowExtent / 2)
+              request.rowExtent / 2)
           .clamp(0.0, position.maxScrollExtent);
+      if (!animate) {
+        _scroll.jumpTo(target);
+        return;
+      }
       _scroll.animateTo(
         target,
         duration: const Duration(milliseconds: 320),
@@ -683,6 +759,126 @@ class _LyricViewState extends ConsumerState<_LyricView> {
       );
     });
   }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AuroraTokens.of(context);
+    final track = ref.watch(playbackProvider.select((s) => s.track));
+    final lyric = ref.watch(lyricControllerProvider);
+    final positionMs = ref.watch(
+      playbackProvider.select((s) => s.position.inMilliseconds),
+    );
+    if (track == null) return const SizedBox.shrink();
+
+    final loading = lyric.loading || lyric.trackId != track.id;
+    final active = activeLyricIndex(
+      lyric.lines,
+      Duration(milliseconds: positionMs),
+      offsetMs: lyric.offsetMs,
+    );
+    final desktop = DesktopContent.of(context);
+    if (loading || lyric.lines.isEmpty) _lastScrollTarget = null;
+
+    return Column(
+      children: [
+        if (widget.showTools) const PlayerLyricTools(),
+        Expanded(
+          child: loading
+              ? Center(
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    color: t.primary,
+                  ),
+                )
+              : lyric.lines.isEmpty
+                  ? EmptyState(
+                      asset: "assets/illustrations/empty_music.svg",
+                      title: "暂无歌词",
+                      subtitle: lyric.error ?? "可搜索并应用歌词",
+                      action: const PlayerLyricTools(searchButtonOnly: true),
+                    )
+                  : ShaderMask(
+                      blendMode: BlendMode.dstIn,
+                      shaderCallback: (bounds) => const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        stops: [0, 0.22, 0.78, 1],
+                        colors: [
+                          Colors.transparent,
+                          Colors.white,
+                          Colors.white,
+                          Colors.transparent,
+                        ],
+                      ).createShader(bounds),
+                      child: LayoutBuilder(builder: (context, constraints) {
+                        // 桌面首尾各补半个视口，让第一句和最后一句也能停在正中。
+                        final padding = desktop
+                            ? ((constraints.maxHeight - _rowExtent) / 2)
+                                .clamp(0.0, double.infinity)
+                            : 36.0;
+                        _autoScroll(active, lyric,
+                            padding: padding,
+                            viewportHeight: constraints.maxHeight);
+                        return ListView.builder(
+                          controller: _scroll,
+                          padding: EdgeInsets.symmetric(vertical: padding),
+                          itemExtent: _rowExtent,
+                          itemCount: lyric.lines.length,
+                          itemBuilder: (context, i) {
+                            final line = lyric.lines[i];
+                            final isActive = i == active;
+                            return InkWell(
+                                onTap: () => ref
+                                    .read(playbackProvider.notifier)
+                                    .seek(line.time +
+                                        Duration(milliseconds: lyric.offsetMs)),
+                                child: Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 26),
+                                    child: Text(
+                                      line.text,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: widget.expanded
+                                            ? (isActive ? 27 : 22)
+                                            : (isActive ? 20 : 15),
+                                        fontWeight: isActive
+                                            ? FontWeight.w800
+                                            : FontWeight.w600,
+                                        height: 1.35,
+                                        color: isActive ? t.primary : t.fgMute,
+                                      ),
+                                    ),
+                                  ),
+                                ));
+                          },
+                        );
+                      }),
+                    ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 搜索与校准工具独立于歌词滚动区，桌面展开页可把它放到左侧信息区。
+class PlayerLyricTools extends ConsumerStatefulWidget {
+  const PlayerLyricTools(
+      {super.key, this.horizontalPadding = 26, this.searchButtonOnly = false});
+  final double horizontalPadding;
+  final bool searchButtonOnly;
+
+  @override
+  ConsumerState<PlayerLyricTools> createState() => _PlayerLyricToolsState();
+}
+
+class _PlayerLyricToolsState extends ConsumerState<PlayerLyricTools> {
+  String _offsetLabel(int ms) => ms == 0
+      ? "未校准"
+      : "${ms > 0 ? "延后" : "提前"} ${(ms.abs() / 1000).toStringAsFixed(1)}s";
 
   Future<void> _searchLyrics(Track track) async {
     final keyword = await AppDialog.input(
@@ -845,113 +1041,37 @@ class _LyricViewState extends ConsumerState<_LyricView> {
   @override
   Widget build(BuildContext context) {
     final t = AuroraTokens.of(context);
-    final track = ref.watch(playbackProvider.select((s) => s.track));
+    final track = ref.watch(playbackProvider.select((state) => state.track));
     final lyric = ref.watch(lyricControllerProvider);
-    final positionMs = ref.watch(
-      playbackProvider.select((s) => s.position.inMilliseconds),
-    );
     if (track == null) return const SizedBox.shrink();
-
-    final loading = lyric.loading || lyric.trackId != track.id;
-    final active = activeLyricIndex(
-      lyric.lines,
-      Duration(milliseconds: positionMs),
-      offsetMs: lyric.offsetMs,
-    );
-    if (!loading && lyric.lines.isNotEmpty) _autoScroll(active);
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 26),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _offsetLabel(lyric.offsetMs),
-                  style: TextStyle(fontSize: 12, color: t.fgDim),
-                ),
-              ),
-              IconButton(
-                key: const Key("lyric_search"),
-                tooltip: "搜索歌词",
-                onPressed: () => _searchLyrics(track),
-                icon: Icon(Icons.search, size: 20, color: t.fgDim),
-              ),
-              if (lyric.lines.isNotEmpty)
-                IconButton(
-                  key: const Key("lyric_tools"),
-                  tooltip: "歌词设置",
-                  onPressed: () => _openTools(track),
-                  icon: Icon(Icons.tune, size: 20, color: t.fgDim),
-                ),
-            ],
+    if (widget.searchButtonOnly) {
+      return GlassChip(label: "搜索歌词", onTap: () => _searchLyrics(track));
+    }
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: widget.horizontalPadding),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              _offsetLabel(lyric.offsetMs),
+              style: TextStyle(fontSize: 12, color: t.fgDim),
+            ),
           ),
-        ),
-        Expanded(
-          child: loading
-              ? Center(
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.4,
-                    color: t.primary,
-                  ),
-                )
-              : lyric.lines.isEmpty
-                  ? EmptyState(
-                      asset: "assets/illustrations/empty_music.svg",
-                      title: "暂无歌词",
-                      subtitle: lyric.error ?? "可搜索并应用歌词",
-                      action: GlassChip(
-                        label: "搜索歌词",
-                        onTap: () => _searchLyrics(track),
-                      ),
-                    )
-                  : ShaderMask(
-                      blendMode: BlendMode.dstIn,
-                      shaderCallback: (bounds) => const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        stops: [0, 0.22, 0.78, 1],
-                        colors: [
-                          Colors.transparent,
-                          Colors.white,
-                          Colors.white,
-                          Colors.transparent,
-                        ],
-                      ).createShader(bounds),
-                      child: ListView.builder(
-                        controller: _scroll,
-                        padding: const EdgeInsets.symmetric(vertical: 36),
-                        itemExtent: _rowExtent,
-                        itemCount: lyric.lines.length,
-                        itemBuilder: (context, i) {
-                          final line = lyric.lines[i];
-                          final isActive = i == active;
-                          return Center(
-                            child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 26),
-                              child: Text(
-                                line.text,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: isActive ? 20 : 15,
-                                  fontWeight: isActive
-                                      ? FontWeight.w800
-                                      : FontWeight.w600,
-                                  height: 1.35,
-                                  color: isActive ? t.primary : t.fgMute,
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-        ),
-      ],
+          IconButton(
+            key: const Key("lyric_search"),
+            tooltip: "搜索歌词",
+            onPressed: () => _searchLyrics(track),
+            icon: Icon(Icons.search, size: 20, color: t.fgDim),
+          ),
+          if (lyric.lines.isNotEmpty)
+            IconButton(
+              key: const Key("lyric_tools"),
+              tooltip: "歌词设置",
+              onPressed: () => _openTools(track),
+              icon: Icon(Icons.tune, size: 20, color: t.fgDim),
+            ),
+        ],
+      ),
     );
   }
 }

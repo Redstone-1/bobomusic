@@ -13,6 +13,7 @@ import "../../core/theme/theme_providers.dart";
 import "../../core/widgets/app_buttons.dart";
 import "../../core/widgets/glass_card.dart";
 import "../../core/widgets/page_header.dart";
+import "../../core/widgets/desktop_content.dart";
 import "../../core/widgets/theme_swatch.dart";
 import "../download/downloads_page.dart";
 import "../player/playback_provider.dart";
@@ -38,7 +39,7 @@ class SettingsPage extends ConsumerWidget {
     final cacheSize = ref.watch(audioCacheSizeProvider);
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 150),
+      padding: EdgeInsets.fromLTRB(DesktopContent.of(context) ? 30 : 20, DesktopContent.of(context) ? 30 : 16, DesktopContent.of(context) ? 30 : 20, DesktopContent.of(context) ? 30 : 150),
       children: [
         PageHeader(
           title: "设置",
