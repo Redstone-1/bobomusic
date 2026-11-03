@@ -142,9 +142,31 @@ void main() {
 
     // 酷我在线曲为 mp3，扩展名随音源（不再误标 .m4a）
     final kuwo = downloadFileName(
-      const Track(id: "kuwo:1", name: "酷我曲", author: "歌手", origin: OriginType.kuwo),
+      const Track(
+          id: "kuwo:1", name: "酷我曲", author: "歌手", origin: OriginType.kuwo),
     );
     expect(kuwo.endsWith(".mp3"), isTrue);
+  });
+
+  test("同名不同身份的下载互不覆盖，保留各自离线路径", () async {
+    final first = await downloadService.download(t("bili:same-1"));
+    final second = await downloadService.download(t("bili:same-2"));
+    expect(first.path, isNot(second.path));
+    expect(await File(first.path!).readAsString(), "AUDIO-bili:same-1");
+    expect(await File(second.path!).readAsString(), "AUDIO-bili:same-2");
+  });
+
+  test("目标目录不可写时返回失败，不产生离线标记", () async {
+    final blocked = File("${temp.path}/blocked");
+    await blocked.writeAsString("占用目录名");
+    downloadDepsTestOverride = DownloadDeps(
+      resolveDir: () async => Directory("${blocked.path}/child"),
+      fetch: (_, target) async => target.writeAsString("不应执行"),
+    );
+    final track = t("bili:disk-error");
+    final result = await downloadService.download(track);
+    expect(result.ok, isFalse);
+    expect((await TrackRepository().getById(track.id))?.localPath, isNull);
   });
 }
 

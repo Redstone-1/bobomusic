@@ -2,6 +2,7 @@ import "dart:io";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:url_launcher/url_launcher.dart";
 
 import "../../core/overlays/app_dialog.dart";
 import "../../core/overlays/app_sheet.dart";
@@ -196,6 +197,22 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
       context,
       title: track.effectiveName,
       actions: [
+        if (Platform.isWindows && track.localPath != null)
+          AppSheetAction(
+            icon: Icons.folder_open_outlined,
+            label: "打开所在文件夹",
+            onTap: () async {
+              try {
+                if (!await launchUrl(
+                    Uri.directory(File(track.localPath!).parent.path),
+                    mode: LaunchMode.externalApplication)) {
+                  throw StateError("无法打开目录");
+                }
+              } catch (e) {
+                if (mounted) AppToast.show(context, "打开文件夹失败：$e");
+              }
+            },
+          ),
         AppSheetAction(
           icon: Icons.edit_outlined,
           label: "编辑信息",
@@ -253,9 +270,9 @@ class _TaskTile extends ConsumerWidget {
     final failed = task.status == DownloadTaskStatus.failed;
     final status = switch (task.status) {
       DownloadTaskStatus.queued => "排队中",
-      DownloadTaskStatus.downloading =>
-        "下载中 ${(task.progress * 100).round()}%",
+      DownloadTaskStatus.downloading => "下载中 ${(task.progress * 100).round()}%",
       DownloadTaskStatus.completed => "已完成",
+      DownloadTaskStatus.paused => "已暂停 · 继续时校验续传，必要时重新下载",
       DownloadTaskStatus.failed => task.message ?? "下载失败",
     };
 
@@ -310,10 +327,32 @@ class _TaskTile extends ConsumerWidget {
               if (failed)
                 IconButton(
                   tooltip: "重试",
-                  onPressed: () =>
-                      ref.read(downloadTasksProvider.notifier).retry(task.track),
+                  onPressed: () => ref
+                      .read(downloadTasksProvider.notifier)
+                      .retry(task.track),
                   icon: Icon(Icons.refresh, size: 20, color: t.primary),
                 ),
+              if (task.active)
+                IconButton(
+                    tooltip: "暂停",
+                    onPressed: () => ref
+                        .read(downloadTasksProvider.notifier)
+                        .pause(task.track.id),
+                    icon: Icon(Icons.pause, color: t.fg)),
+              if (task.status == DownloadTaskStatus.paused)
+                IconButton(
+                    tooltip: "继续",
+                    onPressed: () => ref
+                        .read(downloadTasksProvider.notifier)
+                        .start(task.track),
+                    icon: Icon(Icons.play_arrow, color: t.primary)),
+              if (task.status != DownloadTaskStatus.completed)
+                IconButton(
+                    tooltip: "取消下载",
+                    onPressed: () => ref
+                        .read(downloadTasksProvider.notifier)
+                        .cancel(task.track),
+                    icon: Icon(Icons.close, color: t.fgDim)),
             ],
           ),
           const SizedBox(height: 10),

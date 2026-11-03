@@ -1,5 +1,7 @@
+import "dart:convert";
 import "dart:io";
 
+import "package:crypto/crypto.dart";
 import "package:dio/dio.dart";
 import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
@@ -10,6 +12,7 @@ import "../../data/models/track.dart";
 import "../../data/origin_service.dart";
 import "../../data/repositories/track_repository.dart";
 import "../player/range_proxy_source.dart";
+import "download_transfer.dart";
 
 enum DownloadStatus { done, already, failed }
 
@@ -17,157 +20,150 @@ class DownloadResult {
   final DownloadStatus status;
   final String message;
   final String? path;
-
-  const DownloadResult(this.status, this.message, {this.path});
-
+  final bool interrupted;
+  const DownloadResult(this.status, this.message,
+      {this.path, this.interrupted = false});
   bool get ok => status != DownloadStatus.failed;
 }
 
-/// 下载依赖注入（测试用：临时目录 + 假取流，不碰网络/平台通道）
+/// 临时目录与取流替身只用于测试，不碰真实音源和平台通道。
 class DownloadDeps {
   final Future<Directory?> Function() resolveDir;
   final Future<void> Function(Track track, File target) fetch;
   final Future<void> Function(File file)? exportFile;
-
-  const DownloadDeps({
-    required this.resolveDir,
-    required this.fetch,
-    this.exportFile,
-  });
+  const DownloadDeps(
+      {required this.resolveDir, required this.fetch, this.exportFile});
 }
 
 DownloadDeps? downloadDepsTestOverride;
-
-/// 全局下载服务（测试可替换）
 DownloadService downloadService = DownloadService();
 
-/// 下载模块（§3.4-8）：同一曲目身份登记 localPath，离线可播
-/// - 命中播放缓存 → 直接复制（不重复消耗流量）
-/// - 未命中 → 按音源取直链下载（B 站/酷我；本地曲直接复制）
-/// - 成功后写 tracks.local_path + downloaded_at；列表/播放读取同一 Track 身份
+/// 先写临时文件，再转正并登记同一曲目身份；暂停保留部分文件，取消则清理。
 class DownloadService {
-  static final Dio _dio = Dio(
-    BaseOptions(
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(minutes: 5),
-    ),
-  );
+  static final Dio _dio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 15),
+    receiveTimeout: const Duration(minutes: 5),
+  ));
 
   Future<DownloadResult> download(
     Track track, {
     void Function(double progress)? onProgress,
+    CancelToken? cancelToken,
   }) async {
-    // 先入库：搜索/广场条目可能尚未落库，否则 markDownloaded 会更新 0 行
+    File? target;
+    var createdTarget = false;
+    var registered = false;
     try {
+      checkDownloadCancellation(cancelToken);
       await TrackRepository().upsert(track);
-    } catch (e) {
-      print("下载前入库失败 [${track.id}]：$e");
-    }
-    // 已是本地可播文件（本地扫描/上次下载）
-    final localPath = track.localPath;
-    if (localPath != null && localPath.isNotEmpty) {
-      try {
-        if (await File(localPath).exists()) {
-          await TrackRepository().markDownloaded(track.id, localPath);
-          onProgress?.call(1);
-          return const DownloadResult(
-            DownloadStatus.already,
-            "已下载，可直接离线播放",
-          );
-        }
-      } catch (_) {
-        // 路径不可读时继续走下载
+      final localPath =
+          (await TrackRepository().getById(track.id))?.localPath ??
+              track.localPath;
+      checkDownloadCancellation(cancelToken);
+      if (localPath != null &&
+          localPath.isNotEmpty &&
+          await File(localPath).exists()) {
+        await TrackRepository().markDownloaded(track.id, localPath);
+        onProgress?.call(1);
+        return DownloadResult(DownloadStatus.already, "已下载，可直接离线播放",
+            path: localPath);
       }
-    }
-
-    final override = downloadDepsTestOverride;
-    if (override == null && !await requestDownloadPermission()) {
-      return const DownloadResult(
-        DownloadStatus.failed,
-        "未获得存储权限，无法写入下载目录",
-      );
-    }
-    final dir = override != null
-        ? await override.resolveDir()
-        : await _resolvePlatformDir();
-    if (dir == null) {
-      return const DownloadResult(DownloadStatus.failed, "无法访问下载目录");
-    }
-    await dir.create(recursive: true);
-    final target = File(p.join(dir.path, downloadFileName(track)));
-
-    try {
-      // 目标已存在且非空：视为已下载（避免重复占空间）
+      final override = downloadDepsTestOverride;
+      if (override == null && !await requestDownloadPermission()) {
+        return const DownloadResult(DownloadStatus.failed, "未获得存储权限，无法写入下载目录");
+      }
+      final dir = override != null
+          ? await override.resolveDir()
+          : await _resolvePlatformDir();
+      if (dir == null) throw StateError("无法访问下载目录");
+      await dir.create(recursive: true);
+      target = File(p.join(dir.path, downloadFileName(track)));
+      final partial = File("${target.path}.part");
+      checkDownloadCancellation(cancelToken);
       if (await target.exists() && await target.length() > 0) {
         await TrackRepository().markDownloaded(track.id, target.path);
         onProgress?.call(1);
-        return DownloadResult(
-          DownloadStatus.already,
-          "已下载：${target.path}",
-          path: target.path,
-        );
+        return DownloadResult(DownloadStatus.already, "已下载：${target.path}",
+            path: target.path);
       }
-
-      // 播放缓存命中 → 复制；key/md5 与 RangeProxySource 完全一致
       final cache = RangeProxySource.cacheFileFor(track.id);
       if (await cache.exists() && await cache.length() > 0) {
-        await cache.copy(target.path);
-        onProgress?.call(1);
+        await cache.copy(partial.path);
       } else if (override != null) {
-        await override.fetch(track, target);
-        onProgress?.call(1);
+        await override.fetch(track, partial);
       } else {
-        await _fetch(track, target, onProgress);
+        await _fetch(track, partial, onProgress, cancelToken);
       }
-
-      if (!await target.exists() || await target.length() == 0) {
-        return const DownloadResult(DownloadStatus.failed, "下载结果为空，请重试");
+      checkDownloadCancellation(cancelToken);
+      if (!await partial.exists() || await partial.length() == 0) {
+        throw StateError("下载结果为空，请重试");
       }
+      await partial.rename(target.path);
+      createdTarget = true;
+      checkDownloadCancellation(cancelToken);
       await TrackRepository().markDownloaded(track.id, target.path);
+      registered = true;
+      checkDownloadCancellation(cancelToken);
+      await _deleteFile(File("${partial.path}.json"));
       onProgress?.call(1);
-
-      // iOS 不能写公共下载目录：保存到文档目录后调起分享面板导出
-      // 导出失败不影响“已下载”结论（文件仍在文档目录）
-      if (override?.exportFile != null) {
+      if (override?.exportFile != null || Platform.isIOS) {
         try {
-          await override!.exportFile!(target);
-        } catch (e) {
-          print("导出文件失败：$e");
-        }
-      } else if (Platform.isIOS) {
-        try {
-          await _export(target);
+          if (override?.exportFile != null) {
+            await override!.exportFile!(target);
+          } else {
+            await SharePlus.instance
+                .share(ShareParams(files: [XFile(target.path)]));
+          }
         } catch (e) {
           print("导出文件失败：$e");
         }
       }
-      return DownloadResult(
-        DownloadStatus.done,
-        "已下载：${target.path}",
-        path: target.path,
-      );
+      return DownloadResult(DownloadStatus.done, "已下载：${target.path}",
+          path: target.path);
     } catch (e) {
-      // 失败不留半成品
-      try {
-        if (await target.exists()) await target.delete();
-      } catch (_) {}
-      return DownloadResult(DownloadStatus.failed, "下载失败：$e");
+      final interrupted = cancelToken?.isCancelled == true;
+      final paused = interrupted && cancelToken?.cancelError?.error == "pause";
+      if (registered) await TrackRepository().clearDownloaded(track.id);
+      if (createdTarget && target != null) await _deleteFile(target);
+      if (!paused && target != null) await _discardTargetPartial(target);
+      return DownloadResult(DownloadStatus.failed,
+          interrupted ? (paused ? "下载已暂停" : "下载已取消") : "下载失败：$e",
+          interrupted: interrupted);
     }
   }
 
-  Future<void> _fetch(
-    Track track,
-    File target,
-    void Function(double progress)? onProgress,
-  ) async {
-    // 本地曲（路径存在但上面未命中，通常为异常）直接复制文件
+  Future<void> discardPartial(Track track) async {
+    final override = downloadDepsTestOverride;
+    final dir = override != null
+        ? await override.resolveDir()
+        : await _resolvePlatformDir();
+    if (dir != null) {
+      await _discardTargetPartial(
+          File(p.join(dir.path, downloadFileName(track))));
+    }
+  }
+
+  Future<void> _discardTargetPartial(File target) async {
+    await _deleteFile(File("${target.path}.part"));
+    await _deleteFile(File("${target.path}.part.json"));
+  }
+
+  Future<void> _deleteFile(File file) async {
+    try {
+      if (await file.exists()) await file.delete();
+    } catch (e) {
+      print("清理下载临时文件失败：$e");
+    }
+  }
+
+  Future<void> _fetch(Track track, File target,
+      void Function(double)? onProgress, CancelToken? cancelToken) async {
     if (track.origin == OriginType.local) {
-      final src = track.localPath;
-      if (src == null || !await File(src).exists()) {
+      final path = track.localPath;
+      if (path == null || !await File(path).exists()) {
         throw StateError("本地文件不存在");
       }
-      await File(src).copy(target.path);
-      onProgress?.call(1);
+      await File(path).copy(target.path);
       return;
     }
     final musicUrl = switch (track.origin) {
@@ -177,49 +173,38 @@ class DownloadService {
       OriginType.qianqian => await qianqianApi.getMusicUrl(track.id),
       _ => await biliApi.getMusicUrl(track.id),
     };
-    await _dio.download(
-      musicUrl.url,
-      target.path,
-      options: Options(headers: musicUrl.headers),
-      onReceiveProgress: (received, total) {
-        if (total > 0) onProgress?.call(received / total);
-      },
-    );
+    checkDownloadCancellation(cancelToken);
+    await DownloadTransfer(_dio).fetch(musicUrl.url, target,
+        headers: musicUrl.headers,
+        cancelToken: cancelToken,
+        onProgress: onProgress);
   }
 
   Future<Directory?> _resolvePlatformDir() async {
     if (Platform.isAndroid) {
-      // 与旧版一致：公共 Download/啵啵音乐（扫描器已排除，防重复）
       return Directory("/storage/emulated/0/Download/啵啵音乐");
     }
     if (Platform.isIOS) {
       final docs = await getApplicationDocumentsDirectory();
       return Directory(p.join(docs.path, "啵啵音乐"));
     }
-    final downloads = await getDownloadsDirectory();
-    final base = downloads ?? await getApplicationDocumentsDirectory();
+    final base = await getDownloadsDirectory() ??
+        await getApplicationDocumentsDirectory();
     return Directory(p.join(base.path, "啵啵音乐"));
-  }
-
-  Future<void> _export(File file) async {
-    await SharePlus.instance.share(
-      ShareParams(files: [XFile(file.path)]),
-    );
   }
 }
 
-/// 文件名清洗（纯函数）：去掉路径非法字符、压缩空白、限制长度
-/// 在线曲按音源扩展名（B 站 dash=.m4a / 酷我·网易 mp3=.mp3），本地曲沿用原扩展名
+/// 身份摘要隔离同名歌曲；旧下载仍优先通过数据库登记的 localPath 找回。
 String downloadFileName(Track track) {
-  final raw = "${track.name} - ${track.author}".trim();
-  var safe = raw
+  var safe = "${track.name} - ${track.author}"
+      .trim()
       .replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1F]'), "_")
       .replaceAll(RegExp(r"\s+"), " ")
       .trim();
-  if (safe.isEmpty) safe = track.id;
-  if (safe.length > 80) safe = safe.substring(0, 80);
-  final localExt = track.localPath == null ? "" : p.extension(track.localPath!);
-  if (localExt.isNotEmpty) return "$safe$localExt";
-  // B 站 dash 为 m4a，其余在线源均为 mp3
-  return "$safe${track.origin == OriginType.bili ? ".m4a" : ".mp3"}";
+  if (safe.isEmpty) safe = "音乐";
+  if (safe.length > 67) safe = safe.substring(0, 67);
+  safe =
+      "$safe [${md5.convert(utf8.encode(track.id)).toString().substring(0, 10)}]";
+  final ext = track.localPath == null ? "" : p.extension(track.localPath!);
+  return "$safe${ext.isNotEmpty ? ext : track.origin == OriginType.bili ? ".m4a" : ".mp3"}";
 }

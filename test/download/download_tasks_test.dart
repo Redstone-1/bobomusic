@@ -1,4 +1,5 @@
 import "dart:io";
+import "dart:async";
 
 import "package:bobomusic/data/db/app_database.dart";
 import "package:bobomusic/data/models/track.dart";
@@ -48,17 +49,15 @@ void main() {
       author: "歌手",
       origin: OriginType.bili,
     );
-    final result = await container
-        .read(downloadTasksProvider.notifier)
-        .start(track);
+    final result =
+        await container.read(downloadTasksProvider.notifier).start(track);
 
     expect(result.ok, isTrue, reason: result.message);
     final tasks = container.read(downloadTasksProvider);
     expect(tasks.single.status, DownloadTaskStatus.completed);
     expect(tasks.single.progress, 1);
 
-    final downloaded =
-        await container.read(downloadedTracksProvider.future);
+    final downloaded = await container.read(downloadedTracksProvider.future);
     expect(downloaded.single.id, track.id);
   });
 
@@ -76,9 +75,8 @@ void main() {
       author: "歌手",
       origin: OriginType.bili,
     );
-    final result = await container
-        .read(downloadTasksProvider.notifier)
-        .start(track);
+    final result =
+        await container.read(downloadTasksProvider.notifier).start(track);
 
     expect(result.ok, isFalse);
     final tasks = container.read(downloadTasksProvider);
@@ -89,5 +87,72 @@ void main() {
       isNull,
       reason: "失败不应产生可播放的下载登记",
     );
+  });
+
+  test("暂停后等待旧写入结束，取消不登记部分文件且不被迟到结果复活", () async {
+    final entered = Completer<void>();
+    final release = Completer<void>();
+    downloadDepsTestOverride = DownloadDeps(
+      resolveDir: () async => Directory("${temp.path}/out"),
+      fetch: (_, target) async {
+        await target.writeAsString("partial");
+        entered.complete();
+        await release.future;
+      },
+    );
+    const track = Track(
+        id: "bili:cancel", name: "取消", author: "歌手", origin: OriginType.bili);
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final tasks = container.read(downloadTasksProvider.notifier);
+    final first = tasks.start(track);
+    await entered.future;
+    final paused = tasks.pause(track.id);
+    expect(container.read(downloadTasksProvider).single.status,
+        DownloadTaskStatus.paused);
+    release.complete();
+    await paused;
+    expect((await first).interrupted, isTrue);
+    expect((await TrackRepository().getById(track.id))?.localPath, isNull);
+    final part = File("${temp.path}/out/${downloadFileName(track)}.part");
+    expect(await part.exists(), isTrue);
+    await tasks.cancel(track);
+    expect(container.read(downloadTasksProvider), isEmpty);
+    expect(await part.exists(), isFalse);
+  });
+
+  test("下载中取消后旧取流结束，不能转正或覆盖重新开始的同曲任务", () async {
+    final entered = Completer<void>();
+    final release = Completer<void>();
+    var calls = 0;
+    downloadDepsTestOverride = DownloadDeps(
+      resolveDir: () async => Directory("${temp.path}/out"),
+      fetch: (_, target) async {
+        calls++;
+        if (calls == 1) {
+          entered.complete();
+          await release.future;
+        }
+        await target.writeAsString("audio-$calls");
+      },
+    );
+    const track = Track(
+        id: "bili:restart", name: "重试", author: "歌手", origin: OriginType.bili);
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final tasks = container.read(downloadTasksProvider.notifier);
+    final first = tasks.start(track);
+    await entered.future;
+    final cancel = tasks.cancel(track);
+    final second = tasks.start(track);
+    expect(container.read(downloadTasksProvider), isEmpty);
+    release.complete();
+    await cancel;
+    expect((await first).interrupted, isTrue);
+    final result = await second;
+    expect(result.ok, isTrue);
+    expect(await File(result.path!).readAsString(), "audio-2");
+    expect(container.read(downloadTasksProvider).single.status,
+        DownloadTaskStatus.completed);
   });
 }

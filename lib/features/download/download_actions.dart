@@ -16,7 +16,7 @@ Future<void> downloadTrack(BuildContext context, Track track) async {
   AppToast.show(context, "已开始下载");
   // 失败时补一次提示；成功由下载管理页展示
   future.then((result) {
-    if (!result.ok && context.mounted) {
+    if (!result.ok && !result.interrupted && context.mounted) {
       AppToast.show(context, result.message);
     }
   });
