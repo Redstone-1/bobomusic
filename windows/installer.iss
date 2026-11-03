@@ -13,9 +13,10 @@
 AppId={{283CB667-2FC0-43E5-9CC8-35D7CF1ED236}
 AppName=啵啵音乐
 AppVersion={#AppVersion}
-DefaultDirName={localappdata}\Programs\Bobomusic
+DefaultDirName={autopf}\Bobomusic
 DefaultGroupName=啵啵音乐
-PrivilegesRequired=lowest
+; 安装时请求管理员权限，以便写入用户选择的受保护目录。
+PrivilegesRequired=admin
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 MinVersion=10.0.17763
@@ -29,7 +30,7 @@ CloseApplications=yes
 RestartApplications=no
 
 [Languages]
-Name: "chinesesimp"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "chinesesimp"; MessagesFile: "installer\ChineseSimplified.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; Flags: unchecked
@@ -43,4 +44,4 @@ Name: "{autodesktop}\啵啵音乐"; Filename: "{app}\bobomusic.exe"; Tasks: desk
 
 ; 不添加数据目录的卸载删除项；用户库、偏好和下载文件在升级与卸载时保留。
 [Run]
-Filename: "{app}\bobomusic.exe"; Description: "启动啵啵音乐"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\bobomusic.exe"; Description: "启动啵啵音乐"; Flags: nowait postinstall skipifsilent runasoriginaluser
