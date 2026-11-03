@@ -81,6 +81,54 @@ void main() {
     expect(stored.effectiveAuthor, "");
   });
 
+  test("封面覆盖：改后生效、清空恢复原始、upsert 不冲掉", () async {
+    final withCover = Track(
+      id: "200_BV2",
+      name: "带封面的曲",
+      author: "",
+      cover: "https://original.example/cover.jpg",
+      origin: OriginType.bili,
+    );
+    await tracks.upsert(withCover);
+    await tracks.updateDisplayInfo("200_BV2",
+        cover: "https://custom.example/c.jpg");
+
+    final edited = await tracks.getById("200_BV2");
+    expect(edited!.cover, "https://original.example/cover.jpg"); // 原始保留
+    expect(edited.effectiveCover, "https://custom.example/c.jpg");
+
+    // 播放/入队 upsert 原始值不冲掉封面覆盖
+    await tracks.upsert(withCover);
+    expect(
+      (await tracks.getById("200_BV2"))!.effectiveCover,
+      "https://custom.example/c.jpg",
+    );
+
+    // 清空 = 恢复原始封面
+    await tracks.updateDisplayInfo("200_BV2", cover: "  ");
+    final cleared = (await tracks.getById("200_BV2"))!;
+    expect(cleared.displayCover, isNull);
+    expect(cleared.effectiveCover, "https://original.example/cover.jpg");
+  });
+
+  test("桌面歌单封面优先使用自定义封面，清空后恢复原图", () async {
+    await tracks.upsert(const Track(
+      id: "desktop-cover",
+      name: "封面测试",
+      author: "测试歌手",
+      cover: "https://original.example/cover.jpg",
+    ));
+    final playlist = await playlists.create("封面歌单");
+    await playlists.addTrack(playlist.id, "desktop-cover");
+    await tracks.updateDisplayInfo("desktop-cover",
+        cover: "https://custom.example/cover.jpg");
+    expect((await playlists.list()).single.cover,
+        "https://custom.example/cover.jpg");
+    await tracks.updateDisplayInfo("desktop-cover", cover: "");
+    expect((await playlists.list()).single.cover,
+        "https://original.example/cover.jpg");
+  });
+
   test("歌单成员与队列条目读出覆盖后的显示名", () async {
     await tracks.upsert(bili());
     await tracks.updateDisplayInfo("100_BV1", name: "现场版", author: "歌手名");

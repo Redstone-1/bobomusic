@@ -28,6 +28,9 @@ class Track {
   /// 显示用歌手覆盖（同上）
   final String? displayAuthor;
 
+  /// 显示用封面覆盖（URL；null = 未改。原始 cover 保留，清空覆盖即恢复原始）
+  final String? displayCover;
+
   const Track({
     required this.id,
     required this.name,
@@ -41,9 +44,12 @@ class Track {
     this.lyricOffsetMs = 0,
     this.displayName,
     this.displayAuthor,
+    this.displayCover,
   });
 
-  /// 展示用歌名/歌手（列表行、播放卡、媒体通知等 UI 消费；未改时回退原始值）
+  /// 展示用歌名/歌手/封面（列表行、播放卡、媒体通知等 UI 消费；未改时回退原始值）。
+  /// cover 本身可空（本地曲常无封面），effectiveCover 同为可空
   String get effectiveName => displayName ?? name;
   String get effectiveAuthor => displayAuthor ?? author;
+  String? get effectiveCover => displayCover ?? cover;
 }

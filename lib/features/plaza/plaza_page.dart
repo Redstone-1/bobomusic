@@ -144,6 +144,7 @@ class _ChartListViewState extends ConsumerState<_ChartListView>
     final currentTrackId = ref.watch(
       playbackProvider.select((s) => s.track?.id),
     );
+    final vipLimitedIds = ref.watch(vipLimitedTrackIdsProvider);
 
     return ListView(
       padding: EdgeInsets.fromLTRB(20, 4, 20, DesktopContent.of(context) ? 24 : 150),
@@ -176,6 +177,8 @@ class _ChartListViewState extends ConsumerState<_ChartListView>
                         hit: hit,
                         playing: currentTrackId != null &&
                             hit.item?.id == currentTrackId,
+                        vipLimited: hit.item != null &&
+                            vipLimitedIds.contains(hit.item!.id),
                         onTap: () => _playHit(hit),
                       ),
                   ],
@@ -208,17 +211,20 @@ class _ChartListViewState extends ConsumerState<_ChartListView>
   }
 }
 
-/// 榜单歌曲行：排名 + 封面 + 歌名/歌手 + 播放态（原热歌榜列表行样式）
+/// 榜单歌曲行：排名 + 封面 + 歌名/歌手 + 播放态（原热歌榜列表行样式）；
+/// [vipLimited] 为真时整行灰显并打 VIP 角标（会话内探测到的试听片段）
 class _ChartSongRow extends StatelessWidget {
   final int rank;
   final ChartHit hit;
   final bool playing;
+  final bool vipLimited;
   final VoidCallback onTap;
 
   const _ChartSongRow({
     required this.rank,
     required this.hit,
     required this.playing,
+    required this.vipLimited,
     required this.onTap,
   });
 
@@ -262,7 +268,11 @@ class _ChartSongRow extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13.5,
                       fontWeight: FontWeight.w600,
-                      color: playing ? t.primary : t.fg,
+                      color: playing
+                          ? t.primary
+                          : vipLimited
+                              ? t.fgMute
+                              : t.fg,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -270,11 +280,32 @@ class _ChartSongRow extends StatelessWidget {
                     hit.artist,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11.5, color: t.fgDim),
+                    style: TextStyle(fontSize: 11.5, color: t.fgMute),
                   ),
                 ],
               ),
             ),
+            // VIP 角标：会话内探测到的试听片段曲目
+            if (vipLimited)
+              Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 5,
+                  vertical: 1.5,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: t.fgMute, width: 0.8),
+                ),
+                child: Text(
+                  "VIP",
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: t.fgMute,
+                  ),
+                ),
+              ),
             if (playing) const EqBars(),
           ],
         ),

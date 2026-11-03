@@ -13,6 +13,7 @@ import "../../data/repositories/track_repository.dart";
 import "../../origin_sdk/bili/bili_api.dart";
 import "../../origin_sdk/bili/bili_api_error.dart";
 import "../playlist/playlists_provider.dart" show queueEntriesProvider;
+import "../plaza/hot_songs_provider.dart" show vipLimitedTrackIdsProvider;
 import "audio_engine.dart";
 import "just_audio_engine.dart";
 import "play_mode.dart";
@@ -150,6 +151,9 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
 
   // UI 提示后会清除 error，失效源标记须独立保留到重新装载成功。
   String? _failedSourceKey;
+
+  /// 已弹过 VIP 试听提示的曲目（每曲只提示一次）
+  String? _vipNotifiedId;
   DateTime _lastSystemSync = DateTime.fromMillisecondsSinceEpoch(0);
 
   /// 惰性创建并订阅事件流（首次使用时；dispose 统一取消）
@@ -890,6 +894,7 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     _onDuration = e.durationStream.listen((d) {
       state = state.copyWith(duration: d);
       _syncSystem(force: true);
+      _detectVipFragment(d);
     });
     _onPlaying = e.playingStream.listen((playing) {
       state = state.copyWith(playing: playing, buffering: false);
@@ -908,6 +913,20 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       _snapshot();
       _syncSystem(force: true);
     });
+  }
+
+  /// 酷我 VIP 试听探测：引擎实际时长明显短于曲目标注（<70%）判定为
+  /// VIP 试听片段——登记进广场灰显集（app 壳监听集合新增弹提示）。
+  /// 只对酷我启用：其它源标注时长可靠性不一，避免误伤
+  void _detectVipFragment(Duration engineDuration) {
+    final track = state.track;
+    if (track == null || track.origin != OriginType.kuwo) return;
+    final metaSec = track.duration ?? 0;
+    if (metaSec <= 0 || engineDuration.inSeconds <= 0) return;
+    if (engineDuration.inSeconds >= metaSec * 0.7) return;
+    if (_vipNotifiedId == track.id) return; // 同曲只提示一次
+    _vipNotifiedId = track.id;
+    ref.read(vipLimitedTrackIdsProvider.notifier).add(track.id);
   }
 
   /// 进度去抖 5s 写盘（§5.2-2：修掉旧版"每秒写盘"与"假节流"两个极端）

@@ -130,7 +130,7 @@ class DesktopPlayerBar extends ConsumerWidget {
                                     ? null
                                     : () => _openPlayer(ref),
                                 child: CoverPlaceholder(
-                                    cover: track?.cover,
+                                    cover: track?.effectiveCover,
                                     text: track?.effectiveName,
                                     size: 46,
                                     radius: t.radiusSm)),
@@ -411,7 +411,7 @@ class DesktopPlayerPage extends ConsumerWidget {
                           child: LayoutBuilder(
                               builder: (context, box) => CoverPlaceholder(
                                   key: const Key("desktop_player_cover"),
-                                  cover: track.cover,
+                                  cover: track.effectiveCover,
                                   text: track.effectiveName,
                                   size: box.maxWidth,
                                   radius: t.radiusXl)),

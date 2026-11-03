@@ -58,9 +58,11 @@ class PlaylistRepository {
       SELECT p.*, (
         SELECT COUNT(*) FROM playlist_items i WHERE i.playlist_id = p.id
       ) AS track_count, (
-        SELECT t.cover FROM playlist_items i
+        SELECT COALESCE(t.display_cover, t.cover) FROM playlist_items i
         JOIN tracks t ON t.id = i.track_id
-        WHERE i.playlist_id = p.id AND t.cover IS NOT NULL AND t.cover != ?
+        WHERE i.playlist_id = p.id
+          AND COALESCE(t.display_cover, t.cover) IS NOT NULL
+          AND COALESCE(t.display_cover, t.cover) != ?
         ORDER BY i.sort_index LIMIT 1
       ) AS cover
       FROM playlists p
@@ -93,6 +95,7 @@ class PlaylistRepository {
           lyricOffsetMs: (r["lyric_offset"] as int?) ?? 0,
           displayName: r["display_name"] as String?,
           displayAuthor: r["display_author"] as String?,
+          displayCover: r["display_cover"] as String?,
         ),
     ];
   }

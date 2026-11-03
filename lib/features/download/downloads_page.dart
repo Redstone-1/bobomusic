@@ -284,7 +284,7 @@ class _TaskTile extends ConsumerWidget {
           Row(
             children: [
               CoverPlaceholder(
-                cover: task.track.cover,
+                cover: task.track.effectiveCover,
                 text: task.track.effectiveName,
                 size: 44,
                 radius: t.radiusSm,

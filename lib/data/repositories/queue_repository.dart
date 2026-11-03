@@ -26,6 +26,7 @@ class QueueRepository {
         lyricOffsetMs: (r["lyric_offset"] as int?) ?? 0,
         displayName: r["display_name"] as String?,
         displayAuthor: r["display_author"] as String?,
+        displayCover: r["display_cover"] as String?,
       );
 
   QueueEntry _entryFromRow(Map<String, Object?> row) =>

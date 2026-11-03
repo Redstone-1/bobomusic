@@ -21,6 +21,7 @@ import "../../features/playlist/playlist_page.dart";
 import "../../features/playlist/playlists_provider.dart";
 import "../../features/playlist/recent_tracks_page.dart";
 import "../../features/plaza/plaza_page.dart";
+import "../../features/plaza/hot_songs_provider.dart";
 import "../../features/plaza/search_page.dart";
 import "../../features/settings/settings_page.dart";
 
@@ -158,6 +159,12 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
       if (error == null) return;
       AppToast.show(context, "播放失败：$error");
       ref.read(playbackProvider.notifier).clearError();
+    });
+    // 与手机壳共用播放期探测结果，桌面播放试听片段时也给出原因。
+    ref.listen(vipLimitedTrackIdsProvider, (previous, next) {
+      if (next.length > (previous?.length ?? 0)) {
+        AppToast.show(context, "该歌曲需要酷我 VIP，仅提供试听片段");
+      }
     });
     return CallbackShortcuts(
         bindings: {

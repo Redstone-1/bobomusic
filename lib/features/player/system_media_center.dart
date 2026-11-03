@@ -122,7 +122,7 @@ class SystemMediaCenter {
       _invoke("stop");
       return;
     }
-    unawaited(_resolveCover(snap.track!.cover));
+    unawaited(_resolveCover(snap.track!.effectiveCover));
     _push(snap);
   }
 
@@ -165,7 +165,7 @@ class SystemMediaCenter {
       if (url != _coverKey) return;
       _coverPath = file.path;
       final last = _lastSnapshot;
-      if (last != null && last.track?.cover == url) {
+      if (last != null && last.track?.effectiveCover == url) {
         _push(last);
       }
     } catch (e) {

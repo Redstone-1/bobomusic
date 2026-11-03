@@ -204,7 +204,7 @@ void main() {
     final container = await _openLyrics(tester, true);
     await tester.tap(find.byKey(const Key("lyric_tools")));
     await _settleLyrics(tester);
-    await tester.tap(find.text("歌词延后 0.5s"));
+    await tester.tap(find.text("延后 0.5s"));
     await _settleLyrics(tester);
     expect(container.read(lyricControllerProvider).offsetMs, 500);
     expect(

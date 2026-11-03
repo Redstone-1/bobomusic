@@ -11,14 +11,15 @@ import "../../origin_sdk/qianqian/qianqian_api.dart";
 import "../../origin_sdk/qq/qq_api.dart";
 
 /// 广场榜单卡定义（key = "<源 value>:<源内榜单id>"，展示名带源前缀；Tab 顺序即展示顺序）
-/// 酷我：官方 bang 榜（bang/list 族接口 2026-10 实测复活）；
 /// 网易：官方 playlist 榜（免加密接口）；千千：官方新歌榜（bdid 硬编码）；
-/// B 站音乐榜已按用户决定下线（请求不稳定）；QQ 榜单未上（免费条目少）
+/// B 站音乐榜已按用户决定下线（请求不稳定）；QQ 榜单未上（免费条目少）；
+/// 酷我双榜已按用户决定下线（2026-11-01：VIP 试听占比过高，bang 接口付费
+/// 字段全员恒定，解析层无法过滤）
 const plazaChartDefs = <(String, String)>[
-  ("kuwo:16", "酷我热歌榜"),
-  ("kuwo:93", "酷我飙升榜"),
   ("${NeteaseApi.chartKeyPrefix}${NeteaseApi.hotChartId}", "网易云热歌榜"),
   ("${NeteaseApi.chartKeyPrefix}${NeteaseApi.surgeChartId}", "网易云飙升榜"),
+  ("${NeteaseApi.chartKeyPrefix}${NeteaseApi.originalChartId}", "网易云原创榜"),
+  ("${NeteaseApi.chartKeyPrefix}${NeteaseApi.electroChartId}", "网易云电音榜"),
   ("${QianqianApi.chartKeyPrefix}${QianqianApi.newSongChartBdid}", "千千新歌榜"),
 ];
 
@@ -102,3 +103,19 @@ Future<Track?> resolveChartHit(ChartHit hit, OriginType origin) async {
     return null;
   }
 }
+
+/// 酷我 VIP 试听片段登记（会话内有效，app 重启清零）：播放期探测到
+/// 「引擎实际时长明显短于曲目标注」的曲目 id 集合，广场榜单据此
+/// 灰显 + 打 VIP 角标；app 壳监听集合新增弹提示
+class VipLimitedTrackIds extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  void add(String trackId) {
+    if (state.contains(trackId)) return;
+    state = {...state, trackId};
+  }
+}
+
+final vipLimitedTrackIdsProvider =
+    NotifierProvider<VipLimitedTrackIds, Set<String>>(VipLimitedTrackIds.new);
