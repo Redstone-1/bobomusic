@@ -2,6 +2,19 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Windows 桌面（Debug）",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "cwd": "${workspaceFolder}",
+      "deviceId": "windows",
+      "flutterMode": "debug",
+      "toolArgs": ["--dart-define=ENV=dev"],
+      "env": {
+        "FLUTTER_STORAGE_BASE_URL": "https://storage.flutter-io.cn"
+      }
+    },
+    {
       "name": "Flutter (Debug)",
       "type": "dart",
       "request": "launch",

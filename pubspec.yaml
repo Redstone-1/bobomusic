@@ -48,6 +48,7 @@ dependencies:
   package_info_plus: ^10.2.2
   device_info_plus: ^13.3.0
   window_manager: ^0.5.2
+  screen_retriever: ^0.2.2
   file_picker: ^13.2.0
   # share_plus 钉 13.1.x：13.2.0 起迁移 AGP 内置 Kotlin，其 KGP 回退路径在 AGP 9 宿主下编译丢类；
   # 而 12.x 依赖 win32 5.x 与 plus 家族 13 线（win32 6.x）互斥，故锁 13.0~13.1 窗口

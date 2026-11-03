@@ -57,6 +57,17 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# permission_handler_windows 0.2.2 已启用 C++20，但仍附加旧 /await，
+# 导致 WinRT 选入 experimental/coroutine，在新版 MSVC 下报 STL1011。
+# 插件载入后只移除该目标的旧参数，让它使用标准 C++20 协程。
+if(MSVC AND TARGET permission_handler_windows_plugin)
+  get_target_property(PERMISSION_HANDLER_COMPILE_OPTIONS
+    permission_handler_windows_plugin COMPILE_OPTIONS)
+  list(REMOVE_ITEM PERMISSION_HANDLER_COMPILE_OPTIONS "/await")
+  set_property(TARGET permission_handler_windows_plugin PROPERTY
+    COMPILE_OPTIONS "${PERMISSION_HANDLER_COMPILE_OPTIONS}")
+endif()
+
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can
