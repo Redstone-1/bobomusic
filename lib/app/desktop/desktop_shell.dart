@@ -24,6 +24,7 @@ import "../../features/plaza/plaza_page.dart";
 import "../../features/plaza/hot_songs_provider.dart";
 import "../../features/plaza/search_page.dart";
 import "../../features/settings/settings_page.dart";
+import "../../features/settings/update_prompt.dart";
 
 class DesktopShell extends ConsumerStatefulWidget {
   const DesktopShell({super.key});
@@ -43,6 +44,8 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
   @override
   void initState() {
     super.initState();
+    // 冷启动静默检查一次新版本（内部防重延迟触发，失败不提示；测试可关）
+    scheduleLaunchUpdateCheck(context, ref);
     windowsWindowController?.beforeClose = () async {
       try {
         await ref.read(playbackProvider.notifier).prepareForExit();

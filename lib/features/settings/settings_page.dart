@@ -1,6 +1,5 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:url_launcher/url_launcher.dart";
 
 import "../../app/design_system_demo.dart";
 import "../../core/overlays/app_dialog.dart";
@@ -23,6 +22,7 @@ import "doc_page.dart";
 import "info_pages.dart";
 import "settings_info.dart";
 import "update_checker.dart";
+import "update_prompt.dart";
 
 /// 设置页：主题偏好、应用管理与说明入口。
 class SettingsPage extends ConsumerWidget {
@@ -197,36 +197,7 @@ class SettingsPage extends ConsumerWidget {
         return;
       }
       final latest = result.latest!;
-      final go = await AppDialog.show<bool>(
-        context,
-        title: "发现新版本 ${latest.version}",
-        content: SizedBox(
-          height: 200,
-          child: SingleChildScrollView(
-            child: Text(
-              latest.notes.trim().isEmpty ? "前往发布页查看更新内容" : latest.notes,
-              style: const TextStyle(fontSize: 13, height: 1.5),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text("稍后"),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text("去下载"),
-          ),
-        ],
-      );
-      if (go == true && latest.url.isNotEmpty) {
-        final ok = await launchUrl(
-          Uri.parse(latest.url),
-          mode: LaunchMode.externalApplication,
-        );
-        if (!ok && context.mounted) AppToast.show(context, "无法打开下载页面");
-      }
+      await showUpdateFoundDialog(context, latest);
     } catch (e) {
       print("检查更新失败：$e");
       if (context.mounted) AppToast.show(context, "检查更新失败，请稍后再试");

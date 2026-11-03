@@ -12,6 +12,7 @@ import "../playlist/playlist_page.dart";
 import "../plaza/hot_songs_provider.dart";
 import "../plaza/plaza_page.dart";
 import "../settings/settings_page.dart";
+import "../settings/update_prompt.dart";
 import "home_tab.dart";
 
 /// 应用壳：极光背景 + IndexedStack 三 Tab 保活 + 迷你播放条 + 底部玻璃 Dock
@@ -20,6 +21,8 @@ class AppShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // 冷启动静默检查一次新版本（内部防重，失败不提示；测试可整体关闭）
+    scheduleLaunchUpdateCheck(context, ref);
     final tab = ref.watch(homeTabControllerProvider);
     // 播放错误全局提示（状态机把引擎/解析错误收进 state，这里统一弹 toast）
     ref.listen(

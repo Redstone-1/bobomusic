@@ -6,6 +6,8 @@ import "package:bobomusic/data/models/track.dart" as models;
 import "package:bobomusic/data/origin_service.dart";
 import "package:bobomusic/data/repositories/track_repository.dart";
 import "package:bobomusic/features/player/audio_engine.dart";
+import "package:bobomusic/features/settings/settings_info.dart";
+import "package:bobomusic/features/settings/update_prompt.dart";
 import "package:bobomusic/features/player/playback_provider.dart";
 import "package:bobomusic/origin_sdk/bili/types.dart" as bili;
 import "package:bobomusic/origin_sdk/lyric/lyric_service.dart";
@@ -424,6 +426,8 @@ Future<Widget> buildTestApp({
   AppPlatform platform = AppPlatform.android,
   Map<String, Object> prefs = const {},
   List<Map<String, Object>> seedTracks = const [],
+  // 默认关启动静默检查更新：多数用例不关心，且避免挂起 Timer / 真实网络
+  bool launchUpdateCheck = false,
 }) async {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfiNoIsolate; // 同步 FFI：微任务内完成
@@ -437,6 +441,9 @@ Future<Widget> buildTestApp({
   qianqianApi = FakeQianqianApi();
   lyricService = FakeLyricService();
   fakePlaybackEngine = FakeEngine();
+  // 启动检查更新按用例开关；调度标志重置，防模块级状态跨用例残留
+  silentUpdateCheckEnabled = launchUpdateCheck;
+  resetLaunchUpdateCheck();
   playbackDepsTestOverride = PlaybackDeps(
     engine: fakePlaybackEngine!,
     resolveSource: (track) async => PlaySource(
@@ -455,7 +462,12 @@ Future<Widget> buildTestApp({
     );
   }
   return ProviderScope(
-    overrides: [appPlatformProvider.overrideWithValue(platform)],
+    overrides: [
+      appPlatformProvider.overrideWithValue(platform),
+      // PackageInfo 平台通道在 FakeAsync 下永不返回（挂 AsyncLoading），
+      // 钉死版本号：设置行文案确定，启动检查更新拿得到版本
+      appVersionProvider.overrideWith((ref) async => "3.0.0"),
+    ],
     child: const App(),
   );
 }
