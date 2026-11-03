@@ -8,7 +8,6 @@ import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/cover_placeholder.dart";
 import "../../core/widgets/desktop_content.dart";
 import "../../core/widgets/empty_state.dart";
-import "../../core/widgets/page_header.dart";
 import "../../data/models/track.dart";
 import "../../data/repositories/track_repository.dart";
 import "../download/download_actions.dart";
@@ -50,32 +49,32 @@ void _openPlayer(WidgetRef ref) => ref
     .read(desktopNavigationProvider.notifier)
     .open(const DesktopDestination("player", "正在播放"));
 
-void _showTrackActions(BuildContext context, WidgetRef ref, Track track) {
-  AppSheet.show(context, title: track.effectiveName, actions: [
-    AppSheetAction(
-        icon: Icons.edit_outlined,
-        label: "编辑信息",
-        onTap: () => showTrackEditDialog(context, ref, track)),
-    AppSheetAction(
-        icon: Icons.library_add_outlined,
-        label: "加入歌单",
-        onTap: () => showAddToPlaylistSheet(context, ref, [track])),
-    if (track.origin != OriginType.local)
+List<AppSheetAction> _trackActions(
+        BuildContext context, WidgetRef ref, Track track) =>
+    [
+      if (track.origin != OriginType.local)
+        AppSheetAction(
+            icon: Icons.download_outlined,
+            label: "下载",
+            onTap: () => downloadTrack(context, track)),
       AppSheetAction(
-          icon: Icons.download_outlined,
-          label: "下载",
-          onTap: () => downloadTrack(context, track)),
-    if (track.origin == OriginType.netease || track.origin == OriginType.kuwo)
+          icon: Icons.edit_outlined,
+          label: "编辑信息",
+          onTap: () => showTrackEditDialog(context, ref, track)),
       AppSheetAction(
-          icon: Icons.comment_outlined,
-          label: "查看评论",
-          onTap: () => CommentPage.open(context, track)),
-    AppSheetAction(
-        icon: Icons.timer_outlined,
-        label: "定时关闭",
-        onTap: () => showSleepTimerSheet(context, ref)),
-  ]);
-}
+          icon: Icons.library_add_outlined,
+          label: "加入歌单",
+          onTap: () => showAddToPlaylistSheet(context, ref, [track])),
+      if (track.origin == OriginType.netease || track.origin == OriginType.kuwo)
+        AppSheetAction(
+            icon: Icons.comment_outlined,
+            label: "查看评论",
+            onTap: () => CommentPage.open(context, track)),
+      AppSheetAction(
+          icon: Icons.timer_outlined,
+          label: "定时关闭",
+          onTap: () => showSleepTimerSheet(context, ref)),
+    ];
 
 class _LikeButton extends ConsumerWidget {
   const _LikeButton(this.track);
@@ -108,6 +107,8 @@ class DesktopPlayerBar extends ConsumerWidget {
         )));
     final commands = ref.read(playbackProvider.notifier);
     final track = data.track;
+    final expanded = ref.watch(
+        desktopNavigationProvider.select((state) => state.route == "player"));
     return DesktopContent(
         child: Builder(
             builder: (context) => Container(
@@ -259,10 +260,22 @@ class DesktopPlayerBar extends ConsumerWidget {
                                     icon:
                                         const Icon(Icons.queue_music_outlined)),
                                 IconButton(
-                                    tooltip: "展开播放页",
+                                    key: const Key("desktop_player_expand"),
+                                    tooltip: expanded ? "收起播放页" : "展开播放页",
                                     iconSize: 19,
-                                    onPressed: () => _openPlayer(ref),
-                                    icon: const Icon(Icons.open_in_full)),
+                                    onPressed: () {
+                                      if (expanded) {
+                                        ref
+                                            .read(desktopNavigationProvider
+                                                .notifier)
+                                            .back();
+                                      } else {
+                                        _openPlayer(ref);
+                                      }
+                                    },
+                                    icon: Icon(expanded
+                                        ? Icons.close_fullscreen
+                                        : Icons.open_in_full)),
                               ])),
                     ]);
                   }),
@@ -377,7 +390,7 @@ class DesktopPlayerPage extends ConsumerWidget {
           title: "还没有正在播放的音乐",
           subtitle: "先从歌单或广场选择一首歌");
     }
-    // 左栏承载标题、工具与曲目信息，右栏歌词独占内容区的完整高度。
+    // 左栏按可用高度缩放封面，不滚动；右栏歌词始终占满内容区高度。
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 28),
       child: LayoutBuilder(
@@ -385,56 +398,27 @@ class DesktopPlayerPage extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   SizedBox(
+                    key: const Key("desktop_player_artwork_panel"),
                     width: (constraints.maxWidth * .38).clamp(180, 360),
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(vertical: 28),
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            PageHeader(
-                                title: "正在播放",
-                                subtitle: "留一点时间，只给音乐",
-                                trailing: IconButton(
-                                    tooltip: "收起播放页",
-                                    onPressed: () => ref
-                                        .read(
-                                            desktopNavigationProvider.notifier)
-                                        .back(),
-                                    icon: const Icon(Icons.close_fullscreen))),
-                            const SizedBox(height: 12),
-                            const PlayerLyricTools(horizontalPadding: 0),
-                            const SizedBox(height: 16),
-                            LayoutBuilder(
-                                builder: (context, box) => CoverPlaceholder(
-                                    cover: track.cover,
-                                    text: track.effectiveName,
-                                    size: box.maxWidth,
-                                    radius: t.radiusXl)),
-                            const SizedBox(height: 24),
-                            Text(track.effectiveName,
-                                style: TextStyle(
-                                    color: t.fg,
-                                    fontSize: 25,
-                                    fontWeight: FontWeight.w700)),
-                            const SizedBox(height: 8),
-                            Text(track.effectiveAuthor,
-                                style: TextStyle(color: t.fgDim, fontSize: 13)),
-                            const SizedBox(height: 18),
-                            Wrap(spacing: 8, children: [
-                              _LikeButton(track),
-                              IconButton(
-                                  tooltip: "下载",
-                                  onPressed: track.origin == OriginType.local
-                                      ? null
-                                      : () => downloadTrack(context, track),
-                                  icon: const Icon(Icons.download_outlined)),
-                              IconButton(
-                                  tooltip: "更多操作",
-                                  onPressed: () =>
-                                      _showTrackActions(context, ref, track),
-                                  icon: const Icon(Icons.more_horiz)),
-                            ]),
-                          ]),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Column(children: [
+                        const PlayerLyricTools(horizontalPadding: 0),
+                        const SizedBox(height: 16),
+                        Flexible(
+                            child: AspectRatio(
+                          aspectRatio: 1,
+                          child: LayoutBuilder(
+                              builder: (context, box) => CoverPlaceholder(
+                                  key: const Key("desktop_player_cover"),
+                                  cover: track.cover,
+                                  text: track.effectiveName,
+                                  size: box.maxWidth,
+                                  radius: t.radiusXl)),
+                        )),
+                        const SizedBox(height: 16),
+                        _DesktopTrackActions(track),
+                      ]),
                     ),
                   ),
                   const SizedBox(width: 32),
@@ -444,5 +428,55 @@ class DesktopPlayerPage extends ConsumerWidget {
                 ],
               )),
     );
+  }
+}
+
+class _DesktopTrackActions extends ConsumerWidget {
+  const _DesktopTrackActions(this.track);
+  final Track track;
+  static const _buttonExtent = 48.0;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = AuroraTokens.of(context);
+    final liked = ref.watch(_trackLikedProvider(track.id)).value ?? track.liked;
+    final actions = [
+      AppSheetAction(
+          icon: liked ? Icons.favorite : Icons.favorite_border,
+          label: liked ? "取消喜欢" : "喜欢",
+          onTap: () => _toggleLike(context, ref, track)),
+      ..._trackActions(context, ref, track),
+    ];
+    return LayoutBuilder(builder: (context, constraints) {
+      // 仅将放不下的操作移入更多；预留更多按钮自身的位置，避免窄窗溢出。
+      final slots = (constraints.maxWidth / _buttonExtent)
+          .floor()
+          .clamp(1, actions.length);
+      final visibleCount = slots >= actions.length ? actions.length : slots - 1;
+      final overflow = actions.skip(visibleCount).toList();
+      return Row(
+          key: const Key("desktop_track_actions"),
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            for (final action in actions.take(visibleCount))
+              SizedBox.square(
+                  dimension: _buttonExtent,
+                  child: IconButton(
+                      tooltip: action.label,
+                      onPressed: action.onTap,
+                      icon: Icon(action.icon,
+                          color: action.icon == Icons.favorite
+                              ? t.primary
+                              : t.fgDim))),
+            if (overflow.isNotEmpty)
+              SizedBox.square(
+                  dimension: _buttonExtent,
+                  child: IconButton(
+                      tooltip: "更多操作",
+                      onPressed: () => AppSheet.show(context,
+                          title: "更多操作", actions: overflow),
+                      icon: Icon(Icons.more_horiz, color: t.fgDim))),
+          ]);
+    });
   }
 }

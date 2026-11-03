@@ -221,15 +221,15 @@ class _TopBar extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 8),
       child: Row(
         children: [
-          Tooltip(
-            message: sidePanel ? "展开播放页" : "收起播放页",
-            child: GlassIconButton(
-              key: const Key("player_close"),
-              icon: Icon(
-                  sidePanel ? Icons.open_in_full : Icons.keyboard_arrow_down),
-              onTap: onClose,
+          if (!sidePanel)
+            Tooltip(
+              message: "收起播放页",
+              child: GlassIconButton(
+                key: const Key("player_close"),
+                icon: const Icon(Icons.keyboard_arrow_down),
+                onTap: onClose,
+              ),
             ),
-          ),
           Expanded(
             child: Column(
               children: [
