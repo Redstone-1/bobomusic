@@ -62,6 +62,9 @@ abstract class AudioEngine {
   /// 调整播放速度，保留媒体时间轴、当前位置与播放/暂停状态。
   Future<void> setSpeed(double speed);
 
+  /// 应用内音量，范围 0～1，不修改系统混音器的主音量。
+  Future<void> setVolume(double volume);
+
   Future<void> stop();
 
   Future<void> dispose();

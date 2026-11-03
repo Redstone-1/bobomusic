@@ -22,6 +22,9 @@ class LifecyclePlayer extends Fake implements AudioPlayer {
   int loads = 0;
   @override
   double speed = 1.0;
+  @override
+  double volume = 1.0;
+  double? rejectedVolume;
   final speedCalls = <double>[];
   double? rejectedSpeed;
 
@@ -70,6 +73,12 @@ class LifecyclePlayer extends Fake implements AudioPlayer {
     speedCalls.add(value);
     speed = value; // 模拟 just_audio 在平台确认之前先修改内部值。
     if (value == rejectedSpeed) throw StateError("平台不支持该速度");
+  }
+
+  @override
+  Future<void> setVolume(double value) async {
+    volume = value;
+    if (value == rejectedVolume) throw StateError("平台不支持该音量");
   }
 
   @override
@@ -131,6 +140,16 @@ void main() {
     await expectLater(engine.setSpeed(1.5), throwsA(isA<StateError>()));
     expect(player.speed, 1.0);
     expect(player.speedCalls, [1.5, 1.0]);
+    await engine.dispose();
+  });
+
+  test("平台拒绝音量时恢复内部音量，不重新装载音源", () async {
+    final player = LifecyclePlayer()..rejectedVolume = .3;
+    final engine = JustAudioEngine(player: player);
+    await engine.setVolume(.6);
+    await expectLater(engine.setVolume(.3), throwsA(isA<StateError>()));
+    expect(player.volume, .6);
+    expect(player.loads, 0);
     await engine.dispose();
   });
 

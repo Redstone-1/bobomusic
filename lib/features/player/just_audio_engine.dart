@@ -93,6 +93,21 @@ class JustAudioEngine implements AudioEngine {
   }
 
   @override
+  Future<void> setVolume(double volume) async {
+    final previous = _player.volume;
+    try {
+      await _player.setVolume(volume);
+    } catch (error) {
+      try {
+        await _player.setVolume(previous);
+      } catch (restoreError) {
+        print("恢复播放音量失败：$restoreError");
+      }
+      rethrow;
+    }
+  }
+
+  @override
   Future<void> stop() {
     _playGeneration++;
     return _player.stop();

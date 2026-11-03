@@ -18,6 +18,7 @@ import "just_audio_engine.dart";
 import "play_mode.dart";
 import "system_media_center.dart";
 import "playback_speed.dart";
+import "playback_volume.dart";
 
 part "playback_provider.g.dart";
 
@@ -39,6 +40,7 @@ class PlaybackState {
   final Duration duration;
   final PlayMode mode;
   final double speed;
+  final double volume;
 
   /// 定时关闭截止时间（null = 未开启；仅会话内有效，不持久化）
   final DateTime? sleepDeadline;
@@ -57,6 +59,7 @@ class PlaybackState {
     this.duration = Duration.zero,
     this.mode = PlayMode.listLoop,
     this.speed = 1.0,
+    this.volume = 1.0,
     this.sleepDeadline,
     this.stopAfterTrack = false,
   });
@@ -72,6 +75,7 @@ class PlaybackState {
     Duration? duration,
     PlayMode? mode,
     double? speed,
+    double? volume,
     DateTime? sleepDeadline,
     bool clearSleep = false,
     bool? stopAfterTrack,
@@ -88,8 +92,8 @@ class PlaybackState {
         duration: duration ?? this.duration,
         mode: mode ?? this.mode,
         speed: speed ?? this.speed,
-        sleepDeadline:
-            clearSleep ? null : sleepDeadline ?? this.sleepDeadline,
+        volume: volume ?? this.volume,
+        sleepDeadline: clearSleep ? null : sleepDeadline ?? this.sleepDeadline,
         stopAfterTrack: stopAfterTrack ?? this.stopAfterTrack,
       );
 }
@@ -137,6 +141,8 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
 
   // 串行应用速度：连续选择与装载后恢复共用队列，避免迟到的平台结果覆盖新设置。
   Future<void> _speedOperation = Future<void>.value();
+  Future<void> _volumeOperation = Future<void>.value();
+  double _lastAudibleVolume = 1;
 
   /// 引擎当前已装载的曲目 id（null = 引擎无源：冷启动恢复后/装载失败后）。
   /// 播放键据此决定裸 play 还是完整装载（裸 play 在无源引擎上无声无进度）
@@ -161,7 +167,11 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     // 通知栏/耳机键命令接到本状态机（Android 才有 handler）
     systemMediaCenter?.commands = this;
     _restoreFromPrefs();
+    final restoredLast =
+        restorePlaybackVolume(appPrefs.get(playbackLastVolumePreferenceKey));
+    _lastAudibleVolume = restoredLast > 0 ? restoredLast : 1;
     return PlaybackState(
+      volume: restorePlaybackVolume(appPrefs.get(playbackVolumePreferenceKey)),
       speed: restorePlaybackSpeed(appPrefs.get(playbackSpeedPreferenceKey)),
     );
   }
@@ -302,9 +312,8 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     final queue = [...state.queue]..removeAt(index);
     state = state.copyWith(
       queue: queue,
-      queueIndex: index < state.queueIndex
-          ? state.queueIndex - 1
-          : state.queueIndex,
+      queueIndex:
+          index < state.queueIndex ? state.queueIndex - 1 : state.queueIndex,
     );
     _snapshot();
     _persistNow();
@@ -341,7 +350,8 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     if (_loadedKey != state.track!.id) {
       final queue = state.queue.isEmpty ? [state.track!] : state.queue;
       final index = state.queueIndex >= 0 ? state.queueIndex : 0;
-      await _load(queue, index, autoplay: true, initialPosition: state.position);
+      await _load(queue, index,
+          autoplay: true, initialPosition: state.position);
       return;
     }
     // 乐观落定先行（同暂停）：引擎 no-op 无事件时 UI 也必须翻到暂停图标
@@ -407,6 +417,70 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
         if (ref.mounted) state = state.copyWith(error: "倍速已调整，但未能保存设置");
       }
     });
+  }
+
+  Future<void> _queueVolume(Future<void> Function() action) {
+    final operation = _volumeOperation.then((_) => action());
+    _volumeOperation = operation.then<void>((_) {},
+        onError: (Object error, StackTrace stack) {});
+    return operation;
+  }
+
+  /// 命令串行应用；引擎确认后才更新显示，空闲时只保存偏好，不创建播放器。
+  Future<void> setVolume(double value) {
+    if (!value.isFinite || value < 0 || value > 1) {
+      state = state.copyWith(error: "音量需在 0～100% 之间");
+      return Future<void>.value();
+    }
+    return _queueVolume(() => _applyVolume(value));
+  }
+
+  Future<void> toggleMute() => _queueVolume(
+      () => _applyVolume(state.volume > 0 ? 0 : _lastAudibleVolume));
+
+  Future<void> _applyVolume(double value) async {
+    if (!ref.mounted || value == state.volume) return;
+    try {
+      await _engine?.setVolume(value);
+    } catch (error) {
+      print("设置音量失败：$error");
+      if (ref.mounted) state = state.copyWith(error: "音量设置失败，请重试");
+      return;
+    }
+    if (!ref.mounted) return;
+    state = state.copyWith(volume: value);
+    if (value > 0) _lastAudibleVolume = value;
+    try {
+      final saved =
+          await appPrefs.setDouble(playbackVolumePreferenceKey, value);
+      final lastSaved = await appPrefs.setDouble(
+          playbackLastVolumePreferenceKey, _lastAudibleVolume);
+      if (!saved || !lastSaved) throw StateError("音量偏好写入被拒绝");
+    } catch (error) {
+      print("保存音量失败：$error");
+      if (ref.mounted) state = state.copyWith(error: "音量已调整，但未能保存设置");
+    }
+  }
+
+  /// 退出命令等待快照真正写入，不能只依赖进程销毁时未等待的异步写盘。
+  Future<void> prepareForExit() async {
+    await _seekOperation;
+    await _volumeOperation;
+    await _speedOperation;
+    await pause();
+    _persistDebounce?.cancel();
+    _snapshot();
+    final track = _snapTrack;
+    if (track == null) return;
+    final saved = await Future.wait([
+      appPrefs.setString(_kTrackId, track.id),
+      appPrefs.setInt(_kPositionMs, _snapPosition.inMilliseconds),
+      appPrefs.setString(_kMode, _snapMode.name),
+      appPrefs.setString(
+          _kQueueIds, jsonEncode([for (final item in _snapQueue) item.id])),
+      appPrefs.setInt(_kQueueIndex, _snapQueueIndex),
+    ]);
+    if (saved.any((ok) => !ok)) throw StateError("播放状态保存失败，请重试退出");
   }
 
   /// 曲目显示信息编辑后热更新当前会话：迷你条/播放卡/系统通知立即换新名。
@@ -653,7 +727,8 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
     // just_audio 会先停掉旧源——失败后引擎已哑，回退不能宣称仍在播
     var reachedEngine = false;
     try {
-      final source = await _resolveSource(track, forceRefresh: _failedSourceKey == track.id);
+      final source = await _resolveSource(track,
+          forceRefresh: _failedSourceKey == track.id);
       if (!ref.mounted) return false;
       reachedEngine = true;
       final engine = _resolveEngine();
@@ -661,6 +736,9 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       if (!ref.mounted) return false;
       await _queueSpeed(() async {
         if (ref.mounted) await engine.setSpeed(state.speed);
+      });
+      await _queueVolume(() async {
+        if (ref.mounted) await engine.setVolume(state.volume);
       });
       if (!ref.mounted) return false;
       if (autoplay) await _resolveEngine().play();
@@ -706,6 +784,7 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       // 引擎已被动过（load 阶段失败）→ 强制暂停态，播放键走完整装载恢复
       state = prev.copyWith(
         speed: state.speed,
+        volume: state.volume,
         buffering: false,
         error: friendly,
         playing: reachedEngine ? false : prev.playing,
@@ -718,7 +797,8 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
   }
 
   /// 源解析：本地文件（本地曲/已下载）优先直读；在线曲按音源取 playurl
-  Future<PlaySource> _resolveSource(Track track, {bool forceRefresh = false}) async {
+  Future<PlaySource> _resolveSource(Track track,
+      {bool forceRefresh = false}) async {
     final override = playbackDepsTestOverride?.resolveSource;
     if (override != null) return override(track);
     var localPath = track.localPath;
@@ -909,9 +989,8 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
       queue: queue,
       queueIndex: index,
       position: Duration(milliseconds: positionMs),
-      mode: PlayMode.values
-          .where((m) => m.name == modeName)
-          .firstOrNull ?? PlayMode.listLoop,
+      mode: PlayMode.values.where((m) => m.name == modeName).firstOrNull ??
+          PlayMode.listLoop,
     );
     _snapshot();
     _syncSystem(force: true);

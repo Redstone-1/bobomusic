@@ -1,3 +1,5 @@
+import "dart:async";
+
 import "package:bobomusic/core/prefs/app_prefs.dart";
 import "package:bobomusic/data/db/app_database.dart";
 import "package:bobomusic/data/models/track.dart";
@@ -22,6 +24,7 @@ class _FakeLyricService implements LyricService {
   ];
   String? raw = "[00:01.00]仿佛如同一场梦\n[00:03.00]我们如此短暂地相逢";
   int searchCalls = 0;
+  Completer<String?>? fetchGate;
 
   @override
   Future<List<LyricCandidate>> search(String keyword) async {
@@ -30,7 +33,10 @@ class _FakeLyricService implements LyricService {
   }
 
   @override
-  Future<String?> fetch(LyricCandidate candidate) async => raw;
+  Future<String?> fetch(LyricCandidate candidate) async {
+    if (fetchGate != null) return fetchGate!.future;
+    return raw;
+  }
 }
 
 void main() {
@@ -62,6 +68,23 @@ void main() {
         duration: 227,
         lyric: lyric,
       );
+
+  test("多个播放视图共用正在匹配的歌词，不作废首个加载", () async {
+    final track = t("shared");
+    await TrackRepository().upsert(track);
+    fake.fetchGate = Completer<String?>();
+    final commands = container.read(lyricControllerProvider.notifier);
+    final pending = commands.loadFor(track);
+    for (var i = 0; i < 10 && !container.read(lyricControllerProvider).loading; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    expect(container.read(lyricControllerProvider).loading, isTrue);
+    await commands.loadFor(track);
+    fake.fetchGate!.complete(fake.raw);
+    await pending;
+    expect(fake.searchCalls, 1);
+    expect(container.read(lyricControllerProvider).lines, isNotEmpty);
+  });
 
   LyricController c() => container.read(lyricControllerProvider.notifier);
 

@@ -68,7 +68,8 @@ class LyricController extends _$LyricController {
 
   /// 曲目切换时调用：先读库；无歌词则自动匹配（网易→LRCLIB→备胎）
   Future<void> loadFor(Track track) async {
-    if (state.trackId == track.id && !state.loading) return;
+    // 多个播放视图复用同一在途加载，不能让第二个视图作废正在匹配的请求。
+    if (state.trackId == track.id) return;
     final request = ++_loadSeq;
     final stored = await TrackRepository().getById(track.id);
     if (!ref.mounted || request != _loadSeq) return;
