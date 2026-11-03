@@ -43,12 +43,13 @@ class SystemPlaybackSnapshot {
   });
 }
 
-/// 全局桥接实例；非 Android/iOS（桌面/测试）保持 null，相关调用全部跳过
+/// 全局桥接实例；Android、iOS、Windows 初始化，测试默认保持 null。
 SystemMediaCenter? systemMediaCenter;
 
-const MethodChannel _mediaCenterChannel = MethodChannel("com.bobomusic/media_center");
+const MethodChannel _mediaCenterChannel =
+    MethodChannel("com.bobomusic/media_center");
 
-/// 初始化自研媒体中心桥（仅 Android/iOS；失败不阻塞 App 启动）
+/// 初始化自研媒体中心桥（通道不可用不阻塞播放）。
 Future<void> initSystemMediaCenter() async {
   if (systemMediaCenter != null) return;
   final center = SystemMediaCenter(_mediaCenterChannel);
@@ -69,8 +70,8 @@ class SystemMediaCenter {
 
   /// 封面取数函数：默认走全局磁盘缓存（含浏览器 UA）；入参为已升 https 的 URL，
   /// 测试注入替身以覆盖换歌竞态分支
-  Future<File> Function(String url) coverFetcher =
-      (url) => DefaultCacheManager().getSingleFile(url, headers: coverFetchHeaders);
+  Future<File> Function(String url) coverFetcher = (url) =>
+      DefaultCacheManager().getSingleFile(url, headers: coverFetchHeaders);
 
   SystemPlaybackSnapshot? _lastSnapshot;
 
@@ -101,6 +102,13 @@ class SystemMediaCenter {
       case "seek":
         final ms = (call.arguments as num?)?.toInt() ?? 0;
         await commands.systemSeek(Duration(milliseconds: ms));
+      case "setSpeed":
+        final speed = (call.arguments as num?)?.toDouble();
+        if (speed != null && speed.isFinite && speed >= 0.5 && speed <= 2) {
+          await commands.systemSetSpeed(speed);
+        }
+      case "stop":
+        await commands.systemStop();
     }
     return null;
   }
@@ -176,6 +184,7 @@ Map<String, Object?> mediaStateMap(
       ? snap.duration.inMilliseconds
       : (track?.duration != null ? track!.duration! * 1000 : 0);
   return {
+    "id": track?.id ?? "",
     // 显示名优先：曲目被本地改名后通知栏/锁屏同步生效
     "title": track?.effectiveName ?? "",
     "artist": track?.effectiveAuthor ?? "",

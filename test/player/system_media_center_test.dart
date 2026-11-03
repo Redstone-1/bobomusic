@@ -67,6 +67,7 @@ void main() {
   test("mediaStateMap：快照序列化为通道载荷", () {
     final map = mediaStateMap(snap(), coverPath: "/cache/cover.jpg");
     expect(map["title"], "夜航西飞");
+    expect(map["id"], "bili:1_BV1_2");
     expect(map["artist"], "陈鸿宇");
     expect(map["coverPath"], "/cache/cover.jpg");
     expect(map["durationMs"], 252000);
@@ -113,12 +114,17 @@ void main() {
     await center.onNativeCall(const MethodCall("next"));
     await center.onNativeCall(const MethodCall("previous"));
     await center.onNativeCall(const MethodCall("seek", 42000));
+    await center.onNativeCall(const MethodCall("setSpeed", 1.5));
+    await center.onNativeCall(const MethodCall("stop"));
+    await center.onNativeCall(const MethodCall("setSpeed", 99));
     expect(commands.calls, [
       "play",
       "pause",
       "next",
       "previous",
       "seek:42000",
+      "speed:1.5",
+      "stop",
     ]);
   });
 
@@ -143,10 +149,11 @@ void main() {
     });
     final center = SystemMediaCenter(channel);
     final gate = Completer<File>();
-    center.coverFetcher = (url) => gate.future.then((_) => File("/cache/ready.jpg"));
-    addTearDown(() =>
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(channel, null));
+    center.coverFetcher =
+        (url) => gate.future.then((_) => File("/cache/ready.jpg"));
+    addTearDown(() => TestDefaultBinaryMessengerBinding
+        .instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null));
 
     center.sync(snap());
     await drain();
@@ -174,9 +181,9 @@ void main() {
     center.coverFetcher = (url) => url.contains("a.jpg")
         ? gateA.future
         : Future<File>.value(File("/cache/b.jpg"));
-    addTearDown(() =>
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(channel, null));
+    addTearDown(() => TestDefaultBinaryMessengerBinding
+        .instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null));
 
     center.sync(snap(cover: "http://x/a.jpg")); // a：拉取挂起
     await drain();
@@ -206,9 +213,9 @@ void main() {
       fetches++;
       return Future<File>.value(File("/cache/c.jpg"));
     };
-    addTearDown(() =>
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(channel, null));
+    addTearDown(() => TestDefaultBinaryMessengerBinding
+        .instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null));
 
     center.sync(snap(cover: "https://x/same.jpg"));
     await drain();
