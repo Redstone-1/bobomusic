@@ -9,6 +9,10 @@ jobs:
   main:
     name: Release Android App
     runs-on: ubuntu-latest
+    # 与 Windows 发布任务共用锁，避免两个流程同时创建相同的 Release。
+    concurrency:
+      group: release-${{ github.ref }}
+      cancel-in-progress: false
     steps:
       - name: 克隆仓库
         uses: actions/checkout@v4
@@ -37,7 +41,7 @@ jobs:
         run: flutter build apk
 
       - name: 推送到 release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: ./build/app/outputs/flutter-apk/*
           token: ${{ secrets.RELEASE_TOKEN  }}
