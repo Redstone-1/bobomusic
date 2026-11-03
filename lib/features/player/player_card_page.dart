@@ -1130,21 +1130,23 @@ class _PlayerLyricToolsState extends ConsumerState<PlayerLyricTools> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // 校准方向约定（所有者 2026-11-03 指定）：右箭头 = 提前，
+            // 左箭头 = 延后；与直觉相反，勿按常规语义改回
             Row(
               children: [
                 Expanded(
                   child: _LyricToolTile(
                     icon: Icons.fast_rewind_outlined,
-                    label: "提前 0.5s",
-                    onTap: () => _adjust(track, -500),
+                    label: "延后 0.5s",
+                    onTap: () => _adjust(track, 500),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: _LyricToolTile(
                     icon: Icons.fast_forward_outlined,
-                    label: "延后 0.5s",
-                    onTap: () => _adjust(track, 500),
+                    label: "提前 0.5s",
+                    onTap: () => _adjust(track, -500),
                   ),
                 ),
               ],
@@ -1155,16 +1157,16 @@ class _PlayerLyricToolsState extends ConsumerState<PlayerLyricTools> {
                 Expanded(
                   child: _LyricToolTile(
                     icon: Icons.fast_rewind,
-                    label: "提前 2s",
-                    onTap: () => _adjust(track, -2000),
+                    label: "延后 2s",
+                    onTap: () => _adjust(track, 2000),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: _LyricToolTile(
                     icon: Icons.fast_forward,
-                    label: "延后 2s",
-                    onTap: () => _adjust(track, 2000),
+                    label: "提前 2s",
+                    onTap: () => _adjust(track, -2000),
                   ),
                 ),
               ],
@@ -1224,18 +1226,27 @@ class _PlayerLyricToolsState extends ConsumerState<PlayerLyricTools> {
               style: TextStyle(fontSize: 12, color: t.fgDim),
             ),
           ),
-          IconButton(
-            key: const Key("lyric_search"),
-            tooltip: "搜索歌词",
-            onPressed: () => _searchLyrics(track),
-            icon: Icon(Icons.search, size: 20, color: t.fgDim),
+          // 宽度压成与顶栏 38×38 圆钮一致（高度仍 48 保行高），
+          // 图标中心线与上方「更多」/「收起」精确同轴——左侧「未校准」
+          // 视觉中心即落在该轴上，右侧保持同一竖线
+          SizedBox(
+            width: 38,
+            child: IconButton(
+              key: const Key("lyric_search"),
+              tooltip: "搜索歌词",
+              onPressed: () => _searchLyrics(track),
+              icon: Icon(Icons.search, size: 20, color: t.fgDim),
+            ),
           ),
           if (lyric.lines.isNotEmpty)
-            IconButton(
-              key: const Key("lyric_tools"),
-              tooltip: "歌词设置",
-              onPressed: () => _openTools(track),
-              icon: Icon(Icons.tune, size: 20, color: t.fgDim),
+            SizedBox(
+              width: 38,
+              child: IconButton(
+                key: const Key("lyric_tools"),
+                tooltip: "歌词设置",
+                onPressed: () => _openTools(track),
+                icon: Icon(Icons.tune, size: 20, color: t.fgDim),
+              ),
             ),
         ],
       ),
