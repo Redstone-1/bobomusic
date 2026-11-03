@@ -7,7 +7,7 @@
 
 - 单仓库 Flutter 音乐 App（`com.bobomusic`），v3 已完成重构，当前版本从 `pubspec.yaml` 读取。协作工具链基线 Flutter 3.47.7 / Dart 3.13.5 / JDK 17，Android 配置以当前 Gradle 文件为准。
 - **无后端**：在线音源为 Bilibili、酷我、网易云、QQ 音乐、千千；歌词搜索链为网易直连 → LRCLIB → timelessq。用户数据本地保存（sqflite + SharedPreferences）。
-- 正式发布平台 Android；Windows/Linux 可用于桌面联调；iOS/macOS/Web 未完成适配。
+- Android 正式发布；Windows x64 已实现桌面界面、系统媒体桥和打包流程，完整运行验收仍在进行；Linux 可用于联调，iOS/macOS/Web 未完成适配。Windows 操作见 `windows/发布与验收.md`。
 - 上游基于 [bbmusic](https://github.com/bb-music/flutter-app) 二次开发。`项目文档.md` 保留 master / 2.7.0 历史，不作为 v3 当前架构或缺陷清单。
 - UI 参考当前 `lib/core/` 与 `lib/features/` 实现；历史重构计划和原型目录已不再是工作依赖。
 
@@ -28,7 +28,7 @@ flutter test
 ```text
 lib/
 ├── main.dart           # prefs / 数据库 / 缓存 / 平台播放初始化 → ProviderScope
-├── app/                # 根 App 与设计系统演示入口
+├── app/                # 根 App、Windows 桌面壳、启动失败页与演示入口
 ├── core/               # theme / widgets / overlays / permissions / prefs
 ├── features/           # home / playlist / plaza / player / download / settings
 ├── data/               # models / repositories / db / 音源实例 / 本地扫描与导入
@@ -66,10 +66,10 @@ test/
 
 | 层 | 入口 | 什么时候读 |
 | --- | --- | --- |
-| 当前实现 | `lib/`、`test/`、`pubspec.yaml`、Android 工程配置 | 核实行为、依赖、平台与工具链 |
+| 当前实现 | `lib/`、`test/`、`pubspec.yaml`、Android / Windows 工程配置 | 核实行为、依赖、平台与工具链 |
 | 模块记忆 | `memories/README.md` | 改模块前：关系图、状态链、易踩坑与排查入口 |
 | 角色技能 | `.agents/skills/` | 架构分析、前端实现、QA、评审、记忆维护 |
-| 开发指南 | `安卓开发指南.md` | 环境搭建、签名、codegen、验证、运行与发布 |
+| 开发指南 | `安卓开发指南.md`、`windows/发布与验收.md` | 环境搭建、签名、codegen、验证、运行与发布 |
 | UI 基线 | `lib/core/theme/`、`lib/core/widgets/`、现有页面 | 主题、组件、交互与布局参考 |
 | 旧版历史 | `项目文档.md`、git 历史 | 对照 2.7.0 行为与迁移背景，不套用旧架构硬规则 |
 
