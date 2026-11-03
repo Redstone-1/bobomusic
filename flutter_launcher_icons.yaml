@@ -22,11 +22,10 @@ flutter_launcher_icons:
 
   windows:
     generate: true
-    image_path: "assets/ic_launch.png"
-    icon_size: 48 # min:48, max:256, default: 48
-    background_color: "#000000"
+    # 桌面专用圆角透明素材，与 README 图片独立维护。
+    image_path: "assets/icon/desktop.png"
+    icon_size: 256 # min:48, max:256, default: 48
 
   macos:
     generate: true
-    image_path: "assets/ic_launch.png"
-    background_color: "#000000"
+    image_path: "assets/icon/desktop.png"
