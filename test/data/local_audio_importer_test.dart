@@ -23,7 +23,8 @@ void main() {
         await temp.delete(recursive: true);
       } catch (_) {}
     });
-    final srcDir = Directory(p.join(temp.path, "src"))..createSync(recursive: true);
+    final srcDir = Directory(p.join(temp.path, "src"))
+      ..createSync(recursive: true);
     final a = File(p.join(srcDir.path, "a.mp3"))..writeAsStringSync("AAA");
     final b = File(p.join(srcDir.path, "b.flac"))..writeAsStringSync("BBBB");
     final target = Directory(p.join(temp.path, "imported"));
@@ -73,5 +74,26 @@ void main() {
     );
     expect(tracks.length, 1);
     expect(tracks.single.name, "ok");
+  });
+
+  test("同名不同内容另存，相同内容再次导入复用已保存文件", () async {
+    final temp = await Directory.systemTemp.createTemp("bobo_same_name");
+    addTearDown(() => temp.delete(recursive: true));
+    final a = File(p.join(temp.path, "a", "同名.mp3"));
+    final b = File(p.join(temp.path, "b", "同名.mp3"));
+    await a.parent.create();
+    await b.parent.create();
+    await a.writeAsString("AAA");
+    await b.writeAsString("BBB");
+    final target = Directory(p.join(temp.path, "导入 目录"));
+    final first = await importAudioFilePaths([a.path, b.path],
+        targetDir: target, source: _FakeMeta());
+    expect(first.map((track) => track.localPath).toSet().length, 2);
+    expect(await File(first.first.localPath!).readAsString(), "AAA");
+    expect(await File(first.last.localPath!).readAsString(), "BBB");
+    final again = await importAudioFilePaths([b.path],
+        targetDir: target, source: _FakeMeta());
+    expect(again.single.localPath, first.last.localPath);
+    expect(await target.list().length, 2);
   });
 }

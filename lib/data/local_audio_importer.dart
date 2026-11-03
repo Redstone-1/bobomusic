@@ -1,6 +1,7 @@
 import "dart:io";
 
 import "package:file_picker/file_picker.dart";
+import "package:crypto/crypto.dart";
 import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
 
@@ -38,12 +39,23 @@ Future<List<Track>> importAudioFilePaths(
     try {
       final src = File(path);
       if (!await src.exists()) continue;
-      final dest = File(p.join(targetDir.path, p.basename(path)));
+      var dest = File(p.join(targetDir.path, p.basename(path)));
       if (p.equals(src.path, dest.path)) {
         copied.add(dest);
         continue;
       }
-      await src.copy(dest.path); // 覆盖同名文件；指纹不变时仍保留喜欢/歌词
+      // 同名不同内容另存，重复导入相同文件则复用，避免覆盖已经入库的另一首歌。
+      var suffix = 1;
+      while (await dest.exists()) {
+        if (await src.length() == await dest.length() &&
+            await md5.bind(src.openRead()).first ==
+                await md5.bind(dest.openRead()).first) {
+          break;
+        }
+        dest = File(p.join(targetDir.path,
+            "${p.basenameWithoutExtension(path)} (${suffix++})${p.extension(path)}"));
+      }
+      if (!await dest.exists()) await src.copy(dest.path);
       copied.add(dest);
     } catch (e) {
       print("导入文件失败 [$path]：$e");

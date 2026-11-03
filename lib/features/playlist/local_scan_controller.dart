@@ -16,11 +16,10 @@ class LocalScanController extends ChangeNotifier {
     LocalScanTask Function()? taskFactory,
     Future<void> Function(List<Track> tracks)? syncTracks,
   })  : _taskFactory = taskFactory ?? scanLocalLibraryTask,
-        _syncTracks = syncTracks ??
-            ((tracks) => TrackRepository().syncLocalTracks(tracks));
+        _syncTracks = syncTracks;
 
   final LocalScanTask Function() _taskFactory;
-  final Future<void> Function(List<Track> tracks) _syncTracks;
+  final Future<void> Function(List<Track> tracks)? _syncTracks;
 
   LocalScanPhase phase = LocalScanPhase.idle;
   int scanned = 0;
@@ -119,7 +118,15 @@ class LocalScanController extends ChangeNotifier {
     phase = LocalScanPhase.syncing;
     _notifyNow();
     try {
-      await _syncTracks(result.tracks);
+      if (_syncTracks != null) {
+        await _syncTracks(result.tracks);
+      } else {
+        await TrackRepository().syncLocalTracks(result.tracks,
+          scannedRoots: result.roots.isEmpty ? null : result.roots,
+          retainedPaths: result.failed,
+          removeMissing: result.inaccessibleDirectories.isEmpty,
+        );
+      }
       if (_cancelled || _disposed) {
         _completeDone();
         return;

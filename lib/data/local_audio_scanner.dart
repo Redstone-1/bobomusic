@@ -47,11 +47,15 @@ class LocalScanResult {
 
   /// 结构化的失败列表（`failed` 保留为路径列表，兼容旧调用）
   final List<ScanFailure> failures;
+  final List<String> roots;
+  final List<String> inaccessibleDirectories;
 
   const LocalScanResult({
     required this.tracks,
     required this.failed,
     this.failures = const [],
+    this.roots = const [],
+    this.inaccessibleDirectories = const [],
   });
 }
 
@@ -124,7 +128,13 @@ String localAudioFingerprint({
 class LocalAudioScanner {
   /// 音频扩展名白名单（沿 2.7.0）
   static const audioExtensions = {
-    ".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".opus",
+    ".mp3",
+    ".wav",
+    ".flac",
+    ".m4a",
+    ".aac",
+    ".ogg",
+    ".opus",
   };
 
   /// 判定目录是否排除：名为 Android 的目录（系统私有，不可访问且巨大）、
@@ -132,7 +142,10 @@ class LocalAudioScanner {
   static bool isExcludedDir(Directory dir) {
     final normalized = dir.path.replaceAll("\\", "/");
     if (normalized.split("/").contains("Android")) return true;
-    if (normalized.contains("/Download/啵啵音乐")) return true;
+    final lower = normalized.toLowerCase();
+    if (lower.contains("/download/啵啵音乐") || lower.contains("/downloads/啵啵音乐")) {
+      return true;
+    }
     return false;
   }
 
@@ -232,6 +245,8 @@ class LocalAudioScanner {
                 tracks: tracks,
                 failed: [for (final f in failures) f.path],
                 failures: failures,
+                roots: (message[3] as List).cast<String>(),
+                inaccessibleDirectories: (message[4] as List).cast<String>(),
               ),
             ),
           );
@@ -288,7 +303,13 @@ class LocalAudioScanner {
           break;
       }
     });
-    send.send(["done", result.tracks, result.failures]);
+    send.send([
+      "done",
+      result.tracks,
+      result.failures,
+      result.roots,
+      result.inaccessibleDirectories
+    ]);
   }
 
   static LocalScanResult _scanFilesSync(
@@ -309,29 +330,50 @@ class LocalAudioScanner {
     _ScanEmitter emit,
   ) {
     final acc = _ScanAccumulator();
+    final inaccessible = <String>[];
     for (final root in roots) {
-      _walk(root, source, acc, emit);
+      if (isExcludedDir(root)) {
+        inaccessible.add(root.absolute.path);
+        continue;
+      }
+      _walk(root, source, acc, emit, inaccessible);
     }
     acc.flush(emit);
-    return acc.result;
+    final result = acc.result;
+    final failures = [
+      ...result.failures,
+      for (final path in inaccessible)
+        ScanFailure(path: path, reason: "目录不可访问，本次不清理缺失音乐")
+    ];
+    return LocalScanResult(
+        tracks: result.tracks,
+        failed: [for (final failure in failures) failure.path],
+        failures: failures,
+        roots: [for (final root in roots) root.absolute.path],
+        inaccessibleDirectories: inaccessible);
   }
 
-  /// 递归扫描：无权限目录静默跳过（系统目录如 lost+found 会拒访）
+  /// 目录拒访必须进入结果，不能让缺失清理把权限失败当成文件已删除。
   static void _walk(
     Directory dir,
     AudioMetadataSource source,
     _ScanAccumulator acc,
     _ScanEmitter emit,
+    List<String> inaccessible,
   ) {
     final List<FileSystemEntity> entities;
     try {
       entities = dir.listSync(followLinks: false);
-    } catch (_) {
+    } catch (error) {
+      inaccessible.add(dir.absolute.path);
+      emit(LocalScanFileFailure(dir.path, "目录不可访问：$error"));
       return;
     }
     for (final entity in entities) {
       if (entity is Directory) {
-        if (!isExcludedDir(entity)) _walk(entity, source, acc, emit);
+        if (!isExcludedDir(entity)) {
+          _walk(entity, source, acc, emit, inaccessible);
+        }
       } else if (entity is File && _isAudio(entity.path)) {
         acc.record(entity, source, emit);
       }
@@ -352,9 +394,8 @@ class LocalAudioScanner {
           .split("/")
           .last
           .replaceFirst(RegExp(r"\.[^.]+$"), "");
-      final title = (meta.title ?? "").trim().isNotEmpty
-          ? meta.title!.trim()
-          : fileTitle;
+      final title =
+          (meta.title ?? "").trim().isNotEmpty ? meta.title!.trim() : fileTitle;
       final artist = (meta.artist ?? "").trim();
       final durationSec = ((meta.durationMs ?? 0) / 1000).round();
       return _ReadResult(
@@ -435,7 +476,7 @@ class _ReadResult {
 LocalScanResult? localScanTestOverride;
 
 /// 流式扫描入口（生产用）：按平台解析根目录后返回任务
-LocalScanTask scanLocalLibraryTask() {
+LocalScanTask scanLocalLibraryTask({List<Directory>? roots}) {
   if (localScanTestOverride case final override?) {
     final controller = StreamController<LocalScanEvent>();
     var closed = false;
@@ -452,15 +493,17 @@ LocalScanTask scanLocalLibraryTask() {
     });
     return LocalScanTask(events: controller.stream, cancel: close);
   }
-  final home =
-      Platform.environment["USERPROFILE"] ?? Platform.environment["HOME"] ?? ".";
-  final roots = <Directory>[
-    if (Platform.isAndroid)
-      Directory("/storage/emulated/0")
-    else
-      Directory("$home/Music"),
-  ];
-  return LocalAudioScanner().scanTask(roots: roots);
+  final home = Platform.environment["USERPROFILE"] ??
+      Platform.environment["HOME"] ??
+      ".";
+  final resolvedRoots = roots ??
+      <Directory>[
+        if (Platform.isAndroid)
+          Directory("/storage/emulated/0")
+        else
+          Directory("$home/Music"),
+      ];
+  return LocalAudioScanner().scanTask(roots: resolvedRoots);
 }
 
 /// 一次性扫描入口（兼容旧调用）：消费 [scanLocalLibraryTask] 的事件流

@@ -1,4 +1,5 @@
 import "package:sqflite/sqflite.dart";
+import "package:path/path.dart" as p;
 
 import "../db/app_database.dart";
 
@@ -80,7 +81,10 @@ class TrackRepository {
       found.addAll([for (final r in rows) _fromRow(r)]);
     }
     final byId = {for (final t in found) t.id: t};
-    return [for (final id in ids) if (byId.containsKey(id)) byId[id]!];
+    return [
+      for (final id in ids)
+        if (byId.containsKey(id)) byId[id]!
+    ];
   }
 
   /// 本地音乐曲目（origin = local，倒序；本地扫描来源，排除下载目录由扫描器负责）
@@ -106,7 +110,12 @@ class TrackRepository {
   /// 本地扫描同步（C3）：事务内全量 upsert + 删除本次未再现的 local 条目
   /// （playlist_items/queue 有 ON DELETE CASCADE，引用自动清理）
   /// 重扫同文件指纹 id 不变 → liked_at/lyric 由 upsert 语义保留（§3.4-9）
-  Future<void> syncLocalTracks(List<Track> scanned) async {
+  Future<void> syncLocalTracks(
+    List<Track> scanned, {
+    List<String>? scannedRoots,
+    List<String> retainedPaths = const [],
+    bool removeMissing = true,
+  }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     await db.transaction((txn) async {
       for (final track in scanned) {
@@ -144,16 +153,23 @@ class TrackRepository {
       // 删除未再现条目：先求「库内 - 本次扫描」差集，再按 id 分批 IN 删除。
       // 不能按 NOT IN 分批——每批都会把其它批的曲目当成“未再现”删掉
       // （>900 首时首批就会误删后续所有条目，喜欢/歌词/歌单引用一并丢失）。
+      if (!removeMissing) return;
       final existingRows = await txn.query(
         "tracks",
-        columns: ["id"],
+        columns: ["id", "local_path"],
         where: "origin = ?",
         whereArgs: [OriginType.local.name],
       );
       final scannedIds = {for (final t in scanned) t.id};
       final staleIds = [
         for (final row in existingRows)
-          if (!scannedIds.contains(row["id"] as String)) row["id"] as String,
+          if (!scannedIds.contains(row["id"] as String) &&
+              !retainedPaths.any((path) =>
+                  p.equals(path, row["local_path"] as String? ?? "")) &&
+              (scannedRoots == null ||
+                  scannedRoots.any((root) => p.isWithin(p.absolute(root),
+                      p.absolute(row["local_path"] as String? ?? "")))))
+            row["id"] as String,
       ];
       const chunkSize = 900; // SQLite 变量上限 999
       for (var i = 0; i < staleIds.length; i += chunkSize) {

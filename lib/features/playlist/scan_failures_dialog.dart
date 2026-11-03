@@ -22,17 +22,21 @@ Future<void> showScanFailuresDialog(
         itemCount: failures.length,
         separatorBuilder: (_, __) => const SizedBox(height: 14),
         itemBuilder: (context, index) {
-          return Text(
-            failures[index].path,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontFamily: "monospace",
-              fontSize: 11.5,
-              height: 1.35,
-              color: errorColor,
-            ),
-          );
+          return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(failures[index].path,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontFamily: "monospace",
+                        fontSize: 11.5,
+                        height: 1.35,
+                        color: errorColor)),
+                const SizedBox(height: 4),
+                Text(failures[index].reason,
+                    style: TextStyle(fontSize: 11.5, color: t.fgDim)),
+              ]);
         },
       ),
     ),
