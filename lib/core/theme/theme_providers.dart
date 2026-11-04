@@ -9,7 +9,7 @@ part "theme_providers.g.dart";
 
 const _themeColorKey = "theme_color";
 
-/// 当前主题色（默认 = 青绿色，所有者 2026-10-27 修订；真实持久化）
+/// 当前主题色（默认 = 橙色，所有者 2026-11-04 修订；真实持久化）
 @riverpod
 class AppThemeSeed extends _$AppThemeSeed {
   @override
@@ -18,7 +18,7 @@ class AppThemeSeed extends _$AppThemeSeed {
     try {
       return AppThemeColor.values.byName(name!);
     } catch (_) {
-      return AppThemeColor.natureGreen;
+      return AppThemeColor.autumnOrange;
     }
   }
 

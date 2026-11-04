@@ -5,12 +5,12 @@ import "package:flutter/painting.dart";
 import "aurora_tokens.dart";
 
 /// 10 种主题色原色；实际强调色统一从 buildAuroraTokens 读取。
-/// 青绿置首 = 默认主题色（所有者 2026-10-27 修订）
+/// 橙色置首 = 默认主题色（所有者 2026-11-04 修订）
 enum AppThemeColor {
+  autumnOrange(0xFFFF8A3D, "秋日橙"),
   natureGreen(0xFF2EC4B6, "青绿色"),
   deepSpaceBlack(0xFF141414, "深空黑"),
   sunsetRed(0xFFFF3B6B, "晚霞红"),
-  autumnOrange(0xFFFF8A3D, "秋日橙"),
   lemonYellow(0xFFFFD23F, "柠檬黄"),
   leafGreen(0xFF71C75B, "草木绿"),
   skyCyan(0xFF38BDF8, "晴空青"),
@@ -69,12 +69,14 @@ AuroraTokens buildAuroraTokens(AppThemeColor seed, Brightness brightness) {
     fg: dark ? const Color(0xFFF5F5F8) : const Color(0xFF141420),
     fgDim: dark ? const Color(0xFF9C9CAB) : const Color(0xFF5C5C6B),
     fgMute: dark ? const Color(0xFF6B6B7A) : const Color(0xFF8A8A98),
+    // 亮色玻璃拟态：表面需保留足够透明度让极光背景透出（对齐暗色的通透思路），
+    // 白色 72%/90% 近乎实心，模糊层被盖死；45%/72% 为第二轮（所有者反馈首版 55%/80% 仍不够透）。
     surface: dark
         ? const Color(0xFFFFFFFF).withValues(alpha: 0.055)
-        : const Color(0xFFFFFFFF).withValues(alpha: 0.72),
+        : const Color(0xFFFFFFFF).withValues(alpha: 0.45),
     surface2: dark
         ? const Color(0xFFFFFFFF).withValues(alpha: 0.09)
-        : const Color(0xFFFFFFFF).withValues(alpha: 0.90),
+        : const Color(0xFFFFFFFF).withValues(alpha: 0.72),
     hairline: dark
         ? const Color(0xFFFFFFFF).withValues(alpha: 0.10)
         : const Color(0xFF141420).withValues(alpha: 0.09),

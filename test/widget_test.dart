@@ -375,13 +375,13 @@ void main() {
     );
   });
 
-  testWidgets("默认主题色为青绿色（natureGreen）", (WidgetTester tester) async {
+  testWidgets("默认主题色为橙色（autumnOrange）", (WidgetTester tester) async {
     await tester.pumpWidget(await buildTestApp());
     await tester.pump();
 
     final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
     final expected = buildAuroraTokens(
-      AppThemeColor.natureGreen,
+      AppThemeColor.autumnOrange,
       Brightness.light,
     ).primary;
     expect(app.theme?.colorScheme.primary, expected);
@@ -394,8 +394,8 @@ void main() {
 
     await tester.tap(find.text("设置"));
     await tester.pump();
-    // 第三个色点（晚霞红——默认已是青绿色，只有选不同色才写盘）
-    await tester.tap(find.byType(ThemeSwatch).at(2));
+    // 第四个色点（晚霞红——默认已是橙色，只有选不同色才写盘）
+    await tester.tap(find.byType(ThemeSwatch).at(3));
     await tester.pump();
     expect(appPrefs.getString("theme_color"), "sunsetRed");
 

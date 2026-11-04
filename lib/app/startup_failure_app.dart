@@ -14,7 +14,7 @@ class StartupFailureApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
         debugShowCheckedModeBanner: false,
-        theme: buildAppTheme(AppThemeColor.natureGreen, Brightness.dark),
+        theme: buildAppTheme(AppThemeColor.autumnOrange, Brightness.dark),
         home: Builder(builder: (context) {
           final t = AuroraTokens.of(context);
           return Scaffold(
