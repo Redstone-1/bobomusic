@@ -1,5 +1,6 @@
 import "package:bobomusic/core/widgets/app_checkbox_row.dart";
 import "package:bobomusic/core/widgets/app_form_field.dart";
+import "package:bobomusic/core/theme/aurora_tokens.dart";
 import "package:bobomusic/data/db/app_database.dart";
 import "package:bobomusic/data/repositories/playlist_repository.dart";
 import "package:bobomusic/data/repositories/track_repository.dart";
@@ -140,14 +141,9 @@ void main() {
       await _frames(tester);
       await tester.tap(find.byKey(const Key("rename_rule")));
       await _frames(tester);
-      await tester.tap(find.text("移除固定前缀"));
+      await tester.tap(find.text("删除指定字符"));
       await _frames(tester);
-      expect(_fieldStyle(tester, "需要移除的固定前缀"), baseline);
-      await tester.tap(find.byKey(const Key("rename_rule")));
-      await _frames(tester);
-      await tester.tap(find.text("按分隔符拆分"));
-      await _frames(tester);
-      expect(_fieldStyle(tester, "分隔符（包含空格）"), baseline);
+      expect(_fieldStyle(tester, "要删除的指定字符"), baseline);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       await tester.pump();
@@ -155,21 +151,32 @@ void main() {
     });
   }
 
-  testWidgets("规则面板保留边距和选中反馈，歌曲方框可以独立勾选或取消", (tester) async {
+  testWidgets("规则面板保留边距和选中反馈，底部复选框全选与清空", (tester) async {
     await _openPlaylist(tester);
     await _playlistMenu(tester, "批量重命名");
     final first = find.byKey(const ValueKey("rename_track_a"));
     final second = find.byKey(const ValueKey("rename_track_b"));
     final box = find.descendant(of: first, matching: find.byType(Checkbox));
+    final toggleAll = find.byKey(const Key("rename_toggle_all"));
+    // 默认清除开头数字：a/b 命中自动勾选，c 未命中，复选框呈部分选中态
+    expect(tester.widget<AppCheckboxRow>(first).value, isTrue);
+    expect(tester.widget<AppCheckboxRow>(second).value, isTrue);
+    expect(tester.widget<Checkbox>(toggleAll).value, isNull);
+    // 未全选时点击 → 全选（含未变更的 c）
+    await tester.tap(toggleAll);
+    await tester.pump();
+    expect(tester.widget<Checkbox>(toggleAll).value, isTrue);
+    expect(find.text("已选 3 首"), findsOneWidget);
+    // 已全选时点击 → 清空
+    await tester.tap(toggleAll);
+    await tester.pump();
+    expect(tester.widget<Checkbox>(toggleAll).value, isFalse);
+    expect(find.text("已选 0 首"), findsOneWidget);
+    // 行内方框独立勾选
     await tester.tap(box);
     await tester.pump();
     expect(tester.widget<AppCheckboxRow>(first).value, isTrue);
-    expect(find.text("已选 1 首 · 可修改 0 首"), findsOneWidget);
-    expect(
-        tester
-            .widget<FilledButton>(find.byKey(const Key("rename_apply")))
-            .onPressed,
-        isNull);
+    expect(find.text("已选 1 首"), findsOneWidget);
     await tester.tap(box);
     await tester.pump();
     expect(tester.widget<AppCheckboxRow>(first).value, isFalse);
@@ -182,19 +189,41 @@ void main() {
     expect(rect.left, greaterThanOrEqualTo(16));
     expect(rect.right, lessThanOrEqualTo(374));
     expect(rect.bottom, lessThanOrEqualTo(808));
-    expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
-    await tester.tap(find.text("仅去除序号"));
+    // 选中瓦片主题色浅底高亮（不再用对勾图标），未选中为浅灰填充；奇数项最后一行通栏
+    expect(find.byIcon(Icons.check_circle_outline), findsNothing);
+    // 页面背景的规则字段值与瓦片同名，取弹层内第一个匹配
+    final tokens =
+        AuroraTokens.of(tester.element(find.text("清除开头数字").first));
+    expect(
+        tester
+            .widget<InkWell>(
+                find.byKey(const ValueKey("sheet_action_清除开头数字")))
+            .child,
+        isA<Container>().having((c) => c.decoration, "decoration",
+            isA<BoxDecoration>().having((d) => d.color, "color",
+                tokens.primary.withValues(alpha: 0.12))));
+    expect(
+        tester.widget<InkWell>(
+                find.byKey(const ValueKey("sheet_action_清除特殊字符")))
+            .child,
+        isA<Container>().having((c) => c.decoration, "decoration",
+            isA<BoxDecoration>().having(
+                (d) => d.color, "color", tokens.surface)));
+    final lastTile = tester.getRect(
+        find.byKey(const ValueKey("sheet_action_删除指定字符")));
+    // 面板 1px 描边 + 网格 22 内边距
+    expect(lastTile.left, closeTo(rect.left + 23, 0.5));
+    expect(lastTile.right, closeTo(rect.right - 23, 0.5));
+    // 规则切换立即刷新预览并重置勾选：清除特殊字符对 a/b 重新命中
+    await tester.tap(find.text("清除特殊字符"));
     await _frames(tester);
     expect(tester.widget<AppCheckboxRow>(first).value, isTrue);
     expect(tester.widget<AppCheckboxRow>(second).value, isTrue);
-    await tester.tap(box);
-    await tester.pump();
-    expect(tester.widget<AppCheckboxRow>(first).value, isFalse);
-    expect(tester.widget<AppCheckboxRow>(second).value, isTrue);
     await tester.tap(find.byKey(const Key("rename_apply")));
     await _frames(tester);
-    expect((await TrackRepository().getById("a"))!.displayName, isNull);
-    expect((await TrackRepository().getById("b"))!.effectiveName, "周杰伦-手写的从前");
+    expect((await TrackRepository().getById("a"))!.effectiveName, "01周杰伦晴天");
+    expect(
+        (await TrackRepository().getById("b"))!.effectiveName, "02周杰伦手写的从前");
     expect((await TrackRepository().getById("c"))!.displayName, isNull);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());

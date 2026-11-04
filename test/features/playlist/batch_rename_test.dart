@@ -25,12 +25,12 @@ Future<void> _enterPreview(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets("混合歌单中的正常数字歌名默认不勾选，批量应用后保持原名", (tester) async {
+  testWidgets("默认清除开头数字命中即勾选，未命中条目不勾且保持原名", (tester) async {
     final app = await buildTestApp(seedTracks: const [
       {"id": "a", "name": "001 周杰伦 东方破", "author": "上传者"},
       {"id": "b", "name": "002 周杰伦 发如雪", "author": "上传者"},
       {"id": "c", "name": "8 Mile", "author": "Eminem"},
-      {"id": "d", "name": "9 Crimes", "author": "Damien Rice"},
+      {"id": "d", "name": "普通歌名", "author": "上传者"},
     ]);
     final p = await PlaylistRepository().create("混合歌单");
     for (final id in ["a", "b", "c", "d"]) {
@@ -44,9 +44,9 @@ void main() {
     expect(
         tester
             .widget<AppCheckboxRow>(
-                find.byKey(const ValueKey("rename_track_c")))
+                find.byKey(const ValueKey("rename_track_a")))
             .value,
-        isFalse);
+        isTrue);
     await tester.scrollUntilVisible(
         find.byKey(const ValueKey("rename_track_d")), 120,
         scrollable: find
@@ -63,8 +63,8 @@ void main() {
         isFalse);
     await tester.tap(find.byKey(const Key("rename_apply")));
     await _frames(tester);
-    expect((await TrackRepository().getById("a"))!.effectiveName, "东方破");
-    expect((await TrackRepository().getById("c"))!.effectiveName, "8 Mile");
+    expect((await TrackRepository().getById("a"))!.effectiveName, "周杰伦 东方破");
+    expect((await TrackRepository().getById("c"))!.effectiveName, "Mile");
     expect((await TrackRepository().getById("d"))!.displayName, isNull);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
@@ -94,7 +94,7 @@ void main() {
     await _frames(tester);
     await _enterPreview(tester);
     expect(find.byType(BatchRenamePage), findsOneWidget);
-    expect(find.text("东方破 · 周杰伦"), findsOneWidget);
+    expect(find.text("周杰伦 东方破 · 上传者"), findsOneWidget);
     expect((await TrackRepository().getById("a"))!.displayName, isNull);
     await tester.tap(find.text("返回歌曲列表"));
     await _frames(tester);
@@ -102,10 +102,11 @@ void main() {
     await _enterPreview(tester);
     await tester.tap(find.byKey(const Key("rename_apply")));
     await _frames(tester);
-    expect((await TrackRepository().getById("a"))!.effectiveName, "东方破");
-    expect((await TrackRepository().getById("b"))!.effectiveAuthor, "周杰伦");
-    expect(container.read(playbackProvider).track!.effectiveName, "东方破");
-    expect(container.read(playbackProvider).queue.last.effectiveName, "发如雪");
+    expect((await TrackRepository().getById("a"))!.effectiveName, "周杰伦 东方破");
+    expect((await TrackRepository().getById("b"))!.effectiveName, "周杰伦 发如雪");
+    expect(container.read(playbackProvider).track!.effectiveName, "周杰伦 东方破");
+    expect(container.read(playbackProvider).queue.last.effectiveName,
+        "周杰伦 发如雪");
     expect(
         container.read(playbackProvider).position, const Duration(seconds: 33));
     expect(fakePlaybackEngine!.loads.length, loads);
@@ -122,7 +123,7 @@ void main() {
     await appDb.close();
   });
 
-  testWidgets("已有手动编辑默认跳过，不确定条目可逐首确认建议", (tester) async {
+  testWidgets("手动编辑过的条目同样参与建议，可逐首确认", (tester) async {
     final app = await buildTestApp(seedTracks: const [
       {"id": "a", "name": "001 周杰伦 东方破", "author": "上传者"},
       {"id": "b", "name": "002 周杰伦 发如雪", "author": "上传者"},
@@ -138,6 +139,7 @@ void main() {
     await tester.tap(find.text("预览测试"));
     await _frames(tester);
     await _enterPreview(tester);
+    // 手动编辑不再跳过：命中规则即默认勾选
     expect(
         tester
             .widget<AppCheckboxRow>(
@@ -149,7 +151,7 @@ void main() {
             .widget<AppCheckboxRow>(
                 find.byKey(const ValueKey("rename_track_b")))
             .value,
-        isFalse);
+        isTrue);
     await tester.ensureVisible(find.byKey(const ValueKey("rename_edit_c")));
     await tester.pump();
     expect(
@@ -165,7 +167,8 @@ void main() {
     await _frames(tester);
     await tester.tap(find.byKey(const Key("rename_apply")));
     await _frames(tester);
-    expect((await TrackRepository().getById("b"))!.displayName, "002 周杰伦 手动名字");
+    expect((await TrackRepository().getById("b"))!.displayName,
+        "周杰伦 手动名字");
     expect((await TrackRepository().getById("c"))!.displayName, "确认后的歌名");
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());

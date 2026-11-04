@@ -1,5 +1,6 @@
 import "package:bobomusic/core/platform/app_platform.dart";
 import "package:bobomusic/core/widgets/app_search_field.dart";
+import "package:bobomusic/core/widgets/page_header.dart";
 import "package:bobomusic/data/db/app_database.dart";
 import "package:bobomusic/data/repositories/playlist_repository.dart";
 import "package:bobomusic/data/repositories/track_repository.dart";
@@ -32,7 +33,12 @@ void main() {
       await tester.pumpWidget(app);
       await _frames(tester);
       expect(find.byType(PlaylistTile), findsNWidgets(3));
-      await tester.tap(find.text("查看全部（共 4 个）›"));
+      // 回归：「更多」必须贴区块行右缘——Flexible 标题吃掉 Spacer 份额时
+      // 剩余空间会堆到行尾，尾词离右缘的距离随标题长度变化。
+      final section = tester.getRect(find.byType(SectionHeader).first);
+      expect(tester.getRect(find.text("更多")).right,
+          closeTo(section.right, 0.5));
+      await tester.tap(find.text("更多"));
       await _frames(tester);
       expect(find.byType(AllPlaylistsPage), findsOneWidget);
       expect(find.byType(AppSearchField), findsOneWidget);
@@ -56,7 +62,7 @@ void main() {
   }
 
   for (final count in [0, 3]) {
-    testWidgets("$count 个歌单时无需查看全部入口", (tester) async {
+    testWidgets("$count 个歌单时无需更多入口，计数跟随标题", (tester) async {
       final app = await buildTestApp();
       for (var i = 0; i < count; i++) {
         await PlaylistRepository().create("歌单$i");
@@ -64,7 +70,8 @@ void main() {
       await tester.pumpWidget(app);
       await _frames(tester);
       expect(find.byType(PlaylistTile), findsNWidgets(count));
-      expect(find.textContaining("查看全部"), findsNothing);
+      expect(find.text("更多"), findsNothing);
+      expect(find.text("共 $count 个"), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       await tester.pump();
       await appDb.close();

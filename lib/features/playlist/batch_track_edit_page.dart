@@ -18,6 +18,7 @@ import "../../core/widgets/cover_placeholder.dart";
 import "../../data/models/track.dart";
 import "../../data/models/track_display_edit.dart";
 import "../../data/playlist_cover_store.dart";
+import "../../data/repositories/track_repository.dart";
 import "../../data/track_rename.dart";
 import "../player/mini_player_bar.dart";
 import "../player/playback_provider.dart";
@@ -43,12 +44,11 @@ class BatchTrackEditPage extends ConsumerStatefulWidget {
 }
 
 class _RenameDraft {
+  // 不跳过手动编辑过的条目：用户想改就改，命中规则即默认勾选。
   _RenameDraft(this.suggestion)
       : name = suggestion.name,
         author = suggestion.author,
-        selected = suggestion.confident &&
-            suggestion.changed &&
-            !suggestion.manuallyEdited;
+        selected = suggestion.confident && suggestion.changed;
   final TrackRenameSuggestion suggestion;
   String name;
   String author;
@@ -59,23 +59,31 @@ class _RenameDraft {
 }
 
 class _BatchTrackEditPageState extends ConsumerState<BatchTrackEditPage> {
-  TrackRenameRule _rule = TrackRenameRule.smart;
-  final _prefix = TextEditingController();
-  final _separator = TextEditingController(text: " - ");
+  TrackRenameRule _rule = TrackRenameRule.leadingDigits;
+  final _removeChars = TextEditingController();
   final _value = TextEditingController();
   final _coverStore = PlaylistCoverStore();
   final _stagedCovers = <String>[];
   final _previousCovers = <String>{};
   String? _localCover;
   Future<DisplayEditResult>? _pendingWrite;
-  bool _artistFirst = true;
-  bool _dirty = false;
   bool _busy = false;
-  bool _saved = false;
+  // 最后一次写库方向仅用于刷新失败提示文案（保存 / 撤销）。
+  bool _lastWasUndo = false;
   List<TrackDisplayEdit>? _undo;
   bool _refreshPending = false;
   List<String> _refreshIds = const [];
+  // 应用/撤销成功后按库内最新数据重读，页面保持可继续操作。
+  late List<Track> _tracks = widget.tracks;
   late List<_RenameDraft> _drafts = _suggest();
+
+  @override
+  void initState() {
+    super.initState();
+    // 入口传入的是详情页列表快照，可能落后于库内最新编辑；
+    // 进入即按库内数据重建预览，写库/撤销后也走同一重读。
+    unawaited(_reloadFromDb());
+  }
 
   bool get _renaming => widget.mode == BatchTrackEditMode.rename;
   bool get _settingCover => widget.mode == BatchTrackEditMode.cover;
@@ -106,21 +114,26 @@ class _BatchTrackEditPageState extends ConsumerState<BatchTrackEditPage> {
   }
 
   static const _ruleLabels = {
-    TrackRenameRule.smart: "智能识别",
-    TrackRenameRule.number: "仅去除序号",
-    TrackRenameRule.prefix: "移除固定前缀",
-    TrackRenameRule.separator: "按分隔符拆分",
+    TrackRenameRule.leadingDigits: "清除开头数字",
+    TrackRenameRule.specialChars: "清除特殊字符",
+    TrackRenameRule.removeChars: "删除指定字符",
+  };
+
+  // 规则自身图标 + 选中瓦片高亮，不再用对勾图标表达选择态。
+  static const _ruleIcons = {
+    TrackRenameRule.leadingDigits: Icons.format_list_numbered,
+    TrackRenameRule.specialChars: Icons.auto_fix_high,
+    TrackRenameRule.removeChars: Icons.backspace_outlined,
   };
 
   void _chooseRule() {
     FocusManager.instance.primaryFocus?.unfocus();
-    AppSheet.show(context, title: "整理方式", inset: true, actions: [
+    AppSheet.show(context, inset: true, actions: [
       for (final entry in _ruleLabels.entries)
         AppSheetAction(
-          icon: entry.key == _rule
-              ? Icons.check_circle_outline
-              : Icons.radio_button_unchecked,
+          icon: _ruleIcons[entry.key]!,
           label: entry.value,
+          selected: entry.key == _rule,
           onTap: () {
             if (!mounted) return;
             _rule = entry.key;
@@ -132,7 +145,7 @@ class _BatchTrackEditPageState extends ConsumerState<BatchTrackEditPage> {
 
   List<_RenameDraft> _suggest() => !_renaming
       ? [
-          for (final track in widget.tracks)
+          for (final track in _tracks)
             _RenameDraft(TrackRenameSuggestion(
                 track: track,
                 name: track.effectiveName,
@@ -141,23 +154,20 @@ class _BatchTrackEditPageState extends ConsumerState<BatchTrackEditPage> {
                 reason: ""))
               ..selected = true
         ]
-      : suggestTrackRenames(widget.tracks,
-              rule: _rule,
-              prefix: _prefix.text,
-              separator: _separator.text,
-              artistFirst: _artistFirst)
+      : suggestTrackRenames(_tracks,
+              rule: _rule, removeChars: _removeChars.text)
           .map(_RenameDraft.new)
           .toList();
 
+  // 预览是规则与输入的纯函数：规则切换或输入变化时实时重算，无需手动刷新。
+  // 副作用：改规则或输入会覆盖手动单首编辑，属可预期行为。
   void _regenerate() => setState(() {
         _drafts = _suggest();
-        _dirty = false;
       });
 
   @override
   void dispose() {
-    _prefix.dispose();
-    _separator.dispose();
+    _removeChars.dispose();
     _value.dispose();
     unawaited(_cleanupCovers(_pendingWrite));
     super.dispose();
@@ -238,7 +248,6 @@ class _BatchTrackEditPageState extends ConsumerState<BatchTrackEditPage> {
                       AppFormField(
                           initialValue: author,
                           label: "建议歌手",
-                          helper: "留空保留当前歌手",
                           onChanged: (value) => author = value),
                     ],
                   )))),
@@ -292,7 +301,7 @@ class _BatchTrackEditPageState extends ConsumerState<BatchTrackEditPage> {
               expected: draft.suggestion.track,
             ),
     ];
-    if (!edits.any((edit) => !edit.validateOnly) || _dirty || _busy || _saved) {
+    if (!edits.any((edit) => !edit.validateOnly) || _busy) {
       return;
     }
     FocusManager.instance.primaryFocus?.unfocus();
@@ -305,7 +314,7 @@ class _BatchTrackEditPageState extends ConsumerState<BatchTrackEditPage> {
       if (!mounted) return;
       setState(() {
         _undo = result.undo;
-        _saved = true;
+        _lastWasUndo = false;
         _refreshPending = !result.refreshed;
         _refreshIds = edits.map((edit) => edit.trackId).toList();
       });
@@ -314,6 +323,8 @@ class _BatchTrackEditPageState extends ConsumerState<BatchTrackEditPage> {
           result.refreshed
               ? "已更新 ${result.undo.length} 首歌曲"
               : "修改已保存，界面刷新失败，可重试刷新");
+      // 按库内最新数据重建预览，本页可直接继续下一轮操作。
+      await _reloadFromDb();
     } catch (error) {
       print("${widget.mode.title}失败：$error");
       if (mounted) {
@@ -338,13 +349,14 @@ class _BatchTrackEditPageState extends ConsumerState<BatchTrackEditPage> {
       if (!mounted) return;
       setState(() {
         // 撤销事务已成功，刷新失败时也不能保留已执行过的反向操作。
-        _saved = false;
         _undo = null;
+        _lastWasUndo = true;
         _refreshPending = !result.refreshed;
         _refreshIds = undo.map((edit) => edit.trackId).toList();
       });
       AppToast.show(
           context, result.refreshed ? "已恢复本次操作前的信息" : "修改已撤销，界面刷新失败，可重试刷新");
+      await _reloadFromDb();
     } catch (error) {
       print("撤销${widget.mode.title}失败：$error");
       if (mounted) {
@@ -371,6 +383,27 @@ class _BatchTrackEditPageState extends ConsumerState<BatchTrackEditPage> {
     }
   }
 
+  // 按库内最新数据重读并重建预览，顺序与原列表保持一致。
+  Future<void> _reloadFromDb() async {
+    try {
+      final fresh =
+          await TrackRepository().getByIds(_tracks.map((t) => t.id).toList());
+      final byId = {for (final track in fresh) track.id: track};
+      final ordered = [
+        for (final track in _tracks)
+          if (byId[track.id] != null) byId[track.id]!
+      ];
+      if (!mounted) return;
+      setState(() {
+        _tracks = ordered;
+        _drafts = _suggest();
+      });
+    } catch (error) {
+      // 重读失败不影响已保存的数据，保留当前预览即可继续操作。
+      print("重读曲目信息失败：$error");
+    }
+  }
+
   Widget _batchInputs(bool disabled) {
     final t = AuroraTokens.of(context);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -392,26 +425,26 @@ class _BatchTrackEditPageState extends ConsumerState<BatchTrackEditPage> {
           keyboardType: _settingCover ? TextInputType.url : null,
           autovalidateMode: AutovalidateMode.onUserInteraction,
           validator: _validateValue,
+          suffix: _settingCover
+              ? IconButton(
+                  key: _key("pick_cover"),
+                  tooltip: "从设备选择",
+                  onPressed: disabled ? null : _pickCover,
+                  icon: const Icon(Icons.image_outlined))
+              : null,
           onChanged: (_) => setState(() {
                 // 更新输入只更新预览，保留用户逐首调整过的勾选。
                 _localCover = null;
               })),
       if (_settingCover)
-        Wrap(spacing: 8, children: [
-          TextButton.icon(
-              key: _key("pick_cover"),
-              onPressed: disabled ? null : _pickCover,
-              icon: const Icon(Icons.image_outlined),
-              label: const Text("从设备选择")),
-          TextButton(
-              onPressed: disabled
-                  ? null
-                  : () => setState(() {
-                        _localCover = null;
-                        _value.clear();
-                      }),
-              child: const Text("清除输入")),
-        ]),
+        TextButton(
+            onPressed: disabled
+                ? null
+                : () => setState(() {
+                      _localCover = null;
+                      _value.clear();
+                    }),
+            child: const Text("清除输入")),
     ]);
   }
 
@@ -461,7 +494,7 @@ class _BatchTrackEditPageState extends ConsumerState<BatchTrackEditPage> {
     for (final draft in _drafts) {
       duplicates.update(draft.name, (n) => n + 1, ifAbsent: () => 1);
     }
-    final disabled = _busy || _saved;
+    final disabled = _busy;
     return PopScope(
         canPop: !_busy,
         child: Scaffold(
@@ -501,90 +534,32 @@ class _BatchTrackEditPageState extends ConsumerState<BatchTrackEditPage> {
                               if (_renaming)
                                 AppSelectionField(
                                     key: const Key("rename_rule"),
-                                    label: "整理方式",
                                     value: _ruleLabels[_rule]!,
                                     onTap: disabled ? null : _chooseRule),
                               if (_renaming &&
-                                  _rule == TrackRenameRule.prefix) ...[
+                                  _rule == TrackRenameRule.removeChars) ...[
                                 const SizedBox(height: 12),
                                 AppFormField(
-                                    key: const Key("rename_prefix"),
-                                    controller: _prefix,
+                                    key: const Key("rename_remove_chars"),
+                                    controller: _removeChars,
                                     enabled: !disabled,
-                                    label: "需要移除的固定前缀",
-                                    onChanged: (_) =>
-                                        setState(() => _dirty = true)),
+                                    label: "要删除的指定字符",
+                                    onChanged: (_) => _regenerate()),
                               ],
-                              if (_renaming &&
-                                  _rule == TrackRenameRule.separator) ...[
-                                const SizedBox(height: 12),
-                                AppFormField(
-                                    key: const Key("rename_separator"),
-                                    controller: _separator,
-                                    enabled: !disabled,
-                                    label: "分隔符（包含空格）",
-                                    onChanged: (_) =>
-                                        setState(() => _dirty = true)),
-                                SwitchListTile(
-                                    contentPadding: EdgeInsets.zero,
-                                    title: const Text("歌手在前、歌名在后"),
-                                    value: _artistFirst,
-                                    onChanged: disabled
-                                        ? null
-                                        : (value) {
-                                            _artistFirst = value;
-                                            _regenerate();
-                                          }),
-                              ],
-                              if (!_saved)
-                                Wrap(spacing: 8, children: [
-                                  if (_renaming)
-                                    TextButton(
-                                        onPressed: _busy ? null : _regenerate,
-                                        child: const Text("重新生成预览")),
-                                  TextButton(
-                                      key: _key("select_all"),
-                                      onPressed: _busy
-                                          ? null
-                                          : () => setState(() {
-                                                for (final draft in _drafts) {
-                                                  draft.selected = !_renaming ||
-                                                      (draft.changed &&
-                                                          draft.suggestion
-                                                              .confident &&
-                                                          !draft.suggestion
-                                                              .manuallyEdited);
-                                                }
-                                              }),
-                                      child: Text(_renaming ? "勾选明确建议" : "全选")),
-                                  TextButton(
-                                      key: _key("select_none"),
-                                      onPressed: _busy
-                                          ? null
-                                          : () => setState(() {
-                                                for (final draft in _drafts) {
-                                                  draft.selected = false;
-                                                }
-                                              }),
-                                      child: const Text("取消全选")),
-                                ]),
-                              if (_dirty)
-                                Text("规则已更改，请重新生成预览",
-                                    style: TextStyle(color: t.fgDim)),
                               if (_refreshPending)
                                 Row(children: [
                                   Expanded(
                                       child: Text(
-                                          _saved
-                                              ? "修改已保存，界面刷新待重试"
-                                              : "修改已撤销，界面刷新待重试",
+                                          _lastWasUndo
+                                              ? "修改已撤销，界面刷新待重试"
+                                              : "修改已保存，界面刷新待重试",
                                           style: TextStyle(color: t.fgDim))),
                                   TextButton(
                                       key: _key("retry_refresh"),
                                       onPressed: _busy ? null : _retryRefresh,
                                       child: const Text("重试刷新")),
                                 ]),
-                              if (_saved)
+                              if (_undo != null)
                                 Row(children: [
                                   Expanded(
                                       child: Text("本次修改已保存",
@@ -623,8 +598,8 @@ class _BatchTrackEditPageState extends ConsumerState<BatchTrackEditPage> {
                                                   color: t.fg, fontSize: 14)),
                                           const SizedBox(height: 4),
                                           Text(
-                                              "原：${track.effectiveName} · ${track.effectiveAuthor}\n"
-                                              "${draft.suggestion.manuallyEdited ? "已有手动编辑，默认跳过" : draft.suggestion.confident ? draft.suggestion.reason : "需确认：${draft.suggestion.reason}"}"
+                                              "原：${track.effectiveName} · ${track.effectiveAuthor.isEmpty ? "未填写歌手" : track.effectiveAuthor}\n"
+                                              "${draft.suggestion.reason}"
                                               "${(duplicates[draft.name] ?? 0) > 1 ? "\n存在同名歌曲，各自保留" : ""}",
                                               style: TextStyle(
                                                   color: t.fgDim,
@@ -638,7 +613,7 @@ class _BatchTrackEditPageState extends ConsumerState<BatchTrackEditPage> {
                                       tooltip: "编辑建议",
                                       onPressed:
                                           disabled ? null : () => _edit(draft),
-                                      icon: const Icon(Icons.edit_outlined)),
+                                      icon: const Icon(Icons.edit_note)),
                             ));
                       }),
                 ])),
@@ -646,22 +621,43 @@ class _BatchTrackEditPageState extends ConsumerState<BatchTrackEditPage> {
                     padding: EdgeInsets.fromLTRB(
                         20, 12, 20, hasMiniPlayer ? 100 : 16),
                     child: Row(children: [
+                      // 三态全选：全选=勾、全不选=空、部分=横线；
+                      // 点击只看当前状态（未全选→全选，已全选→清空），与回调值无关。
+                      SizedBox(
+                          width: 32,
+                          height: 40,
+                          child: Checkbox(
+                              key: _key("toggle_all"),
+                              tristate: true,
+                              value: _drafts.isEmpty
+                                  ? false
+                                  : selected == _drafts.length
+                                      ? true
+                                      : selected == 0
+                                          ? false
+                                          : null,
+                              visualDensity: VisualDensity.compact,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              onChanged: disabled
+                                  ? null
+                                  : (_) => setState(() {
+                                        final selectAll =
+                                            selected != _drafts.length;
+                                        for (final draft in _drafts) {
+                                          draft.selected = selectAll;
+                                        }
+                                      }))),
+                      const SizedBox(width: 4),
                       Expanded(
-                          child: Text(
-                              selected == changes
-                                  ? "已选 $selected 首"
-                                  : "已选 $selected 首 · 可修改 $changes 首",
+                          child: Text("已选 $selected 首",
                               style: TextStyle(color: t.fgDim))),
                       FilledButton(
                           key: _key("apply"),
-                          onPressed: disabled || _dirty || changes == 0
-                              ? null
-                              : _apply,
+                          onPressed: disabled || changes == 0 ? null : _apply,
                           child: Text(_busy
                               ? "处理中…"
-                              : _saved
-                                  ? "已应用"
-                                  : "应用所选 $changes 首")),
+                              : "应用所选 $changes 首")),
                     ])),
               ]))),
         )));

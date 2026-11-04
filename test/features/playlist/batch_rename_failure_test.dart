@@ -146,14 +146,14 @@ void main() {
     appDb = probe;
     await tester.tap(find.byKey(const Key("rename_apply")));
     await _frames(tester);
-    expect((await _row(original, "a"))["display_name"], "东方破");
+    expect((await _row(original, "a"))["display_name"], "周杰伦 东方破");
     expect(find.text("本次修改已保存"), findsOneWidget);
     expect(find.text("保存失败，本批修改未应用，请重试"), findsNothing);
     expect(find.byKey(const Key("rename_undo")), findsOneWidget);
     expect(probe.commits, 1);
     await _retryRefresh(tester);
     expect(find.byKey(const Key("rename_retry_refresh")), findsNothing);
-    expect(container.read(playbackProvider).track!.effectiveName, "东方破");
+    expect(container.read(playbackProvider).track!.effectiveName, "周杰伦 东方破");
     expect(probe.commits, 1);
     await _tapUndo(tester);
     expect((await _row(original, "a"))["display_name"], isNull);
@@ -181,7 +181,7 @@ void main() {
     expect(probe.commits, 2);
     await tester.tap(find.byKey(const Key("rename_apply")));
     await _frames(tester);
-    expect((await _row(original, "a"))["display_name"], "东方破");
+    expect((await _row(original, "a"))["display_name"], "周杰伦 东方破");
     expect(probe.commits, 3);
     expect(find.text("歌曲又被编辑过，无法撤销，请重新查看歌曲信息"), findsNothing);
     expect(tester.takeException(), isNull);
@@ -236,14 +236,14 @@ void main() {
       release.complete();
       await _frames(tester);
       expect(
-          (await _row(original, "a"))["display_name"], undo ? isNull : "东方破");
+          (await _row(original, "a"))["display_name"], undo ? isNull : "周杰伦 东方破");
       expect(container.read(playbackProvider).track!.effectiveName,
-          undo ? "001 周杰伦 东方破" : "东方破");
+          undo ? "001 周杰伦 东方破" : "周杰伦 东方破");
       expect(container.read(playbackProvider).queue.last.effectiveName,
-          undo ? "002 周杰伦 发如雪" : "发如雪");
+          undo ? "002 周杰伦 发如雪" : "周杰伦 发如雪");
       final storedDetails =
           await container.read(playlistDetailTracksProvider(playlistId).future);
-      expect(storedDetails.first.effectiveName, undo ? "001 周杰伦 东方破" : "东方破");
+      expect(storedDetails.first.effectiveName, undo ? "001 周杰伦 东方破" : "周杰伦 东方破");
       expect(fakePlaybackEngine!.loads.length, 1);
       expect(tester.takeException(), isNull);
       details.close();

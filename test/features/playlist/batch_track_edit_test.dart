@@ -72,8 +72,9 @@ Future<ProviderContainer> _open(WidgetTester tester, BatchTrackEditMode mode,
   final renameY = tester.getCenter(find.text("批量重命名")).dy;
   final authorY = tester.getCenter(find.text("批量设置歌手")).dy;
   final coverY = tester.getCenter(find.text("批量设置封面")).dy;
+  // 两列瓦片网格：编辑信息+批量重命名一行，批量设置歌手+封面一行
   expect(authorY, greaterThan(renameY));
-  expect(coverY, greaterThan(authorY));
+  expect(coverY, authorY);
   await tester.tap(find.text(mode.title));
   await _frames(tester);
   final container = ProviderScope.containerOf(
@@ -510,7 +511,7 @@ void main() {
       });
     }
 
-    testWidgets("${mode.title}：空值或非法链接不能应用，全选/取消全选和返回不写库", (tester) async {
+    testWidgets("${mode.title}：空值或非法链接不能应用，底部复选框全选/清空和返回不写库", (tester) async {
       await _open(tester, mode);
       await _enter(tester, mode,
           mode == BatchTrackEditMode.cover ? "file:///非法链接.png" : "   ");
@@ -523,10 +524,11 @@ void main() {
           findsOneWidget);
       await _enter(tester, mode,
           mode == BatchTrackEditMode.cover ? "https://new.test/p.jpg" : "新歌手");
-      await _tap(tester, _key(mode, "select_none"));
+      // 默认全选 → 点击复选框清空，应用置灰；再点击重新全选
+      await _tap(tester, _key(mode, "toggle_all"));
       expect(
           tester.widget<FilledButton>(_key(mode, "apply")).onPressed, isNull);
-      await _tap(tester, _key(mode, "select_all"));
+      await _tap(tester, _key(mode, "toggle_all"));
       expect(tester.widget<FilledButton>(_key(mode, "apply")).onPressed,
           isNotNull);
       await _tap(tester, find.text("返回歌曲列表"));

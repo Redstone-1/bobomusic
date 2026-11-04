@@ -44,6 +44,7 @@ class PlaylistPage extends ConsumerWidget {
     final currentTrackId = ref.watch(
       playbackProvider.select((s) => s.track?.id),
     );
+    final playingNow = ref.watch(playbackProvider.select((s) => s.playing));
 
     return ListView(
       padding: EdgeInsets.fromLTRB(DesktopContent.of(context) ? 30 : 20, DesktopContent.of(context) ? 30 : 16, DesktopContent.of(context) ? 30 : 20, DesktopContent.of(context) ? 30 : 150),
@@ -110,11 +111,10 @@ class PlaylistPage extends ConsumerWidget {
         ),
         SectionHeader(
           title: "自定义歌单",
-          trailing: playlistsAsync.value == null
+          count: playlistsAsync.value == null
               ? null
-              : playlistsAsync.value!.length > 3
-                  ? "查看全部（共 ${playlistsAsync.value!.length} 个）›"
-                  : "${playlistsAsync.value!.length} 个",
+              : "共 ${playlistsAsync.value!.length} 个",
+          trailing: (playlistsAsync.value?.length ?? 0) > 3 ? "更多" : null,
           onTrailingTap: (playlistsAsync.value?.length ?? 0) > 3
               ? () => _openAllPlaylists(context, ref) : null,
         ),
@@ -186,6 +186,7 @@ class PlaylistPage extends ConsumerWidget {
                       SongListTile(
                         track: track,
                         playing: track.id == currentTrackId,
+                        paused: !playingNow,
                         onTap: () => PlayerCardPage.start(
                           context,
                           ref,
@@ -232,7 +233,6 @@ class PlaylistPage extends ConsumerWidget {
   void _showRecentActions(BuildContext context, WidgetRef ref, Track track) {
     AppSheet.show(
       context,
-      title: track.effectiveName,
       actions: [
         AppSheetAction(
           icon: Icons.edit_outlined,

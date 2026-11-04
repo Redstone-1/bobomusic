@@ -16,6 +16,7 @@ class RecentTracksPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final recent = ref.watch(recentTracksProvider);
     final currentId = ref.watch(playbackProvider.select((s) => s.track?.id));
+    final playingNow = ref.watch(playbackProvider.select((s) => s.playing));
     return ListView(padding: const EdgeInsets.all(28), children: [
       PageHeader(
           title: "最近播放",
@@ -53,6 +54,7 @@ class RecentTracksPage extends ConsumerWidget {
                     SongListTile(
                         track: track,
                         playing: track.id == currentId,
+                        paused: !playingNow,
                         onTap: () => ref.read(playbackProvider.notifier).play(track, queue: tracks),
                         onMorePressed: () =>
                             showTrackEditDialog(context, ref, track)),

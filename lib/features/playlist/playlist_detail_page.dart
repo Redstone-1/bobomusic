@@ -18,7 +18,6 @@ import "../../core/widgets/app_search_field.dart";
 import "../../core/widgets/page_header.dart";
 import "../../core/widgets/desktop_content.dart";
 import "../../core/widgets/song_list_tile.dart";
-import "../../core/widgets/cover_placeholder.dart";
 import "../../data/local_audio_importer.dart";
 import "../../data/local_audio_scanner.dart";
 import "../../data/models/playlist.dart";
@@ -115,7 +114,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
     child: GlassIconButton(key: const Key("batch_rename_entry"),
         icon: const Icon(Icons.drive_file_rename_outline),
         onTap: tracks == null || tracks.isEmpty || _scanning ? null
-            : () => AppSheet.show(context, title: "批量编辑", actions: _batchActions(tracks))));
+            : () => AppSheet.show(context, actions: _batchActions(tracks))));
 
   @override
   void dispose() {
@@ -229,7 +228,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
 
   void _manageDirectories() {
     final directories = ref.read(localLibraryDirectoriesProvider);
-    AppSheet.show(context, title: "扫描目录", actions: [
+    AppSheet.show(context, actions: [
       AppSheetAction(
           icon: Icons.create_new_folder_outlined,
           label: "添加音乐文件夹",
@@ -393,6 +392,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
     final currentTrackId = ref.watch(
       playbackProvider.select((s) => s.track?.id),
     );
+    final playingNow = ref.watch(playbackProvider.select((s) => s.playing));
     // 统一按歌单 ID 取数，重读期间保留上一份 AsyncValue 数据。
     final detailAsync = widget.tracks == null
         ? ref.watch(playlistDetailTracksProvider(widget.playlist.id))
@@ -513,18 +513,12 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                     )
                                   : custom ? GlassIconButton(key: const Key("custom_playlist_more"),
                                       icon: const Icon(Icons.more_horiz),
-                                      onTap: () => AppSheet.show(context, title: playlist.name, actions: [
+                                      onTap: () => AppSheet.show(context, actions: [
                                         AppSheetAction(icon: Icons.edit_outlined, label: "编辑信息",
                                             onTap: () => showPlaylistEditDialog(context, ref, playlist)),
                                         if (tracks?.isNotEmpty == true) ..._batchActions(tracks),
                                       ])) : null,
                         ),
-                        if (custom) Padding(padding: const EdgeInsets.only(top: 14),
-                            child: Row(children: [
-                              CoverPlaceholder(cover: playlist.cover, text: playlist.name, size: 64, radius: t.radiusMd),
-                              const SizedBox(width: 14),
-                              Text("${raw?.length ?? playlist.count} 首歌曲", style: TextStyle(color: t.fgDim)),
-                            ])),
                         // 喜欢列表有内容时同样提供搜索（空库交给空态引导）
                         if (_isLocal ||
                             (_isLiked && raw != null && raw.isNotEmpty)) ...[
@@ -582,16 +576,14 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                 SongListTile(
                                   track: track,
                                   playing: track.id == currentTrackId,
+                                  paused: !playingNow,
                                   coverOverride: widget.trackCover,
-                                  // 我喜欢：行首心形快速取消收藏，
-                                  // 写库但不刷新列表（心形局部更新，下次进入重读）
-                                  likedHeart: _isLiked
-                                      ? (_likedOverrides[track.id] ??
-                                          track.liked)
-                                      : null,
-                                  onHeartTap: !_isLiked
-                                      ? null
-                                      : (liked) async {
+                                  // 行内心形统一展示喜欢状态（本地/自建可快速收藏，
+                                  // 我喜欢快速取消），写库但不刷新列表
+                                  // （心形局部更新，下次进入重读）
+                                  likedHeart: _likedOverrides[track.id] ??
+                                      track.liked,
+                                  onHeartTap: (liked) async {
                                           // 先落库再刷新计数，避免重读抢在写库前
                                           await TrackRepository()
                                               .setLiked(track.id, liked);
@@ -611,7 +603,6 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                   ),
                                   onMorePressed: () => AppSheet.show(
                                     context,
-                                    title: track.effectiveName,
                                     actions: [
                                       AppSheetAction(
                                         icon: Icons.edit_outlined,

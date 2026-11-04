@@ -79,7 +79,7 @@ void main() {
       expect(await _searchAppearance(tester, "搜索歌曲 / 歌手"), baseline);
       Navigator.of(tester.element(find.byType(AppSearchField))).pop();
       await _frames(tester);
-      await tester.tap(find.text("查看全部（共 4 个）›"));
+      await tester.tap(find.text("更多"));
       await _frames(tester);
       expect(await _searchAppearance(tester, "搜索歌单名称"), baseline);
       expect(tester.takeException(), isNull);

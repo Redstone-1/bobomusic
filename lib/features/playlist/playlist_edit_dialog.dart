@@ -30,8 +30,8 @@ Future<void> showPlaylistEditDialog(
       return;
     }
     await AppDialog.show<void>(context,
-        title: "编辑歌单信息",
         barrierDismissible: false,
+        padding: EdgeInsets.zero,
         content: Flexible(child: _PlaylistEditor(playlist: latest)),
         actions: const []);
   } catch (error) {
@@ -148,109 +148,140 @@ class _PlaylistEditorState extends ConsumerState<_PlaylistEditor> {
               key: _form,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Center(
-                      child: CoverPlaceholder(
-                          cover: _cover ?? widget.playlist.fallbackCover,
-                          text: _name.text.trim().isEmpty
-                              ? widget.playlist.name
-                              : _name.text.trim(),
-                          size: 100,
-                          radius: t.radiusMd)),
-                  const SizedBox(height: 12),
-                  AppFormField(
-                      key: const Key("playlist_edit_name"),
-                      controller: _name,
-                      enabled: !_busy,
-                      label: "歌单名称",
-                      onChanged: (_) => setState(() {}),
-                      validator: (value) {
-                        final name = value?.trim() ?? "";
-                        if (name.isEmpty) return "歌单名不能为空";
-                        if (name.length > 20) return "歌单名最长 20 个字符";
-                        if (name != widget.playlist.name &&
-                            RegExp(r"^\d").hasMatch(name)) {
-                          return "歌单名不能以数字开头";
-                        }
-                        return null;
-                      }),
-                  const SizedBox(height: 12),
-                  AppFormField(
-                      key: const Key("playlist_edit_cover"),
-                      controller: _url,
-                      enabled: !_busy,
-                      label: "封面图片链接",
-                      helper: _localCover == null ? "也可从设备选择图片" : "已选择本地图片",
-                      onChanged: (_) => setState(() {
-                            _localCover = null;
-                          }),
-                      validator: (value) {
-                        if (_apply && _cover == null) return "请先选择图片或填写图片链接";
-                        if (value == null || value.trim().isEmpty) return null;
-                        final uri = Uri.tryParse(value.trim());
-                        return uri != null &&
-                                (uri.scheme == "https" ||
-                                    uri.scheme == "http") &&
-                                uri.host.isNotEmpty
-                            ? null
-                            : "请输入有效的 http 或 https 图片链接";
-                      }),
-                  Wrap(spacing: 8, children: [
-                    TextButton.icon(
-                        onPressed: _busy ? null : _pickImage,
-                        icon: const Icon(Icons.image_outlined),
-                        label: const Text("从设备选择")),
-                    TextButton(
-                        onPressed: _busy
-                            ? null
-                            : () => setState(() {
-                                  _localCover = null;
-                                  _url.clear();
-                                  _apply = false;
+                  // 封面全宽出血铺满弹窗上部（约 1/3），顶部两角随弹窗圆角裁切
+                  ClipRRect(
+                      borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(t.radiusLg)),
+                      child: SizedBox(
+                          height: 160,
+                          child: Stack(fit: StackFit.expand, children: [
+                            CoverPlaceholder(
+                                cover:
+                                    _cover ?? widget.playlist.fallbackCover,
+                                text: _name.text.trim().isEmpty
+                                    ? widget.playlist.name
+                                    : _name.text.trim(),
+                                width: double.infinity,
+                                height: 160,
+                                radius: 0),
+                            // 边缘渐隐：贴近封面处透明露出图片，向下过渡到面板底色
+                            Positioned(
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                child: Container(
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                            begin: Alignment.topCenter,
+                                            end: Alignment.bottomCenter,
+                                            colors: [
+                                      t.bg2.withValues(alpha: 0),
+                                      t.bg2,
+                                    ])))),
+                          ]))),
+                  Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            AppDialog.titleText(context, "编辑歌单信息"),
+                            const SizedBox(height: 14),
+                            AppFormField(
+                                key: const Key("playlist_edit_name"),
+                                controller: _name,
+                                enabled: !_busy,
+                                label: "歌单名称",
+                                onChanged: (_) => setState(() {}),
+                                validator: (value) {
+                                  final name = value?.trim() ?? "";
+                                  if (name.isEmpty) return "歌单名不能为空";
+                                  if (name.length > 20) return "歌单名最长 20 个字符";
+                                  if (name != widget.playlist.name &&
+                                      RegExp(r"^\d").hasMatch(name)) {
+                                    return "歌单名不能以数字开头";
+                                  }
+                                  return null;
                                 }),
-                        child: const Text("恢复默认封面")),
-                  ]),
-                  AppCheckboxRow(
-                      key: const Key("playlist_apply_cover"),
-                      label: Text("将歌单封面应用到此歌单的全部歌曲",
-                          style: TextStyle(
-                              fontSize: 13, color: _busy ? t.fgMute : t.fg)),
-                      value: _apply,
-                      onChanged: _busy
-                          ? null
-                          : (value) => setState(() => _apply = value)),
-                  if (_apply && _cover == null)
-                    Text("请先设置自定义封面，再保存并应用到歌曲。",
-                        style: TextStyle(
-                            color: t.fgDim, fontSize: 12, height: 1.5)),
-                  if (_apply && _cover != null)
-                    Text(
-                        "将覆盖当前 ${widget.playlist.count} 首歌曲的封面（包括已自定义封面）。这些歌曲在其他歌单和播放器中也会同步变化。以后新增歌曲不绑定此封面。",
-                        style: TextStyle(
-                            color: t.fgDim, fontSize: 12, height: 1.5)),
-                  const SizedBox(height: 18),
-                  Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-                    TextButton(
-                        onPressed:
-                            _busy ? null : () => Navigator.of(context).pop(),
-                        child: Text("取消",
-                            style:
-                                TextStyle(color: _busy ? t.fgMute : t.fgDim))),
-                    Flexible(
-                        child: TextButton(
-                            key: const Key("playlist_edit_save"),
-                            onPressed: _busy ? null : _save,
-                            child: Text(
-                                _busy
-                                    ? "处理中…"
-                                    : _apply && _cover != null
-                                        ? "保存并更新 ${widget.playlist.count} 首歌曲"
-                                        : "保存",
-                                style: TextStyle(
-                                    color: _busy ? t.fgMute : t.primary,
-                                    fontWeight: FontWeight.w700)))),
-                  ]),
+                            const SizedBox(height: 12),
+                            AppFormField(
+                                key: const Key("playlist_edit_cover"),
+                                controller: _url,
+                                enabled: !_busy,
+                                label: "封面图片链接",
+                                suffix: IconButton(
+                                    tooltip: "从设备选择",
+                                    onPressed: _busy ? null : _pickImage,
+                                    icon:
+                                        const Icon(Icons.image_outlined)),
+                                onChanged: (_) => setState(() {
+                                      _localCover = null;
+                                    }),
+                                validator: (value) {
+                                  if (_apply && _cover == null) {
+                                    return "请先选择图片或填写图片链接";
+                                  }
+                                  if (value == null || value.trim().isEmpty) {
+                                    return null;
+                                  }
+                                  final uri = Uri.tryParse(value.trim());
+                                  return uri != null &&
+                                          (uri.scheme == "https" ||
+                                              uri.scheme == "http") &&
+                                          uri.host.isNotEmpty
+                                      ? null
+                                      : "请输入有效的 http 或 https 图片链接";
+                                }),
+                            AppCheckboxRow(
+                                key: const Key("playlist_apply_cover"),
+                                label: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerLeft,
+                                    child: Text("将歌单封面应用到此歌单的全部歌曲",
+                                        maxLines: 1,
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            color:
+                                                _busy ? t.fgMute : t.fg))),
+                                value: _apply,
+                                onChanged: _busy
+                                    ? null
+                                    : (value) =>
+                                        setState(() => _apply = value)),
+                            const SizedBox(height: 18),
+                            Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  TextButton(
+                                      onPressed: _busy
+                                          ? null
+                                          : () => Navigator.of(context).pop(),
+                                      child: Text("取消",
+                                          style: TextStyle(
+                                              color: _busy
+                                                  ? t.fgMute
+                                                  : t.fgDim))),
+                                  Flexible(
+                                      child: TextButton(
+                                          key:
+                                              const Key("playlist_edit_save"),
+                                          onPressed: _busy ? null : _save,
+                                          child: Text(
+                                              _busy
+                                                  ? "处理中…"
+                                                  : _apply && _cover != null
+                                                      ? "保存并更新 ${widget.playlist.count} 首歌曲"
+                                                      : "保存",
+                                              style: TextStyle(
+                                                  color: _busy
+                                                      ? t.fgMute
+                                                      : t.primary,
+                                                  fontWeight:
+                                                      FontWeight.w700)))),
+                                ]),
+                          ])),
                 ],
               ),
             ))));
