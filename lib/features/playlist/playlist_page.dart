@@ -7,7 +7,6 @@ import "../../core/overlays/app_toast.dart";
 import "../../core/theme/aurora_tokens.dart";
 import "../../core/navigation/desktop_navigation.dart";
 import "../../core/widgets/app_buttons.dart";
-import "../../core/widgets/cover_placeholder.dart";
 import "../../core/widgets/empty_state.dart";
 import "../../core/widgets/page_header.dart";
 import "../../core/widgets/desktop_content.dart";
@@ -28,6 +27,8 @@ import "playlist_detail_page.dart";
 import "playlists_provider.dart";
 import "track_edit_dialog.dart";
 import "playlist_commands.dart" as commands;
+import "all_playlists_page.dart";
+import "playlist_tile.dart";
 
 /// 歌单页（对齐原型 renderOrder；S3.3 接真数据：歌单 CRUD / 我喜欢 / 播放队列）
 class PlaylistPage extends ConsumerWidget {
@@ -111,7 +112,11 @@ class PlaylistPage extends ConsumerWidget {
           title: "自定义歌单",
           trailing: playlistsAsync.value == null
               ? null
-              : "${playlistsAsync.value!.length} 个",
+              : playlistsAsync.value!.length > 3
+                  ? "查看全部（共 ${playlistsAsync.value!.length} 个）›"
+                  : "${playlistsAsync.value!.length} 个",
+          onTrailingTap: (playlistsAsync.value?.length ?? 0) > 3
+              ? () => _openAllPlaylists(context, ref) : null,
         ),
         // 歌单目录三态
         playlistsAsync.when(
@@ -135,17 +140,18 @@ class PlaylistPage extends ConsumerWidget {
                 )
               : DesktopContent.of(context)
                 ? LayoutBuilder(builder: (context, constraints) => Wrap(spacing: 18, runSpacing: 20, children: [
-                  for (final pl in playlists) SizedBox(width: (constraints.maxWidth - 18 * 3) / 4, child: _PlaylistRow(name: pl.name, count: pl.count, cover: pl.cover, onTap: () => _openPlaylist(context, ref, pl), onMorePressed: () => _showRowActions(context, ref, pl))),
+                  for (final pl in playlists.take(3)) SizedBox(width: (constraints.maxWidth - 18 * 2) / 3, child: PlaylistTile(name: pl.name, count: pl.count, cover: pl.cover, onTap: () => commands.openPlaylist(context, ref, pl), onMorePressed: () => commands.showPlaylistActions(context, ref, pl))),
                 ]))
                 : Column(
                   children: [
-                    for (final pl in playlists)
-                      _PlaylistRow(
+                    for (final pl in playlists.take(3))
+                      PlaylistTile(
                         name: pl.name,
                         count: pl.count,
-                        onTap: () => _openPlaylist(context, ref, pl),
+                        cover: pl.cover,
+                        onTap: () => commands.openPlaylist(context, ref, pl),
                         onMorePressed: () =>
-                            _showRowActions(context, ref, pl),
+                            commands.showPlaylistActions(context, ref, pl),
                       ),
                   ],
                 ),
@@ -200,6 +206,15 @@ class PlaylistPage extends ConsumerWidget {
 
   Future<void> _createPlaylist(BuildContext context, WidgetRef ref) => commands.createPlaylist(context, ref);
 
+  void _openAllPlaylists(BuildContext context, WidgetRef ref) {
+    if (DesktopContent.of(context)) {
+      ref.read(desktopNavigationProvider.notifier).open(
+          const DesktopDestination("all_playlists", "全部歌单"));
+    } else {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AllPlaylistsPage()));
+    }
+  }
+
   Future<void> _clearRecent(BuildContext context, WidgetRef ref) async {
     final ok = await AppDialog.confirm(
       context,
@@ -248,81 +263,6 @@ class PlaylistPage extends ConsumerWidget {
     );
   }
 
-  /// 歌单名校验（§2.1 沿用旧版：非空、≤20 字、不能数字开头）
-  String? _validateName(String? value) {
-    final name = value?.trim() ?? "";
-    if (name.isEmpty) return "歌单名不能为空";
-    if (name.length > 20) return "歌单名最长 20 个字符";
-    if (RegExp(r"^\d").hasMatch(name)) return "歌单名不能以数字开头";
-    return null;
-  }
-
-  void _openPlaylist(BuildContext context, WidgetRef ref, Playlist playlist) {
-    if (DesktopContent.of(context)) {
-      ref.read(desktopNavigationProvider.notifier).open(DesktopDestination("playlist", playlist.name, playlistId: playlist.id));
-      return;
-    }
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => PlaylistDetailPage(playlist: playlist)),
-    );
-  }
-
-  void _showRowActions(BuildContext context, WidgetRef ref, Playlist pl) {
-    AppSheet.show(
-      context,
-      title: pl.name,
-      actions: [
-        AppSheetAction(
-          icon: Icons.edit_outlined,
-          label: "重命名",
-          onTap: () => _renamePlaylist(context, ref, pl),
-        ),
-        AppSheetAction(
-          icon: Icons.delete_outline,
-          label: "删除歌单",
-          danger: true,
-          onTap: () => _deletePlaylist(context, ref, pl),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _renamePlaylist(
-    BuildContext context,
-    WidgetRef ref,
-    Playlist pl,
-  ) async {
-    final name = await AppDialog.input(
-      context,
-      title: "重命名歌单",
-      initial: pl.name,
-      validator: _validateName,
-    );
-    if (name == null || !context.mounted) return;
-    try {
-      await ref.read(playlistsProvider.notifier).rename(pl.id, name.trim());
-      if (context.mounted) AppToast.show(context, "已重命名");
-    } catch (_) {
-      if (context.mounted) AppToast.show(context, "歌单名已存在");
-    }
-  }
-
-  Future<void> _deletePlaylist(
-    BuildContext context,
-    WidgetRef ref,
-    Playlist pl,
-  ) async {
-    final ok = await AppDialog.confirm(
-      context,
-      title: "删除歌单",
-      message: "歌单「${pl.name}」将被删除，歌曲不受影响。",
-      danger: true,
-      confirmText: "删除",
-    );
-    if (!ok || !context.mounted) return;
-    await ref.read(playlistsProvider.notifier).remove(pl.id);
-    if (context.mounted) AppToast.show(context, "已删除");
-  }
 }
 
 /// 快捷入口卡（原型 .qa .qi：大 emoji 沉底 + 标签/计数）
@@ -386,77 +326,6 @@ class _QuickCard extends ConsumerWidget {
                   color: t.fgDim.withValues(alpha: 0.16),
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 歌单行（原型 .plid：字首封面 + 名称/计数 + 更多）
-class _PlaylistRow extends StatelessWidget {
-  final String name;
-  final int count;
-  final String? cover;
-  final VoidCallback onTap;
-  final VoidCallback onMorePressed;
-
-  const _PlaylistRow({
-    required this.name,
-    required this.count,
-    this.cover,
-    required this.onTap,
-    required this.onMorePressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AuroraTokens.of(context);
-    if (DesktopContent.of(context)) {
-      return LayoutBuilder(builder: (context, constraints) => InkWell(onTap: onTap, borderRadius: BorderRadius.circular(t.radiusMd), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        CoverPlaceholder(cover: cover, text: name, size: constraints.maxWidth, radius: t.radiusMd),
-        const SizedBox(height: 8),
-        Row(children: [Expanded(child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: t.fg, fontSize: 12, fontWeight: FontWeight.w600))), SizedBox(width: 26, height: 26, child: IconButton(padding: EdgeInsets.zero, tooltip: "歌单操作", iconSize: 16, onPressed: onMorePressed, icon: const Icon(Icons.more_horiz)))]),
-        Text("$count 首", style: TextStyle(color: t.fgMute, fontSize: 10)),
-      ])));
-    }
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(t.radiusMd),
-      splashColor: t.surface2,
-      highlightColor: t.surface,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 9),
-        child: Row(
-          children: [
-            CoverPlaceholder(
-              text: name,
-              size: 54,
-              radius: t.radiusMd,
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: t.fg),
-                  ),
-                  const SizedBox(height: 3),
-                  Text("$count 首", style: TextStyle(fontSize: 12.5, color: t.fgDim)),
-                ],
-              ),
-            ),
-            IconButton(
-              onPressed: onMorePressed,
-              icon: const Icon(Icons.more_vert),
-              iconSize: 18,
-              color: t.fgMute,
-              visualDensity: VisualDensity.compact,
             ),
           ],
         ),

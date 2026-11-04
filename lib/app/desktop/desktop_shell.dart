@@ -18,6 +18,7 @@ import "../../features/player/playback_provider.dart";
 import "../../features/playlist/playlist_commands.dart";
 import "../../features/playlist/playlist_detail_page.dart";
 import "../../features/playlist/playlist_page.dart";
+import "../../features/playlist/all_playlists_page.dart";
 import "../../features/playlist/playlists_provider.dart";
 import "../../features/playlist/recent_tracks_page.dart";
 import "../../features/plaza/plaza_page.dart";
@@ -132,6 +133,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
 
   Widget _page(DesktopDestination destination) => switch (destination.route) {
         "library" => const PlaylistPage(),
+        "all_playlists" => const AllPlaylistsPage(),
         "plaza" => const PlazaPage(),
         "local" => const PlaylistDetailPage(
             playlist: Playlist(
@@ -321,7 +323,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
                     TextButton(
                         onPressed: () => ref.invalidate(playlistsProvider),
                         child: const Text("歌单加载失败，点击重试")),
-                  for (final playlist in playlists.value ?? <Playlist>[])
+                  for (final playlist in (playlists.value ?? <Playlist>[]).take(3))
                     _navItem(
                         t,
                         selected,
@@ -329,6 +331,10 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
                         DesktopDestination("playlist", playlist.name,
                             playlistId: playlist.id),
                         Icons.queue_music),
+                  if ((playlists.value?.length ?? 0) > 3)
+                    _navItem(t, selected, false,
+                        const DesktopDestination("all_playlists", "全部歌单"),
+                        Icons.library_music_outlined),
                 ],
               ])),
           Padding(

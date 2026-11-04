@@ -4,16 +4,10 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../core/overlays/app_dialog.dart";
 import "../../core/overlays/app_toast.dart";
 import "../../core/theme/aurora_tokens.dart";
+import "../../core/widgets/app_form_field.dart";
 import "../../data/models/track.dart";
 import "../../data/repositories/track_repository.dart";
-import "../download/download_tasks.dart";
-import "../player/playback_provider.dart";
-import "playlists_provider.dart"
-    show
-        playlistsProvider,
-        playlistDetailTracksProvider,
-        queueEntriesProvider,
-        recentTracksProvider;
+import "display_edit_actions.dart";
 
 /// 编辑曲目显示信息：B 站等音源的标题/歌手由上传者自定义（长、奇葩名），
 /// 封面可替换（URL，允许为空恢复原始）。原始 name/author/cover 保留——
@@ -36,11 +30,11 @@ Future<void> showTrackEditDialog(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _field(t, controller: nameController, label: "歌名"),
+        AppFormField(controller: nameController, label: "歌名"),
         const SizedBox(height: 10),
-        _field(t, controller: authorController, label: "歌手"),
+        AppFormField(controller: authorController, label: "歌手"),
         const SizedBox(height: 10),
-        _field(t, controller: coverController, label: "封面 URL"),
+        AppFormField(controller: coverController, label: "封面 URL"),
       ],
     ),
     actions: [
@@ -65,6 +59,7 @@ Future<void> showTrackEditDialog(
     return;
   }
   try {
+    final displayActions = ref.read(trackDisplayActionsProvider);
     await TrackRepository().updateDisplayInfo(
       track.id,
       name: name,
@@ -72,59 +67,12 @@ Future<void> showTrackEditDialog(
       // 封面 URL 允许为空：留空 = 清除覆盖、恢复原始封面
       cover: coverController.text.trim(),
     );
-    // 各列表数据源重读（详情页重读期间保留旧数据）；下载完成列表同步
-    ref.invalidate(playlistDetailTracksProvider);
-    // 桌面歌单卡使用首曲封面，编辑封面后同步刷新目录。
-    ref.invalidate(playlistsProvider);
-    ref.invalidate(queueEntriesProvider);
-    ref.invalidate(recentTracksProvider);
-    ref.invalidate(downloadedTracksProvider);
-    // 正在播放/队列中引用了该曲：按库内最新 Track 热更新当前会话
-    final playback = ref.read(playbackProvider);
-    final inSession = playback.track?.id == track.id ||
-        playback.queue.any((item) => item.id == track.id);
-    if (inSession) {
-      final stored = await TrackRepository().getById(track.id);
-      if (stored != null) {
-        ref.read(playbackProvider.notifier).applyDisplayEdit(stored);
-      }
+    final refreshed = await displayActions.refresh([track.id]);
+    if (context.mounted) {
+      AppToast.show(context, refreshed ? "已保存" : "修改已保存，界面刷新失败，请稍后重试");
     }
-    if (context.mounted) AppToast.show(context, "已保存");
   } catch (e) {
     print("保存歌曲信息失败：$e");
     if (context.mounted) AppToast.show(context, "保存失败，请重试");
   }
-}
-
-Widget _field(
-  AuroraTokens t, {
-  required TextEditingController controller,
-  required String label,
-}) {
-  return TextField(
-    controller: controller,
-    style: TextStyle(fontSize: 14.5, color: t.fg),
-    decoration: InputDecoration(
-      labelText: label,
-      labelStyle: TextStyle(fontSize: 13, color: t.fgDim),
-      filled: true,
-      fillColor: t.surface,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 14,
-        vertical: 12,
-      ),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(t.radiusMd),
-        borderSide: BorderSide(color: t.hairline),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(t.radiusMd),
-        borderSide: BorderSide(color: t.hairline),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(t.radiusMd),
-        borderSide: BorderSide(color: t.primary),
-      ),
-    ),
-  );
 }

@@ -14,10 +14,11 @@ import "../../core/widgets/app_buttons.dart";
 import "../../core/widgets/aurora_background.dart";
 import "../../core/widgets/back_link.dart";
 import "../../core/widgets/empty_state.dart";
-import "../../core/widgets/glass_card.dart";
+import "../../core/widgets/app_search_field.dart";
 import "../../core/widgets/page_header.dart";
 import "../../core/widgets/desktop_content.dart";
 import "../../core/widgets/song_list_tile.dart";
+import "../../core/widgets/cover_placeholder.dart";
 import "../../data/local_audio_importer.dart";
 import "../../data/local_audio_scanner.dart";
 import "../../data/models/playlist.dart";
@@ -39,9 +40,13 @@ import "playlists_provider.dart"
         localCountProvider,
         playlistDetailTracksProvider,
         playlistsProvider,
+        playlistInfoProvider,
         queueEntriesProvider;
 import "scan_failures_dialog.dart";
 import "track_edit_dialog.dart";
+import "playlist_edit_dialog.dart";
+import "batch_rename_page.dart";
+import "batch_track_edit_page.dart";
 
 /// 歌单详情（对齐原型 renderSub/playlist）
 /// 两种数据模式：
@@ -88,6 +93,29 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
   bool get _isLocal => widget.playlist.id == "builtin:local";
 
   bool get _isLiked => widget.playlist.id == "builtin:liked";
+
+  void _openBatchEdit(List<Track>? tracks, BatchTrackEditMode mode) {
+    if (tracks == null || tracks.isEmpty) return;
+    Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => mode == BatchTrackEditMode.rename
+            ? BatchRenamePage(tracks: List.of(tracks))
+            : BatchTrackEditPage(tracks: List.of(tracks), mode: mode)));
+  }
+
+  List<AppSheetAction> _batchActions(List<Track>? tracks) => [
+    AppSheetAction(icon: Icons.drive_file_rename_outline, label: "批量重命名",
+        onTap: () => _openBatchEdit(tracks, BatchTrackEditMode.rename)),
+    AppSheetAction(icon: Icons.person_outline, label: "批量设置歌手",
+        onTap: () => _openBatchEdit(tracks, BatchTrackEditMode.author)),
+    AppSheetAction(icon: Icons.image_outlined, label: "批量设置封面",
+        onTap: () => _openBatchEdit(tracks, BatchTrackEditMode.cover)),
+  ];
+
+  Widget _batchEditButton(List<Track>? tracks) => Tooltip(message: "批量编辑",
+    child: GlassIconButton(key: const Key("batch_rename_entry"),
+        icon: const Icon(Icons.drive_file_rename_outline),
+        onTap: tracks == null || tracks.isEmpty || _scanning ? null
+            : () => AppSheet.show(context, title: "批量编辑", actions: _batchActions(tracks))));
 
   @override
   void dispose() {
@@ -358,6 +386,10 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
   @override
   Widget build(BuildContext context) {
     final t = AuroraTokens.of(context);
+    final custom = widget.tracks == null && widget.playlist.type == PlaylistType.custom;
+    final playlist = custom
+        ? ref.watch(playlistInfoProvider(widget.playlist.id)).value ?? widget.playlist
+        : widget.playlist;
     final currentTrackId = ref.watch(
       playbackProvider.select((s) => s.track?.id),
     );
@@ -414,7 +446,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                           child: BackLink(),
                         ),
                         PageHeader(
-                          title: widget.playlist.name,
+                          title: playlist.name,
                           subtitle: _isLocal && DesktopContent.of(context)
                               ? "${ref.watch(localLibraryDirectoriesProvider).length} 个扫描目录"
                               : null,
@@ -424,6 +456,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                               ? Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
+                                    _batchEditButton(tracks),
                                     if (DesktopContent.of(context))
                                       GlassIconButton(
                                           icon: const Icon(
@@ -452,6 +485,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                   ? Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
+                                        _batchEditButton(tracks),
                                         GlassIconButton(
                                           // 清除全部：二次确认后清空喜欢标记
                                           icon: const Icon(
@@ -477,14 +511,27 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                         ),
                                       ],
                                     )
-                                  : null,
+                                  : custom ? GlassIconButton(key: const Key("custom_playlist_more"),
+                                      icon: const Icon(Icons.more_horiz),
+                                      onTap: () => AppSheet.show(context, title: playlist.name, actions: [
+                                        AppSheetAction(icon: Icons.edit_outlined, label: "编辑信息",
+                                            onTap: () => showPlaylistEditDialog(context, ref, playlist)),
+                                        if (tracks?.isNotEmpty == true) ..._batchActions(tracks),
+                                      ])) : null,
                         ),
+                        if (custom) Padding(padding: const EdgeInsets.only(top: 14),
+                            child: Row(children: [
+                              CoverPlaceholder(cover: playlist.cover, text: playlist.name, size: 64, radius: t.radiusMd),
+                              const SizedBox(width: 14),
+                              Text("${raw?.length ?? playlist.count} 首歌曲", style: TextStyle(color: t.fgDim)),
+                            ])),
                         // 喜欢列表有内容时同样提供搜索（空库交给空态引导）
                         if (_isLocal ||
                             (_isLiked && raw != null && raw.isNotEmpty)) ...[
                           const SizedBox(height: 12),
-                          _TrackSearchField(
+                          AppSearchField(
                             controller: _searchController,
+                            hintText: "搜索歌曲 / 歌手",
                             onChanged: (v) => setState(() => _query = v),
                           ),
                         ],
@@ -679,58 +726,6 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// 歌曲搜索框（本地/喜欢列表共用；玻璃底对齐广场搜索入口，
-/// 实时过滤，清除钮只在有字时出现）
-class _TrackSearchField extends StatelessWidget {
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-
-  const _TrackSearchField({required this.controller, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AuroraTokens.of(context);
-    return GlassCard(
-      frosted: true,
-      radius: t.radiusMd,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: [
-          Icon(Icons.search, size: 20, color: t.primary),
-          const SizedBox(width: 10),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              onChanged: onChanged,
-              style: TextStyle(fontSize: 14, color: t.fg),
-              decoration: InputDecoration(
-                hintText: "搜索歌曲 / 歌手",
-                hintStyle: TextStyle(fontSize: 14, color: t.fgMute),
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-            ),
-          ),
-          ValueListenableBuilder<TextEditingValue>(
-            valueListenable: controller,
-            builder: (_, value, __) => value.text.isEmpty
-                ? const SizedBox.shrink()
-                : IconButton(
-                    visualDensity: VisualDensity.compact,
-                    icon: Icon(Icons.cancel, size: 18, color: t.fgMute),
-                    onPressed: () {
-                      controller.clear();
-                      onChanged("");
-                    },
-                  ),
-          ),
-        ],
       ),
     );
   }
