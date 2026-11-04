@@ -54,6 +54,7 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
     final currentTrackId = ref.watch(
       playbackProvider.select((s) => s.track?.id),
     );
+    final playingNow = ref.watch(playbackProvider.select((s) => s.playing));
     // 仅「加载完成且无错且为空」才显示覆盖空态（加载/错误走列表流内）
     final doneEmpty = !doneAsync.isLoading &&
         !doneAsync.hasError &&
@@ -106,7 +107,7 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
                         padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
                         children: [
                           if (_tab == _DownloadTab.done)
-                            _buildDone(doneAsync, currentTrackId)
+                            _buildDone(doneAsync, currentTrackId, playingNow)
                           else
                             _buildActive(active),
                         ],
@@ -145,7 +146,8 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
     );
   }
 
-  Widget _buildDone(AsyncValue<List<Track>> doneAsync, String? currentTrackId) {
+  Widget _buildDone(
+      AsyncValue<List<Track>> doneAsync, String? currentTrackId, bool playing) {
     return doneAsync.when(
       loading: () => const SkeletonListView(rows: 4),
       error: (e, _) => EmptyState(
@@ -167,6 +169,7 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
                   SongListTile(
                     track: track,
                     playing: track.id == currentTrackId,
+                    paused: !playing,
                     onTap: () => PlayerCardPage.start(
                       context,
                       ref,
@@ -195,7 +198,6 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
   void _showDoneActions(Track track) {
     AppSheet.show(
       context,
-      title: track.effectiveName,
       actions: [
         if (Platform.isWindows && track.localPath != null)
           AppSheetAction(

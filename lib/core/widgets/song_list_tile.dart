@@ -16,6 +16,9 @@ import "desktop_content.dart";
 class SongListTile extends StatelessWidget {
   final Track track;
   final bool playing;
+
+  /// 播放器处于暂停态：播放行波浪停帧（由调用方从播放状态透传）
+  final bool paused;
   final VoidCallback? onTap;
   final VoidCallback? onMorePressed;
   final bool showOriginTag;
@@ -27,6 +30,7 @@ class SongListTile extends StatelessWidget {
     super.key,
     required this.track,
     this.playing = false,
+    this.paused = false,
     this.onTap,
     this.onMorePressed,
     this.showOriginTag = true,
@@ -59,7 +63,7 @@ class SongListTile extends StatelessWidget {
                 if (showOriginTag) SizedBox(width: 62, child: Align(alignment: Alignment.centerLeft, child: OriginTag(origin: track.origin))),
                 SizedBox(width: 46, child: Text(track.duration == null ? "—" : "${track.duration! ~/ 60}:${(track.duration! % 60).toString().padLeft(2, "0")}", style: TextStyle(fontSize: 11, color: t.fgMute))),
               ],
-              if (playing) const Padding(padding: EdgeInsets.only(right: 10), child: EqBars()),
+              if (playing) Padding(padding: const EdgeInsets.only(right: 10), child: EqBars(paused: paused)),
               if (likedHeart != null) IconButton(tooltip: likedHeart! ? "取消喜欢" : "喜欢", visualDensity: VisualDensity.compact, iconSize: 18, onPressed: onHeartTap == null ? null : () => onHeartTap!(!likedHeart!), icon: Icon(likedHeart! ? Icons.favorite : Icons.favorite_border, color: likedHeart! ? t.primary : t.fgMute)),
               IconButton(tooltip: "更多操作", visualDensity: VisualDensity.compact, iconSize: 18, onPressed: onMorePressed, icon: Icon(Icons.more_horiz, color: t.fgMute)),
             ]),
@@ -133,7 +137,7 @@ class SongListTile extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (playing) ...[
-                    const EqBars(),
+                    EqBars(paused: paused),
                     const SizedBox(width: 7),
                   ],
                   if (likedHeart != null)

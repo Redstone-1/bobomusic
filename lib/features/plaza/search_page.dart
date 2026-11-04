@@ -493,7 +493,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     }
     AppSheet.show(
       context,
-      title: item.name,
       actions: [
         AppSheetAction(
           icon: Icons.playlist_add,
@@ -533,7 +532,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   void _showTrackActions(Track track) {
     AppSheet.show(
       context,
-      title: track.name,
       actions: [
         AppSheetAction(
           icon: Icons.library_add_outlined,
@@ -577,6 +575,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final currentTrackId = ref.watch(
       playbackProvider.select((s) => s.track?.id),
     );
+    final playingNow = ref.watch(playbackProvider.select((s) => s.playing));
     final queryEmpty = _controller.text.trim().isEmpty;
     // 聚焦且无关键词且历史非空 → 展示历史面板（否则走空态覆盖层）
     final desktop = DesktopContent.of(context);
@@ -796,6 +795,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                                           track: track,
                                           playing:
                                               track.id == currentTrackId,
+                                          paused: !playingNow,
                                           // 波浪左侧快速收藏心形（真机反馈要求）：
                                           // 初始态取库内喜欢集合，点击后本地覆盖即时变化
                                           likedHeart:

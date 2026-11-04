@@ -67,7 +67,6 @@ class PlaybackQueuePanelState extends ConsumerState<PlaybackQueuePanel> {
   void _pendingActions(QueueEntry entry) {
     AppSheet.show(
       context,
-      title: entry.track.effectiveName,
       actions: [
         AppSheetAction(
           icon: Icons.edit_outlined,
@@ -99,7 +98,6 @@ class PlaybackQueuePanelState extends ConsumerState<PlaybackQueuePanel> {
     final currentIndex = ref.read(playbackProvider).queueIndex;
     AppSheet.show(
       context,
-      title: track.effectiveName,
       actions: [
         AppSheetAction(
           icon: Icons.edit_outlined,
@@ -134,11 +132,12 @@ class PlaybackQueuePanelState extends ConsumerState<PlaybackQueuePanel> {
 
   @override
   Widget build(BuildContext context) {
-    // 进度和倍速不影响列表，只订阅会话结构和当前曲目。
+    // 进度和倍速不影响列表，只订阅会话结构、当前曲目与播放态。
     final session = ref.watch(playbackProvider.select((state) => (
           queue: state.queue,
           index: state.queueIndex,
           trackId: state.track?.id,
+          playing: state.playing,
         )));
     final pending = ref.watch(queueEntriesProvider);
     final entries = pending.value;
@@ -188,13 +187,14 @@ class PlaybackQueuePanelState extends ConsumerState<PlaybackQueuePanel> {
                   const _QueueMessage("暂无待播放歌曲")
                 else
                   for (final entry in entries)
-                    _pendingTile(entry, session.trackId),
+                    _pendingTile(entry, session.trackId, session.playing),
                 _QueueSectionHeader("播放队列 · $count 首"),
                 for (final (index, track) in session.queue.indexed)
                   SongListTile(
                     key: ValueKey("session_$index"),
                     track: track,
                     playing: index == session.index,
+                    paused: !session.playing,
                     onTap: _busy
                         ? null
                         : () => _play(
@@ -213,12 +213,13 @@ class PlaybackQueuePanelState extends ConsumerState<PlaybackQueuePanel> {
     );
   }
 
-  Widget _pendingTile(QueueEntry entry, String? currentTrackId) {
+  Widget _pendingTile(QueueEntry entry, String? currentTrackId, bool playing) {
     final id = entry.id;
     return SongListTile(
       key: ValueKey("pending_$id"),
       track: entry.track,
       playing: entry.track.id == currentTrackId,
+      paused: !playing,
       onTap: _busy
           ? null
           : () => _play((playback) => playback.playQueuedEntry(entry.id)),

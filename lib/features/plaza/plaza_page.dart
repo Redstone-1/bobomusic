@@ -144,6 +144,7 @@ class _ChartListViewState extends ConsumerState<_ChartListView>
     final currentTrackId = ref.watch(
       playbackProvider.select((s) => s.track?.id),
     );
+    final playingNow = ref.watch(playbackProvider.select((s) => s.playing));
     final vipLimitedIds = ref.watch(vipLimitedTrackIdsProvider);
 
     return ListView(
@@ -177,6 +178,7 @@ class _ChartListViewState extends ConsumerState<_ChartListView>
                         hit: hit,
                         playing: currentTrackId != null &&
                             hit.item?.id == currentTrackId,
+                        paused: !playingNow,
                         vipLimited: hit.item != null &&
                             vipLimitedIds.contains(hit.item!.id),
                         onTap: () => _playHit(hit),
@@ -217,6 +219,7 @@ class _ChartSongRow extends StatelessWidget {
   final int rank;
   final ChartHit hit;
   final bool playing;
+  final bool paused;
   final bool vipLimited;
   final VoidCallback onTap;
 
@@ -224,6 +227,7 @@ class _ChartSongRow extends StatelessWidget {
     required this.rank,
     required this.hit,
     required this.playing,
+    required this.paused,
     required this.vipLimited,
     required this.onTap,
   });
@@ -306,7 +310,7 @@ class _ChartSongRow extends StatelessWidget {
                   ),
                 ),
               ),
-            if (playing) const EqBars(),
+            if (playing) EqBars(paused: paused),
           ],
         ),
       ),

@@ -7,11 +7,13 @@ import "../theme/aurora_tokens.dart";
 
 /// 播放中均衡器动效（原型 .eq：3 柱，0.9s 往复，相位差 .15s/.35s）
 /// 列表行「正在播放」标识，播放页也可复用
+/// [paused] 为真时停帧：保留当前波形静止显示，恢复播放后从停帧处继续
 class EqBars extends StatefulWidget {
   final Color? color;
   final double height;
+  final bool paused;
 
-  const EqBars({super.key, this.color, this.height = 14});
+  const EqBars({super.key, this.color, this.height = 14, this.paused = false});
 
   @override
   State<EqBars> createState() => _EqBarsState();
@@ -25,7 +27,19 @@ class _EqBarsState extends State<EqBars> with SingleTickerProviderStateMixin {
   void initState() {
     super.initState();
     _ticker =
-        createTicker((e) => _elapsed.value = e.inMicroseconds / 1e6)..start();
+        createTicker((e) => _elapsed.value = e.inMicroseconds / 1e6);
+    if (!widget.paused) _ticker.start();
+  }
+
+  @override
+  void didUpdateWidget(EqBars oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.paused == widget.paused) return;
+    if (widget.paused) {
+      _ticker.stop();
+    } else if (!_ticker.isActive) {
+      _ticker.start();
+    }
   }
 
   @override
