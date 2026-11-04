@@ -4,6 +4,7 @@ import "package:path/path.dart" as p;
 import "../db/app_database.dart";
 
 import "../models/track.dart";
+import "../models/track_display_edit.dart";
 
 /// 曲目实体仓库（§3.2）：曲目 CRUD / 喜欢 / 歌词 / 下载登记
 /// 读返回 UI 形状的 [Track]（liked = liked_at 非空）；upsert 保留 liked/downloaded/created
@@ -273,6 +274,60 @@ class TrackRepository {
       where: "id = ?",
       whereArgs: [id],
     );
+  }
+
+  /// 批量编辑保持原始元数据不变；任一条目失效则整批回滚。
+  /// 返回仅含本次涉及字段的反向操作，用于恢复操作前的自定义值。
+  Future<List<TrackDisplayEdit>> updateDisplayBatch(
+    List<TrackDisplayEdit> edits,
+  ) => db.transaction((txn) => updateDisplayBatchInTransaction(txn, edits));
+
+  /// 歌单名称、封面及成员封面需要在同一事务中保存。
+  Future<List<TrackDisplayEdit>> updateDisplayBatchInTransaction(
+    Transaction txn,
+    List<TrackDisplayEdit> edits,
+  ) async {
+    final undo = <TrackDisplayEdit>[];
+    final seen = <String>{};
+    String? normalize(String? value) {
+      final text = value?.trim() ?? "";
+      return text.isEmpty ? null : text;
+    }
+    for (final edit in edits) {
+      if (!seen.add(edit.trackId)) throw StateError("同一歌曲不能重复编辑");
+      final rows = await txn.query("tracks", where: "id = ?", whereArgs: [edit.trackId]);
+      if (rows.isEmpty) throw StateError("歌曲列表已变化，请重新打开预览");
+      final previous = _fromRow(rows.single);
+      final expected = edit.expected;
+      if (expected != null &&
+          ((edit.updateName && (previous.displayName != expected.displayName || previous.effectiveName != expected.effectiveName)) ||
+           (edit.updateAuthor && (previous.displayAuthor != expected.displayAuthor || previous.effectiveAuthor != expected.effectiveAuthor)) ||
+           (edit.updateCover && (previous.displayCover != expected.displayCover || previous.effectiveCover != expected.effectiveCover)))) {
+        throw StateError("歌曲信息已变化，请重新打开预览");
+      }
+      // 不变项也必须先通过事务内的快照校验，防止漏掉预览后的修改或删除。
+      if (edit.validateOnly) continue;
+      final values = <String, Object?>{
+        if (edit.updateName) "display_name": normalize(edit.name),
+        if (edit.updateAuthor) "display_author": normalize(edit.author),
+        if (edit.updateCover) "display_cover": normalize(edit.cover),
+      };
+      if (values.isEmpty) continue;
+      final updated = _fromRow({...rows.single, ...values});
+      undo.add(TrackDisplayEdit(
+        trackId: edit.trackId,
+        name: previous.displayName,
+        author: previous.displayAuthor,
+        cover: previous.displayCover,
+        updateName: edit.updateName,
+        updateAuthor: edit.updateAuthor,
+        updateCover: edit.updateCover,
+        expected: updated,
+      ));
+      await txn.update("tracks", {...values, "updated_at": DateTime.now().millisecondsSinceEpoch},
+          where: "id = ?", whereArgs: [edit.trackId]);
+    }
+    return undo;
   }
 
   /// 下载登记（§3.4-8：localPath 登记到原 track，同身份可离线）

@@ -2,8 +2,22 @@ import "dart:io";
 
 import "package:bobomusic/data/db/app_database.dart";
 import "package:bobomusic/data/repositories/track_repository.dart";
+import "package:bobomusic/data/models/track.dart";
+import "package:bobomusic/data/repositories/playlist_repository.dart";
+import "package:bobomusic/data/repositories/queue_repository.dart";
+import "package:bobomusic/data/repositories/history_repository.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:sqflite_common_ffi/sqflite_ffi.dart";
+
+Future<void> _createLegacyPlaylists(Database db) => db.execute("""
+  CREATE TABLE playlists (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    type TEXT NOT NULL,
+    sort_index INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+  )
+""");
 
 /// v3 → v4 升级迁移：清除收藏合集歌单（功能已删除，条目随外键级联清理），
 /// 自定义歌单及其曲目不受影响
@@ -11,6 +25,113 @@ void main() {
   setUpAll(() {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
+  });
+
+  test("v6 升级 v7 完整保留五表数据、顺序、唯一性及外键级联", () async {
+    final dir = await Directory.systemTemp.createTemp("bobomusic_upgrade7");
+    final dbPath = "${dir.path}/upgrade.db";
+    addTearDown(() async {
+      await appDb.close();
+      await dir.delete(recursive: true);
+    });
+    await initAppDatabase(path: dbPath);
+    await TrackRepository().upsert(const Track(
+        id: "a",
+        name: "原名",
+        author: "原歌手",
+        duration: 210,
+        cover: "https://origin/a.jpg",
+        lyric: "原歌词"));
+    await TrackRepository().upsert(const Track(
+        id: "b",
+        name: "本地歌曲",
+        author: "本地歌手",
+        origin: OriginType.local,
+        duration: 180,
+        localPath: "local/b.mp3",
+        lyric: "本地歌词"));
+    await TrackRepository().setLiked("a", true);
+    await TrackRepository().markDownloaded("a", "downloads/a.m4a");
+    await TrackRepository().updateLyricOffset("a", 1250);
+    await TrackRepository().updateDisplayInfo("a",
+        name: "自定义名", author: "自定义歌手", cover: "https://old/a.jpg");
+    final p = await PlaylistRepository().create("旧歌单");
+    final second = await PlaylistRepository().create("另一歌单");
+    await PlaylistRepository().addTrack(p.id, "b");
+    await PlaylistRepository().addTrack(p.id, "a");
+    await PlaylistRepository().addTrack(second.id, "a");
+    await QueueRepository().replaceAll(["a", "b", "a"]);
+    await HistoryRepository().record("a", at: DateTime.utc(2025, 1, 1));
+    await HistoryRepository().record("b", at: DateTime.utc(2025, 1, 2));
+    // 回到真实 v6 的列形状及版本，再使用应用入口验证升级。
+    await appDb.execute("ALTER TABLE playlists DROP COLUMN custom_cover");
+    await appDb.setVersion(6);
+    // 比较所有旧字段，避免只检查显示名而遗漏喜欢、下载、歌词、条目主键或顺序。
+    final before = <String, List<Map<String, Object?>>>{};
+    const tables = {
+      "tracks": "id",
+      "playlists": "id",
+      "playlist_items": "id",
+      "queue": "id",
+      "play_history": "track_id"
+    };
+    for (final entry in tables.entries) {
+      before[entry.key] = await appDb.query(entry.key, orderBy: entry.value);
+    }
+    await appDb.close();
+    await initAppDatabase(path: dbPath);
+    expect(await appDb.getVersion(), 7);
+    for (final entry in tables.entries) {
+      final expected = [
+        for (final row in before[entry.key]!)
+          {...row, if (entry.key == "playlists") "custom_cover": null}
+      ];
+      expect(await appDb.query(entry.key, orderBy: entry.value), expected,
+          reason: "${entry.key} 迁移后旧数据必须完整");
+    }
+    expect(
+        (await appDb.rawQuery("PRAGMA foreign_keys")).single.values.single, 1);
+    expect(await appDb.rawQuery("PRAGMA foreign_key_check"), isEmpty);
+    expect((await PlaylistRepository().getById(p.id))!.customCover, isNull);
+    expect(
+        (await PlaylistRepository().items(p.id)).map((t) => t.id), ["b", "a"]);
+    final track = (await TrackRepository().getById("a"))!;
+    expect(track.effectiveName, "自定义名");
+    expect(track.effectiveAuthor, "自定义歌手");
+    expect(track.lyricOffsetMs, 1250);
+    expect(track.lyric, "原歌词");
+    expect(track.localPath, "downloads/a.m4a");
+    expect((await TrackRepository().likedTracks()).map((t) => t.id), ["a"]);
+    expect(
+        (await TrackRepository().downloadedTracks()).map((t) => t.id), ["a"]);
+    expect((await QueueRepository().all()).map((t) => t.id), ["a", "b", "a"]);
+    expect((await HistoryRepository().recent()).map((t) => t.id), ["b", "a"]);
+    expect(
+        (await PlaylistRepository().getById(p.id))!.cover, "https://old/a.jpg");
+    await expectLater(
+        PlaylistRepository().create("旧歌单"), throwsA(isA<DatabaseException>()));
+    expect(await PlaylistRepository().addTrack(p.id, "a"), isFalse);
+    await expectLater(PlaylistRepository().addTrack(p.id, "missing"),
+        throwsA(isA<DatabaseException>()));
+    await PlaylistRepository()
+        .updateInfo(p.id, name: "旧歌单", customCover: "https://new/p.jpg");
+    await appDb.close();
+    await initAppDatabase(path: dbPath);
+    expect(
+        (await PlaylistRepository().getById(p.id))!.cover, "https://new/p.jpg");
+    expect((await QueueRepository().all()).map((t) => t.id), ["a", "b", "a"]);
+    await PlaylistRepository().delete(int.parse(second.id));
+    expect(
+        await appDb.query("playlist_items",
+            where: "playlist_id = ?", whereArgs: [int.parse(second.id)]),
+        isEmpty);
+    expect(await TrackRepository().getById("a"), isNotNull);
+    // ALTER TABLE 后仍保留曲目到成员、队列和历史三条级联关系。
+    await appDb.delete("tracks", where: "id = ?", whereArgs: ["a"]);
+    expect((await PlaylistRepository().items(p.id)).map((t) => t.id), ["b"]);
+    expect((await QueueRepository().all()).map((t) => t.id), ["b"]);
+    expect((await HistoryRepository().recent()).map((t) => t.id), ["b"]);
+    expect(await appDb.rawQuery("PRAGMA foreign_key_check"), isEmpty);
   });
 
   test("v3 旧库升级 v4：collection 歌单及条目清除，custom 歌单保留", () async {
@@ -125,6 +246,7 @@ void main() {
       options: OpenDatabaseOptions(
         version: 4,
         onCreate: (db, _) async {
+          await _createLegacyPlaylists(db);
           await db.execute("""
             CREATE TABLE tracks (
               id TEXT PRIMARY KEY,
@@ -180,6 +302,7 @@ void main() {
       options: OpenDatabaseOptions(
         version: 5,
         onCreate: (db, _) async {
+          await _createLegacyPlaylists(db);
           await db.execute("""
             CREATE TABLE tracks (
               id TEXT PRIMARY KEY,

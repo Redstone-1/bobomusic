@@ -15,15 +15,21 @@ class Playlist {
   final String name;
   final PlaylistType type;
   final int count; // mock 用：曲目数（真数据由 playlist_items 聚合）
-  final String? cover;
+  final String? _cover;
+  final String? customCover;
+
+  /// 独立封面优先；未设置时使用成员首张有效封面。
+  String? get cover => customCover ?? _cover;
+  String? get fallbackCover => _cover;
 
   const Playlist({
     required this.id,
     required this.name,
     required this.type,
     this.count = 0,
-    this.cover,
-  });
+    String? cover,
+    this.customCover,
+  }) : _cover = cover;
 
   /// 相等性按 id（family provider 参数缓存与刷新依赖它）
   @override

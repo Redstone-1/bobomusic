@@ -11,7 +11,7 @@ late Database appDb;
 Future<void> initAppDatabase({String? path}) async {
   appDb = await openDatabase(
     path ?? "bobomusic3.db",
-    version: 6,
+    version: 7,
     singleInstance: false,
     onConfigure: (db) async {
       // 级联删除依赖外键开关（sqflite 默认关闭）
@@ -27,6 +27,7 @@ Future<void> initAppDatabase({String? path}) async {
 /// v3 → v4：清除收藏合集歌单（功能已删除，playlist_items 由外键级联清理）
 /// v4 → v5：曲目显示用歌名/歌手覆盖（B 站等音源标题可编辑，null = 未改）
 /// v5 → v6：曲目显示用封面覆盖（可编辑封面 URL，null = 未改，原始 cover 保留）
+/// v6 → v7：自定义歌单独立封面，旧歌单继续回退到成员封面
 Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
   if (oldVersion < 2) {
     await db.execute(
@@ -53,6 +54,9 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
   }
   if (oldVersion < 6) {
     await db.execute("ALTER TABLE tracks ADD COLUMN display_cover TEXT");
+  }
+  if (oldVersion < 7) {
+    await db.execute("ALTER TABLE playlists ADD COLUMN custom_cover TEXT");
   }
 }
 
@@ -82,6 +86,7 @@ Future<void> _onCreate(Database db, int _) async {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
       type TEXT NOT NULL,
+      custom_cover TEXT,
       sort_index INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     )

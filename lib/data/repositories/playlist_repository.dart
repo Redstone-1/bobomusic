@@ -4,6 +4,8 @@ import "../db/app_database.dart";
 
 import "../models/playlist.dart";
 import "../models/track.dart";
+import "../models/track_display_edit.dart";
+import "track_repository.dart";
 
 /// 歌单仓库（§3.2）：歌单元数据 + 成员关系（普通歌单禁止重复，§3.4-6）
 class PlaylistRepository {
@@ -18,6 +20,7 @@ class PlaylistRepository {
         type: PlaylistType.values.byName(row["type"] as String),
         count: (row["track_count"] as int?) ?? 0,
         cover: row["cover"] as String?,
+        customCover: row["custom_cover"] as String?,
       );
 
   /// 新建歌单（名称唯一，重复抛异常由 UI 提示）；返回带 id 的歌单
@@ -48,13 +51,61 @@ class PlaylistRepository {
     );
   }
 
+  /// 批量应用是本次保存的快照操作，后来加入的歌曲不会绑定歌单封面。
+  Future<List<String>> updateInfo(String id, {
+    required String name,
+    String? customCover,
+    bool applyCoverToTracks = false,
+  }) async {
+    final cover = customCover?.trim();
+    if (applyCoverToTracks && (cover == null || cover.isEmpty)) {
+      throw ArgumentError("请先设置歌单封面");
+    }
+    return db.transaction((txn) async {
+      final updated = await txn.update("playlists", {
+        "name": name.trim(),
+        "custom_cover": cover == null || cover.isEmpty ? null : cover,
+      }, where: "id = ? AND type = ?", whereArgs: [int.parse(id), PlaylistType.custom.name]);
+      if (updated != 1) throw StateError("歌单已不存在");
+      if (applyCoverToTracks) {
+        final members = await txn.query("playlist_items", columns: ["track_id"],
+            where: "playlist_id = ?", whereArgs: [int.parse(id)]);
+        await TrackRepository().updateDisplayBatchInTransaction(txn, [
+          for (final row in members) TrackDisplayEdit(
+            trackId: row["track_id"] as String, cover: cover, updateCover: true),
+        ]);
+        return [for (final row in members) row["track_id"] as String];
+      }
+      return <String>[];
+    });
+  }
+
+  /// 图片只有在所有歌单和歌曲都不再引用时才允许清理。
+  Future<bool> isCoverReferenced(String cover) async {
+    final rows = await db.rawQuery("""
+      SELECT 1 FROM playlists WHERE custom_cover = ?
+      UNION ALL SELECT 1 FROM tracks WHERE display_cover = ? OR cover = ?
+      LIMIT 1
+    """, [cover, cover, cover]);
+    return rows.isNotEmpty;
+  }
+
   /// 删除歌单（成员关系级联，曲目本体保留）
   Future<void> delete(int id) async =>
       db.delete("playlists", where: "id = ?", whereArgs: [id]);
 
   /// 歌单目录（含曲目计数）
   Future<List<Playlist>> list() async {
-    final rows = await db.rawQuery("""
+    final rows = await db.rawQuery("$_select ORDER BY p.sort_index, p.created_at", [""]);
+    return [for (final r in rows) _fromRow(r)];
+  }
+
+  Future<Playlist?> getById(String id) async {
+    final rows = await db.rawQuery("$_select WHERE p.id = ?", ["", int.parse(id)]);
+    return rows.isEmpty ? null : _fromRow(rows.single);
+  }
+
+  static const _select = """
       SELECT p.*, (
         SELECT COUNT(*) FROM playlist_items i WHERE i.playlist_id = p.id
       ) AS track_count, (
@@ -66,10 +117,7 @@ class PlaylistRepository {
         ORDER BY i.sort_index LIMIT 1
       ) AS cover
       FROM playlists p
-      ORDER BY p.sort_index, p.created_at
-    """, [""]);
-    return [for (final r in rows) _fromRow(r)];
-  }
+    """;
 
   /// 歌单内曲目（按成员排序）
   Future<List<Track>> items(String playlistId) async {
