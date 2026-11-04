@@ -104,7 +104,6 @@ void main() {
 
     AppSheet.show(
       buildContext,
-      title: "夜航西飞",
       actions: [
         AppSheetAction(
           icon: Icons.queue_music_outlined,

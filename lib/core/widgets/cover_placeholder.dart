@@ -21,6 +21,10 @@ class CoverPlaceholder extends StatelessWidget {
   /// 占位首字（真实封面加载中/失败时也不留白）
   final String? text;
   final double size;
+
+  /// 非方形封面（如弹窗全宽头部）单独指定宽高，缺省回退 [size] 方形
+  final double? width;
+  final double? height;
   final double radius;
 
   const CoverPlaceholder({
@@ -28,8 +32,13 @@ class CoverPlaceholder extends StatelessWidget {
     this.cover,
     this.text,
     this.size = 48,
+    this.width,
+    this.height,
     this.radius = 12,
   });
+
+  double get _width => width ?? size;
+  double get _height => height ?? size;
 
   @override
   Widget build(BuildContext context) {
@@ -39,8 +48,8 @@ class CoverPlaceholder extends StatelessWidget {
     // 纯色占位：主题色 + 透明度（亮色淡雅融合底色，暗色稍实保证可见）
     // 首字用主题色（亮）/高亮白（暗），与底同源不抢内容
     final fallback = Container(
-      width: size,
-      height: size,
+      width: _width,
+      height: _height,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
@@ -68,7 +77,7 @@ class CoverPlaceholder extends StatelessWidget {
     if (localUri?.scheme == "file") {
       return ClipRRect(
         borderRadius: BorderRadius.circular(radius),
-        child: Image.file(File.fromUri(localUri!), width: size, height: size,
+        child: Image.file(File.fromUri(localUri!), width: _width, height: _height,
             fit: BoxFit.cover, errorBuilder: (context, error, stack) => fallback),
       );
     }

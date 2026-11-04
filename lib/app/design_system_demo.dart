@@ -201,7 +201,6 @@ class _DesignSystemDemoState extends ConsumerState<DesignSystemDemo> {
                     label: "歌曲操作",
                     onTap: () => AppSheet.show(
                       context,
-                      title: "夜航西飞",
                       actions: [
                         AppSheetAction(
                           icon: Icons.queue_music_outlined,

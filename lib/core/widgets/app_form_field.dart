@@ -53,6 +53,7 @@ class AppFormField extends StatelessWidget {
     this.autofocus = false,
     this.autovalidateMode = AutovalidateMode.disabled,
     this.keyboardType,
+    this.suffix,
   }) : assert(controller == null || initialValue == null);
 
   final TextEditingController? controller;
@@ -67,6 +68,9 @@ class AppFormField extends StatelessWidget {
   final AutovalidateMode autovalidateMode;
   final TextInputType? keyboardType;
 
+  /// 输入框内右侧的操作位（如从设备选图的图标按钮）
+  final Widget? suffix;
+
   @override
   Widget build(BuildContext context) => TextFormField(
         controller: controller,
@@ -78,17 +82,17 @@ class AppFormField extends StatelessWidget {
         autovalidateMode: autovalidateMode,
         keyboardType: keyboardType,
         style: TextStyle(fontSize: 14.5, color: AuroraTokens.of(context).fg),
-        decoration:
-            _decoration(context, label: label, hint: hint, helper: helper),
+        decoration: _decoration(context,
+            label: label, hint: hint, helper: helper, suffix: suffix),
       );
 }
 
 /// 选择操作使用同一表单外观，由调用方打开应用统一选项面板。
+/// [label] 为空时不显示浮标，仅展示当前值。
 class AppSelectionField extends StatelessWidget {
-  const AppSelectionField(
-      {super.key, required this.label, required this.value, this.onTap});
+  const AppSelectionField({super.key, this.label, required this.value, this.onTap});
 
-  final String label;
+  final String? label;
   final String value;
   final VoidCallback? onTap;
 

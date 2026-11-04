@@ -27,7 +27,6 @@ Future<void> showAddToPlaylistSheet(
   }
   AppSheet.show(
     context,
-    title: "加入歌单",
     actions: [
       for (final playlist in playlists)
         AppSheetAction(

@@ -48,7 +48,7 @@ void openPlaylist(BuildContext context, WidgetRef ref, Playlist playlist) {
 
 /// 首页和全部歌单页共用菜单，编辑与删除的行为始终一致。
 void showPlaylistActions(BuildContext context, WidgetRef ref, Playlist playlist) {
-  AppSheet.show(context, title: playlist.name, actions: [
+  AppSheet.show(context, actions: [
     AppSheetAction(icon: Icons.edit_outlined, label: "编辑信息",
         onTap: () => showPlaylistEditDialog(context, ref, playlist)),
     AppSheetAction(icon: Icons.delete_outline, label: "删除歌单", danger: true,

@@ -385,7 +385,6 @@ class _TopBar extends ConsumerWidget {
     final track = state.track;
     AppSheet.show(
       context,
-      title: "更多",
       actions: [
         if (track != null) ...[
           AppSheetAction(
@@ -1043,7 +1042,6 @@ class _PlayerLyricToolsState extends ConsumerState<PlayerLyricTools> {
   void _showCandidates(Track track, List<LyricCandidate> candidates) {
     AppSheet.show(
       context,
-      title: "选择歌词 · ${candidates.length} 条",
       actions: [
         for (final candidate in candidates.take(8))
           AppSheetAction(
@@ -1119,83 +1117,39 @@ class _PlayerLyricToolsState extends ConsumerState<PlayerLyricTools> {
   }
 
   /// 歌词工具面板：六项两列三行瓷贴（删除居第三行第二列），弹层高度
-  /// 由七行列表压到三行瓷贴（所有者 2026-11-01 反馈弹层过高难交互；
-  /// 滑杆方案对比后收益不足回退）；文案省略「歌词」前缀，标题已给上下文
+  /// 由七行列表压到瓷贴（所有者 2026-11-01 反馈弹层过高难交互；
+  /// 滑杆方案对比后收益不足回退）；文案省略「歌词」前缀。
+  /// 瓦片样式即全仓 AppSheet 操作网格的标准实现（2026-11-04 定稿）
   void _openTools(Track track) {
-    AppSheet.show(
-      context,
-      title: "歌词设置",
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(22, 2, 22, 0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // 校准方向约定（所有者 2026-11-03 指定）：右箭头 = 提前，
-            // 左箭头 = 延后；与直觉相反，勿按常规语义改回
-            Row(
-              children: [
-                Expanded(
-                  child: _LyricToolTile(
-                    icon: Icons.fast_rewind_outlined,
-                    label: "延后 0.5s",
-                    onTap: () => _adjust(track, 500),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _LyricToolTile(
-                    icon: Icons.fast_forward_outlined,
-                    label: "提前 0.5s",
-                    onTap: () => _adjust(track, -500),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _LyricToolTile(
-                    icon: Icons.fast_rewind,
-                    label: "延后 2s",
-                    onTap: () => _adjust(track, 2000),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _LyricToolTile(
-                    icon: Icons.fast_forward,
-                    label: "提前 2s",
-                    onTap: () => _adjust(track, -2000),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _LyricToolTile(
-                    icon: Icons.search,
-                    label: "搜索替换",
-                    onTap: () => _searchLyrics(track),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _LyricToolTile(
-                    icon: Icons.delete_outline,
-                    label: "删除歌词",
-                    danger: true,
-                    onTap: () => _deleteLyric(track),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
+    // 校准方向约定（所有者 2026-11-03 指定）：右箭头 = 提前，
+    // 左箭头 = 延后；与直觉相反，勿按常规语义改回
+    AppSheet.show(context, actions: [
+      AppSheetAction(
+          icon: Icons.fast_rewind_outlined,
+          label: "延后 0.5s",
+          onTap: () => _adjust(track, 500)),
+      AppSheetAction(
+          icon: Icons.fast_forward_outlined,
+          label: "提前 0.5s",
+          onTap: () => _adjust(track, -500)),
+      AppSheetAction(
+          icon: Icons.fast_rewind,
+          label: "延后 2s",
+          onTap: () => _adjust(track, 2000)),
+      AppSheetAction(
+          icon: Icons.fast_forward,
+          label: "提前 2s",
+          onTap: () => _adjust(track, -2000)),
+      AppSheetAction(
+          icon: Icons.search,
+          label: "搜索替换",
+          onTap: () => _searchLyrics(track)),
+      AppSheetAction(
+          icon: Icons.delete_outline,
+          label: "删除歌词",
+          danger: true,
+          onTap: () => _deleteLyric(track)),
+    ]);
   }
 
   Future<void> _adjust(Track track, int deltaMs) async {
@@ -1249,61 +1203,6 @@ class _PlayerLyricToolsState extends ConsumerState<PlayerLyricTools> {
               ),
             ),
         ],
-      ),
-    );
-  }
-}
-
-/// 歌词工具双列瓷贴（图标 + 文案居中；[danger] 染错误色）：
-/// 点击后先收面板再执行动作，与 AppSheetAction 的收起语义一致
-class _LyricToolTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool danger;
-
-  const _LyricToolTile({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.danger = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AuroraTokens.of(context);
-    final scheme = Theme.of(context).colorScheme;
-    final color = danger ? scheme.error : t.primary;
-    return InkWell(
-      onTap: () {
-        Navigator.of(context).pop();
-        onTap();
-      },
-      borderRadius: BorderRadius.circular(t.radiusMd),
-      splashColor: t.surface2,
-      highlightColor: t.surface,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: t.surface,
-          borderRadius: BorderRadius.circular(t.radiusMd),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, size: 20, color: color),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: danger ? scheme.error : t.fg,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

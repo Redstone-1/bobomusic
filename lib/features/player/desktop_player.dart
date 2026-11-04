@@ -474,7 +474,7 @@ class _DesktopTrackActions extends ConsumerWidget {
                   child: IconButton(
                       tooltip: "更多操作",
                       onPressed: () => AppSheet.show(context,
-                          title: "更多操作", actions: overflow),
+                          actions: overflow),
                       icon: Icon(Icons.more_horiz, color: t.fgDim))),
           ]);
     });

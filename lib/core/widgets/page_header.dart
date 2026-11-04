@@ -53,15 +53,18 @@ class PageHeader extends StatelessWidget {
 }
 
 /// 区块标题行（原型 .sect：左标题 + 右说明）
+/// [count] 为标题后的灰色小字补充（如「共 x 个」），与标题基线对齐；
 /// [onTrailingTap] 非空时右侧说明可点（如「更多」→ 次级页），带按压缩放反馈
 class SectionHeader extends StatelessWidget {
   final String title;
+  final String? count;
   final String? trailing;
   final VoidCallback? onTrailingTap;
 
   const SectionHeader({
     super.key,
     required this.title,
+    this.count,
     this.trailing,
     this.onTrailingTap,
   });
@@ -71,19 +74,36 @@ class SectionHeader extends StatelessWidget {
     final t = AuroraTokens.of(context);
     return Padding(
       padding: const EdgeInsets.only(top: 20, bottom: 12),
+      // 小字按标题中轴垂直居中，而非文字基线：基线对齐会让小字看起来偏上。
+      // 标题组必须包在 Expanded 里吃满整行——若标题用 Flexible 参与 flex 分配，
+      // 它用不掉的份额会堆到行尾，「更多/清空」就会离开右缘（标题越长偏得越多）。
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.2,
-                color: t.fg,
-              ),
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                      color: t.fg,
+                    ),
+                  ),
+                ),
+                if (count != null) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    count!,
+                    style: TextStyle(fontSize: 12, color: t.fgDim),
+                  ),
+                ],
+              ],
             ),
           ),
           if (trailing != null)

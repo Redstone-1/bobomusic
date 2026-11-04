@@ -9,15 +9,17 @@ import "../widgets/app_form_field.dart";
 class AppDialog {
   AppDialog._();
 
-  /// 面板容器样式（从弹层自身 context 取 token）
+  /// 面板容器样式（从弹层自身 context 取 token）；
+  /// [padding] 允许全出血头部类弹窗自管内边距
   static Widget _panel(
     BuildContext dialogContext, {
     required Widget child,
+    EdgeInsetsGeometry padding = const EdgeInsets.all(20),
   }) {
     final t = AuroraTokens.of(dialogContext);
     return Container(
       key: const Key("app_dialog_panel"),
-      padding: const EdgeInsets.all(20),
+      padding: padding,
       constraints: const BoxConstraints(maxWidth: 320),
       decoration: BoxDecoration(
         color: t.bg2,
@@ -30,9 +32,10 @@ class AppDialog {
 
   static Future<T?> show<T>(
     BuildContext context, {
-    required String title,
+    String? title,
     required Widget content,
     required List<Widget> actions,
+    EdgeInsetsGeometry padding = const EdgeInsets.all(20),
     bool barrierDismissible = true,
   }) {
     final t = AuroraTokens.of(context);
@@ -44,12 +47,15 @@ class AppDialog {
         backgroundColor: Colors.transparent,
         child: _panel(
           dialogContext,
+          padding: padding,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _title(dialogContext, title),
-              const SizedBox(height: 14),
+              if (title != null) ...[
+                _title(dialogContext, title),
+                const SizedBox(height: 14),
+              ],
               content,
               if (actions.isNotEmpty) ...[
                 const SizedBox(height: 18),
@@ -61,6 +67,10 @@ class AppDialog {
       ),
     );
   }
+
+  /// 标题统一外观入口：自定义头部的弹窗用它保持同一标题样式
+  static Widget titleText(BuildContext context, String text) =>
+      _title(context, text);
 
   static Widget _title(BuildContext context, String title) {
     final t = AuroraTokens.of(context);

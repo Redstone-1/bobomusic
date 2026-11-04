@@ -23,7 +23,6 @@ void showSleepTimerSheet(BuildContext context, WidgetRef ref) {
 
   AppSheet.show(
     context,
-    title: "定时关闭",
     actions: [
       for (final (label, minutes) in const [
         ("15 分钟", 15),

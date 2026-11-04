@@ -4,17 +4,20 @@ import "../theme/aurora_tokens.dart";
 import "../widgets/desktop_content.dart";
 
 /// 底部操作面板的一项（图标 + 文案 + 回调）
+/// [selected] 为真时瓦片主题色描边高亮（单选类面板表达当前项，不再用对勾图标）
 class AppSheetAction {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final bool danger;
+  final bool selected;
 
   const AppSheetAction({
     required this.icon,
     required this.label,
     required this.onTap,
     this.danger = false,
+    this.selected = false,
   });
 }
 
@@ -23,9 +26,76 @@ class AppSheetAction {
 class AppSheet {
   AppSheet._();
 
+  /// 操作项两列瓦片网格（以「歌词设置」_LyricToolTile 为标准逐项对齐）：
+  /// surface 填充无边框、图标 20、文字 12.5/w600、垂直 padding 12、行/列距 10；
+  /// 奇数项最后一行通栏。手机弹层与桌面面板共用，全仓唯一瓦片实现。
+  static Widget _actionsGrid(
+    BuildContext context,
+    List<AppSheetAction> actions, {
+    required VoidCallback pop,
+  }) {
+    final t = AuroraTokens.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    Widget tile(AppSheetAction action) {
+      final accent = action.danger ? scheme.error : t.primary;
+      return InkWell(
+        key: ValueKey("sheet_action_${action.label}"),
+        onTap: () {
+          pop();
+          action.onTap();
+        },
+        borderRadius: BorderRadius.circular(t.radiusMd),
+        splashColor: t.surface2,
+        highlightColor: t.surface,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color:
+                action.selected ? t.primary.withValues(alpha: 0.12) : t.surface,
+            borderRadius: BorderRadius.circular(t.radiusMd),
+          ),
+          child: Column(
+            children: [
+              Icon(action.icon, size: 20, color: accent),
+              const SizedBox(height: 6),
+              Text(
+                action.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: action.danger ? scheme.error : t.fg,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < actions.length; i += 2)
+          Padding(
+            padding: EdgeInsets.only(top: i == 0 ? 0 : 10),
+            child: Row(
+              children: [
+                Expanded(child: tile(actions[i])),
+                if (i + 1 < actions.length) ...[
+                  const SizedBox(width: 10),
+                  Expanded(child: tile(actions[i + 1])),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
   static Future<T?> show<T>(
     BuildContext context, {
-    String? title,
     List<AppSheetAction> actions = const [],
     Widget? child,
     bool sidePanel = false,
@@ -43,11 +113,15 @@ class AppSheet {
               clipBehavior: Clip.antiAlias,
               child: ConstrainedBox(constraints: BoxConstraints(maxWidth: sidePanel ? 380 : 460, maxHeight: MediaQuery.sizeOf(dialogContext).height - 100),
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  if (title != null) Padding(padding: const EdgeInsets.fromLTRB(22, 16, 8, 6), child: Row(children: [Expanded(child: Text(title, maxLines: 2, style: TextStyle(color: t.fg, fontSize: 18, fontWeight: FontWeight.w700))), IconButton(tooltip: "关闭", onPressed: () => Navigator.of(dialogContext).pop(), icon: const Icon(Icons.close))])),
                   if (child != null) Flexible(child: child),
-                  if (actions.isNotEmpty) Flexible(child: SingleChildScrollView(padding: const EdgeInsets.symmetric(vertical: 10), child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    for (final action in actions) ListTile(leading: Icon(action.icon, color: action.danger ? Theme.of(context).colorScheme.error : t.primary, size: 20), title: Text(action.label, style: TextStyle(color: t.fg, fontSize: 13)), onTap: () { Navigator.of(dialogContext).pop(); action.onTap(); }),
-                  ]))),
+                  if (actions.isNotEmpty)
+                    Flexible(child: SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 22),
+                          child: _actionsGrid(dialogContext, actions,
+                              pop: () => Navigator.of(dialogContext).pop()),
+                        ))),
                 ]),
               ),
             )),
@@ -62,7 +136,6 @@ class AppSheet {
       barrierColor: AuroraTokens.of(context).maskBg,
       builder: (sheetContext) {
         final t = AuroraTokens.of(sheetContext);
-        final scheme = Theme.of(sheetContext).colorScheme;
         final keyboardInset = MediaQuery.viewInsetsOf(sheetContext).bottom;
 
         return Container(
@@ -98,71 +171,19 @@ class AppSheet {
                     color: t.hairlineStrong,
                   ),
                 ),
-                if (title != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(22, 6, 22, 10),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: t.fg,
-                        ),
-                      ),
-                    ),
-                  ),
                 if (child != null) child,
-                for (final action in actions)
-                  InkWell(
-                    onTap: () {
-                      Navigator.of(sheetContext).pop();
-                      action.onTap();
-                    },
-                    borderRadius: BorderRadius.circular(t.radiusMd),
-                    splashColor: t.surface2,
-                    highlightColor: t.surface,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 22,
-                        vertical: 13,
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(11),
-                              color: t.surface2,
-                            ),
-                            child: Icon(
-                              action.icon,
-                              size: 18,
-                              // 危险操作染错误色，常规操作染主题色（原型 setrow .ic）
-                              color: action.danger ? scheme.error : t.primary,
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          // Expanded + 省略：长文案（如「标题 · 歌手」）不得撑爆面板
-                          Expanded(
-                            child: Text(
-                              action.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 14.5,
-                                fontWeight: FontWeight.w600,
-                                color: action.danger ? scheme.error : t.fg,
-                              ),
-                            ),
-                          ),
-                        ],
+                if (actions.isNotEmpty)
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(22, 2, 22, 24),
+                      child: _actionsGrid(
+                        sheetContext,
+                        actions,
+                        pop: () => Navigator.of(sheetContext).pop(),
                       ),
                     ),
                   ),
-                const SizedBox(height: 14),
+                if (actions.isEmpty) const SizedBox(height: 14),
               ],
             ),
           ),
