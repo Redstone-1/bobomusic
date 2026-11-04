@@ -32,12 +32,35 @@ class Playlists extends _$Playlists {
     ref.invalidateSelf();
   }
 
+  Future<List<String>> updateInfo(String playlistId, {
+    required String name,
+    String? customCover,
+    bool applyCoverToTracks = false,
+  }) async {
+    final changedIds = await PlaylistRepository().updateInfo(playlistId, name: name,
+        customCover: customCover, applyCoverToTracks: applyCoverToTracks);
+    // 详情 family 依赖目录，随目录刷新即可；不能在这里反向失效详情形成循环。
+    ref.invalidateSelf();
+    return changedIds;
+  }
+
   Future<void> remove(String playlistId) async {
     await PlaylistRepository().delete(int.parse(playlistId));
     ref.invalidateSelf();
   }
 
   void refresh() => ref.invalidateSelf();
+}
+
+/// 详情按 ID 订阅最新元数据，编辑名称/封面后不再依赖导航时的快照。
+@riverpod
+Future<Playlist?> playlistInfo(Ref ref, String playlistId) async {
+  // 成员增删也会刷新目录；复用同一份元数据，详情封面和数量随之更新。
+  final playlists = await ref.watch(playlistsProvider.future);
+  for (final playlist in playlists) {
+    if (playlist.id == playlistId) return playlist;
+  }
+  return null;
 }
 
 /// 我喜欢数量（快捷卡计数）

@@ -490,15 +490,21 @@ class Playback extends _$Playback implements SystemPlaybackCommands {
   /// 曲目显示信息编辑后热更新当前会话：迷你条/播放卡/系统通知立即换新名。
   /// [updated] 为库内最新完整 Track（含覆盖后的显示字段）
   void applyDisplayEdit(Track updated) {
-    final hitCurrent = state.track?.id == updated.id;
-    final hitQueue = state.queue.any((item) => item.id == updated.id);
+    applyDisplayEdits([updated]);
+  }
+
+  /// 批量改名/封面仅发布一次会话状态，不重装音频或逐首刷新系统通知。
+  void applyDisplayEdits(List<Track> updated) {
+    final byId = {for (final track in updated) track.id: track};
+    final hitCurrent = byId.containsKey(state.track?.id);
+    final hitQueue = state.queue.any((item) => byId.containsKey(item.id));
     if (!hitCurrent && !hitQueue) return;
     state = state.copyWith(
-      track: hitCurrent ? updated : null,
+      track: hitCurrent ? byId[state.track!.id] : null,
       queue: hitQueue
           ? [
               for (final item in state.queue)
-                if (item.id == updated.id) updated else item,
+                byId[item.id] ?? item,
             ]
           : null,
     );

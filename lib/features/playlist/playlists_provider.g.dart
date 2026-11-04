@@ -36,7 +36,7 @@ final class PlaylistsProvider
   Playlists create() => Playlists();
 }
 
-String _$playlistsHash() => r'edca1346415727087cc644fbdd470e8b29ad9d57';
+String _$playlistsHash() => r'88f6d85e9dc47c0bde1abfeef0398d23334b912a';
 
 /// 歌单目录（歌单页真数据源）：加载 + CRUD（每次变更后重载目录）
 
@@ -53,6 +53,88 @@ abstract class _$Playlists extends $AsyncNotifier<List<Playlist>> {
         Object?>;
     return element.handleCreate(ref, build);
   }
+}
+
+/// 详情按 ID 订阅最新元数据，编辑名称/封面后不再依赖导航时的快照。
+
+@ProviderFor(playlistInfo)
+final playlistInfoProvider = PlaylistInfoFamily._();
+
+/// 详情按 ID 订阅最新元数据，编辑名称/封面后不再依赖导航时的快照。
+
+final class PlaylistInfoProvider extends $FunctionalProvider<
+        AsyncValue<Playlist?>, Playlist?, FutureOr<Playlist?>>
+    with $FutureModifier<Playlist?>, $FutureProvider<Playlist?> {
+  /// 详情按 ID 订阅最新元数据，编辑名称/封面后不再依赖导航时的快照。
+  PlaylistInfoProvider._(
+      {required PlaylistInfoFamily super.from, required String super.argument})
+      : super(
+          retry: null,
+          name: r'playlistInfoProvider',
+          isAutoDispose: true,
+          dependencies: null,
+          $allTransitiveDependencies: null,
+        );
+
+  @override
+  String debugGetCreateSourceHash() => _$playlistInfoHash();
+
+  @override
+  String toString() {
+    return r'playlistInfoProvider'
+        ''
+        '($argument)';
+  }
+
+  @$internal
+  @override
+  $FutureProviderElement<Playlist?> $createElement($ProviderPointer pointer) =>
+      $FutureProviderElement(pointer);
+
+  @override
+  FutureOr<Playlist?> create(Ref ref) {
+    final argument = this.argument as String;
+    return playlistInfo(
+      ref,
+      argument,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is PlaylistInfoProvider && other.argument == argument;
+  }
+
+  @override
+  int get hashCode {
+    return argument.hashCode;
+  }
+}
+
+String _$playlistInfoHash() => r'222c837add0671defa52118c6c0c36fc2b6389a9';
+
+/// 详情按 ID 订阅最新元数据，编辑名称/封面后不再依赖导航时的快照。
+
+final class PlaylistInfoFamily extends $Family
+    with $FunctionalFamilyOverride<FutureOr<Playlist?>, String> {
+  PlaylistInfoFamily._()
+      : super(
+          retry: null,
+          name: r'playlistInfoProvider',
+          dependencies: null,
+          $allTransitiveDependencies: null,
+          isAutoDispose: true,
+        );
+
+  /// 详情按 ID 订阅最新元数据，编辑名称/封面后不再依赖导航时的快照。
+
+  PlaylistInfoProvider call(
+    String playlistId,
+  ) =>
+      PlaylistInfoProvider._(argument: playlistId, from: this);
+
+  @override
+  String toString() => r'playlistInfoProvider';
 }
 
 /// 我喜欢数量（快捷卡计数）

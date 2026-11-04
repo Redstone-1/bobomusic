@@ -226,4 +226,29 @@ void main() {
     await drain();
     expect(fetches, firstPassFetches); // 命中 _coverKey 去重
   });
+
+  test("本地自定义封面直接交给系统媒体桥，不走网络下载", () async {
+    const channel = MethodChannel("media_center_test.local");
+    final directory = await Directory.systemTemp.createTemp("bobo_media_cover_");
+    final file = await File("${directory.path}/cover.png").writeAsBytes([1, 2, 3]);
+    final ready = Completer<Map<String, Object?>>();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      if (call.method == "update") {
+        final update = Map<String, Object?>.from(call.arguments as Map);
+        if (update["coverPath"] != null && !ready.isCompleted) ready.complete(update);
+      }
+      return null;
+    });
+    addTearDown(() async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+      await directory.delete(recursive: true);
+    });
+    final center = SystemMediaCenter(channel);
+    center.coverFetcher = (_) => throw StateError("本地封面不应联网");
+    center.sync(snap(cover: file.uri.toString()));
+    final update = await ready.future.timeout(const Duration(seconds: 5));
+    expect(update["coverPath"], File.fromUri(file.uri).path);
+  });
 }

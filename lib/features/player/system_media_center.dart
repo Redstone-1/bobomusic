@@ -160,7 +160,11 @@ class SystemMediaCenter {
     try {
       // 部分音源给 http 直链，统一升 https；网易等封面 CDN 拦 Dart 默认 UA，
       // 必须带浏览器 UA（实测无 UA 403，见 coverFetchHeaders 注释）
-      final file = await coverFetcher(url.replaceFirst("http://", "https://"));
+      final uri = Uri.tryParse(url);
+      final file = uri?.scheme == "file"
+          ? File.fromUri(uri!)
+          : await coverFetcher(url.replaceFirst("http://", "https://"));
+      if (uri?.scheme == "file" && !await file.exists()) return;
       // 迟到的旧封面：换歌竞态守卫——既不覆盖当前路径也不回推
       if (url != _coverKey) return;
       _coverPath = file.path;
