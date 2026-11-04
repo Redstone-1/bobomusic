@@ -29,6 +29,7 @@ class AppSheet {
     List<AppSheetAction> actions = const [],
     Widget? child,
     bool sidePanel = false,
+    bool inset = false,
   }) {
     if (DesktopContent.of(context)) {
       final t = AuroraTokens.of(context);
@@ -62,15 +63,28 @@ class AppSheet {
       builder: (sheetContext) {
         final t = AuroraTokens.of(sheetContext);
         final scheme = Theme.of(sheetContext).colorScheme;
+        final keyboardInset = MediaQuery.viewInsetsOf(sheetContext).bottom;
 
         return Container(
+          key: const Key("app_sheet_panel"),
+          // 规则等选项选择使用带外边距的同款面板，不再让默认菜单贴住屏幕边缘。
+          margin: inset
+              ? EdgeInsets.fromLTRB(16, 0, 16,
+                  (keyboardInset > 0 ? keyboardInset : MediaQuery.viewPaddingOf(sheetContext).bottom) + 12)
+              : null,
+          clipBehavior: inset ? Clip.antiAlias : Clip.none,
           decoration: BoxDecoration(
             color: t.bg2,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(t.radiusXl)),
-            border: Border(top: BorderSide(color: t.hairline, width: 1)),
+            borderRadius: inset
+                ? BorderRadius.circular(t.radiusXl)
+                : BorderRadius.vertical(top: Radius.circular(t.radiusXl)),
+            border: inset
+                ? Border.all(color: t.hairline, width: 1)
+                : Border(top: BorderSide(color: t.hairline, width: 1)),
           ),
           child: SafeArea(
             top: false,
+            bottom: !inset,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [

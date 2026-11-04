@@ -2,11 +2,26 @@ import "package:bobomusic/core/theme/app_palette.dart";
 import "package:bobomusic/core/theme/app_theme.dart";
 import "package:bobomusic/core/widgets/eq_bars.dart";
 import "package:bobomusic/core/widgets/song_list_tile.dart";
+import "package:bobomusic/core/widgets/cover_placeholder.dart";
+import "package:bobomusic/core/widgets/desktop_content.dart";
 import "package:bobomusic/data/models/track.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 void main() {
+  for (final desktop in [false, true]) {
+    testWidgets("自定义歌曲封面在 ${desktop ? "桌面" : "手机"} 列表优先生效", (tester) async {
+      final tile = SongListTile(track: const Track(id: "a", name: "歌名", author: "歌手",
+          cover: "https://original/a.jpg", displayCover: "https://custom/a.jpg"));
+      await tester.pumpWidget(MaterialApp(
+        theme: buildAppTheme(AppThemeColor.natureGreen, Brightness.dark),
+        home: Scaffold(body: desktop ? DesktopContent(child: tile) : tile),
+      ));
+      expect(tester.widget<CoverPlaceholder>(find.byType(CoverPlaceholder)).cover, "https://custom/a.jpg");
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
   testWidgets("列表行播放中：波浪 → 心形 → 更多（波浪在心形左侧）", (tester) async {
     await tester.pumpWidget(
       MaterialApp(

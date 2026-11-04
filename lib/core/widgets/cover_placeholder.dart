@@ -1,3 +1,5 @@
+import "dart:io";
+
 import "package:cached_network_image/cached_network_image.dart";
 import "package:flutter/material.dart";
 
@@ -61,6 +63,15 @@ class CoverPlaceholder extends StatelessWidget {
     );
 
     if (cover == null || cover!.isEmpty) return fallback;
+
+    final localUri = Uri.tryParse(cover!);
+    if (localUri?.scheme == "file") {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: Image.file(File.fromUri(localUri!), width: size, height: size,
+            fit: BoxFit.cover, errorBuilder: (context, error, stack) => fallback),
+      );
+    }
 
     return Container(
       width: size,

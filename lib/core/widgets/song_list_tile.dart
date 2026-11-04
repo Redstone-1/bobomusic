@@ -47,7 +47,7 @@ class SongListTile extends StatelessWidget {
           child: InkWell(onTap: onTap, borderRadius: BorderRadius.circular(t.radiusMd), child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
             child: Row(children: [
-              CoverPlaceholder(cover: coverOverride ?? track.cover, text: track.effectiveName, size: 40, radius: t.radiusSm),
+              CoverPlaceholder(cover: coverOverride ?? track.effectiveCover, text: track.effectiveName, size: 40, radius: t.radiusSm),
               const SizedBox(width: 12),
               Expanded(flex: 3, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(track.effectiveName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: playing ? t.primary : t.fg)),

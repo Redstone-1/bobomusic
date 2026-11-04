@@ -16,8 +16,10 @@ import "player_card_page.dart";
 /// 推入页（详情/搜索）通用外壳：内容铺满 + 底部迷你条（无播放自隐藏）
 class MiniBarPage extends StatelessWidget {
   final Widget child;
+  /// 输入时可收起播放条；内容留在原节点，避免切换键盘时丢失焦点。
+  final bool showMiniPlayer;
 
-  const MiniBarPage({super.key, required this.child});
+  const MiniBarPage({super.key, required this.child, this.showMiniPlayer = true});
 
   @override
   Widget build(BuildContext context) {
@@ -25,13 +27,14 @@ class MiniBarPage extends StatelessWidget {
     return Stack(
       children: [
         child,
-        Positioned(
-          left: 14,
-          right: 14,
-          // 推入页无底部 Dock，留出下边距避免贴住屏幕底缘
-          bottom: 12,
-          child: const MiniPlayerBar(),
-        ),
+        if (showMiniPlayer)
+          Positioned(
+            left: 14,
+            right: 14,
+            // 推入页无底部 Dock，留出下边距避免贴住屏幕底缘
+            bottom: 12,
+            child: const MiniPlayerBar(),
+          ),
       ],
     );
   }

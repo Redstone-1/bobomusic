@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 
 import "../theme/aurora_tokens.dart";
+import "../widgets/app_form_field.dart";
 
 /// 全局弹窗（确认 / 输入 / 自定义）
 /// 统一样式：bg2 面板 + 发丝描边 + 18 圆角；遮罩用 token maskBg
@@ -15,6 +16,7 @@ class AppDialog {
   }) {
     final t = AuroraTokens.of(dialogContext);
     return Container(
+      key: const Key("app_dialog_panel"),
       padding: const EdgeInsets.all(20),
       constraints: const BoxConstraints(maxWidth: 320),
       decoration: BoxDecoration(
@@ -49,8 +51,10 @@ class AppDialog {
               _title(dialogContext, title),
               const SizedBox(height: 14),
               content,
-              const SizedBox(height: 18),
-              Row(mainAxisAlignment: MainAxisAlignment.end, children: actions),
+              if (actions.isNotEmpty) ...[
+                const SizedBox(height: 18),
+                Row(mainAxisAlignment: MainAxisAlignment.end, children: actions),
+              ],
             ],
           ),
         ),
@@ -168,33 +172,11 @@ class AppDialog {
                 const SizedBox(height: 14),
                 Form(
                   key: formKey,
-                  child: TextFormField(
+                  child: AppFormField(
                     controller: controller,
                     autofocus: true,
                     validator: validator,
-                    style: TextStyle(fontSize: 14.5, color: t.fg),
-                    decoration: InputDecoration(
-                      hintText: hint,
-                      hintStyle: TextStyle(fontSize: 14, color: t.fgMute),
-                      filled: true,
-                      fillColor: t.surface,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(t.radiusMd),
-                        borderSide: BorderSide(color: t.hairline),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(t.radiusMd),
-                        borderSide: BorderSide(color: t.hairline),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(t.radiusMd),
-                        borderSide: BorderSide(color: t.primary),
-                      ),
-                    ),
+                    hint: hint,
                   ),
                 ),
                 const SizedBox(height: 18),
