@@ -48,7 +48,12 @@ test/
 1. **跨模块通信**走 Riverpod provider 依赖图（`ref.watch` / `ref.listen`），禁止 event_bus 与模块间直接 import。
 2. **歌单数据读取**统一走 Repository + family provider（by playlistId），禁止 UI 直读库。
 3. **SQL 全参数化**：固定 schema 为 tracks / playlists / playlist_items / queue / play_history；不拼接用户输入为表名或 SQL。批量 IN 只生成占位符，值走参数。
-4. **颜色/主题**走 `lib/core/theme/` 的 token（ThemeExtension 承载），禁止硬编码颜色值；文案中文，不引入 intl。
+4. **UI 与设计一致性**：
+   - 颜色/主题走 `lib/core/theme/` 的 token（ThemeExtension 承载），禁止硬编码颜色值；文案中文，不引入 intl。
+   - 新增或修改 UI 前，先检索 `lib/core/widgets/`、`lib/core/overlays/` 和现有同类页面，确定已认可的组件与设计基线。同一用途、同一交互场景必须复用同一公共组件；现有实现是页面私有组件时，先提取公共组件再接入新旧页面，不逐页复制样式。
+   - 一致性同时包括外框、圆角、背景、字号、间距、图标、触控区域及聚焦、清除、禁用等适用状态；只使用相同主题 token 不等于设计一致。禁止用未封装样式的 Material 默认控件替换已有同类设计。不同用途或平台确需差异时，在共享组件中明确表达必要变体，遵循用户已确认的设计。
+   - 列表内即时搜索统一使用 `lib/core/widgets/app_search_field.dart`，本地音乐、我喜欢和全部歌单只调整提示词及过滤逻辑。交付前对照同类页面核查外观与交互，并按改动覆盖必要的明暗、聚焦、清除、窄屏及键盘状态；不能仅凭 analyze/test 通过认定视觉一致，未做设备视觉验收须说明。
+   - 编辑表单复用 `lib/core/widgets/app_form_field.dart`；选项入口使用其中的 `AppSelectionField` 配合 `AppSheet`，需要四周留白时使用 `inset` 变体。紧邻文字的复选框复用 `lib/core/widgets/app_checkbox_row.dart`，方框与文字均可切换，尾部操作独立响应。没有播放条时不固定预留播放条高度。
 5. 字符串与 import 用双引号；新增业务逻辑配中文注释讲清意图，不写废话注释。
 6. 错误处理沿用 try/catch + print；UI 通过 `lib/core/overlays/` 提示，SDK 层错误类型化、不直接弹 toast。播放错误由应用壳统一监听提示。
 7. 仓库内文件与文档只用仓库相对路径；修改文件保留原有换行符；diff 尽量小，不顺手重排无关代码。

@@ -17,6 +17,7 @@ metadata:
 - 公共组件：优先复用 `lib/core/widgets/`；迷你播放条与页面底部预留见 `lib/features/player/mini_player_bar.dart`。
 - 主题：`lib/core/theme/aurora_tokens.dart`、`app_theme.dart`、`app_palette.dart` 及主题 provider；从 `AuroraTokens.of(context)` 读取视觉 token。
 - 浮层：`lib/core/overlays/` 的 AppToast / AppLoading / AppDialog / AppSheet，保持现有样式与错误出口。
+- 同类 UI 的复用与对照按 [AGENTS.md](../../../AGENTS.md) 第 4 条执行：实现前先找现有基线，私有控件需要跨页使用时先提取到公共组件；列表内即时搜索复用 `lib/core/widgets/app_search_field.dart`，不另写默认 TextField 或复制其样式。
 - 数据：`lib/data/models/` 与 Repository；歌单查询统一通过 `lib/features/playlist/playlists_provider.dart` 的 family provider。
 - 在线搜索和榜单：搜索页本地选择五源；榜单通过 `plazaChartProvider(key)` 独立加载。SDK 数据经 `lib/data/mappers.dart` 映射为 Track。
 
