@@ -11,6 +11,7 @@ import "../../core/navigation/desktop_navigation.dart";
 import "../../core/widgets/desktop_content.dart";
 import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/app_buttons.dart";
+import "../../core/widgets/app_search_field.dart";
 import "../../core/widgets/aurora_background.dart";
 import "../../core/widgets/back_link.dart";
 import "../../core/widgets/cover_placeholder.dart";
@@ -602,38 +603,16 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                             child: BackLink(),
                           ),
                           const SizedBox(height: 4),
-                          if (!desktop) TextField(
+                          // 搜索主入口统一走 AppSearchField（回车/搜索键才发起，
+                          // 输入过程不自动搜——由 _onChanged 控制）
+                          if (!desktop) AppSearchField(
                             controller: _controller,
                             focusNode: _focus,
                             autofocus: true,
-                            // 回车/搜索键才发起请求（输入过程不自动搜）
                             textInputAction: TextInputAction.search,
                             onSubmitted: (_) => _submitSearch(),
                             onChanged: (_) => _onChanged(),
-                            style: TextStyle(fontSize: 14.5, color: t.fg),
-                            decoration: InputDecoration(
-                              hintText: "搜索歌曲 / 歌手 / 合集",
-                              hintStyle:
-                                  TextStyle(fontSize: 14, color: t.fgMute),
-                              prefixIcon: Icon(Icons.search,
-                                  size: 20, color: t.fgDim),
-                              filled: true,
-                              fillColor: t.surface,
-                              contentPadding:
-                                  const EdgeInsets.symmetric(vertical: 12),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: BorderSide(color: t.hairline),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: BorderSide(color: t.hairline),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: BorderSide(color: t.primary),
-                              ),
-                            ),
+                            hintText: "搜索歌曲 / 歌手 / 合集",
                           ),
                           // 音源选择（默认 B 站；本页切换，不写全局设置）。
                           // 等宽胶囊一行平铺：保留玻璃 chips 视觉语言，撑满搜索框宽度
@@ -1003,7 +982,7 @@ class _OrderResultTile extends StatelessWidget {
             ),
             IconButton(
               onPressed: onMorePressed,
-              icon: const Icon(Icons.more_vert),
+              icon: const Icon(Icons.more_horiz),
               iconSize: 18,
               color: t.fgMute,
               tooltip: "更多",

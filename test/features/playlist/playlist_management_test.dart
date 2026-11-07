@@ -41,7 +41,12 @@ void main() {
       await tester.tap(find.text("更多"));
       await _frames(tester);
       expect(find.byType(AllPlaylistsPage), findsOneWidget);
-      expect(find.byType(AppSearchField), findsOneWidget);
+      // 桌面顶栏搜索框与页内搜索框同用 AppSearchField，只断言页面内那枚
+      expect(
+          find.descendant(
+              of: find.byType(AllPlaylistsPage),
+              matching: find.byType(AppSearchField)),
+          findsOneWidget);
       await tester.enterText(
           find.byKey(const Key("all_playlists_search")), "歌单4");
       await _frames(tester);
