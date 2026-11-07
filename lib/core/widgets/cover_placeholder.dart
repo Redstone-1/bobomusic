@@ -61,8 +61,9 @@ class CoverPlaceholder extends StatelessWidget {
               child: Text(
                 text!.characters.first,
                 style: TextStyle(
+                  // 暗色首字走前景 token（原硬编码纯白，改 t.fg 视觉等价且随主题）
                   color: dark
-                      ? Colors.white.withValues(alpha: 0.92)
+                      ? t.fg.withValues(alpha: 0.92)
                       : t.primary,
                   fontWeight: FontWeight.w800,
                   fontSize: size * 0.42,

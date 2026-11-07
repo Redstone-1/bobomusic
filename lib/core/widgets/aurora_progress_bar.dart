@@ -83,7 +83,7 @@ class _AuroraProgressBarState extends State<AuroraProgressBar> {
                   height: thumbSize,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.white,
+                    color: t.thumbColor,
                     boxShadow: [BoxShadow(color: t.shadow, blurRadius: 8, offset: const Offset(0, 2))],
                   ),
                 ),

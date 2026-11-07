@@ -82,6 +82,8 @@ AuroraTokens buildAuroraTokens(AppThemeColor seed, Brightness brightness) {
     tileBg: dark
         ? const Color(0xFFFFFFFF).withValues(alpha: 0.055)
         : const Color(0xFF141420).withValues(alpha: 0.05),
+    // 拖点白色明暗同值（原型绑定），提 token 便于统一调整
+    thumbColor: const Color(0xFFFFFFFF),
     hairline: dark
         ? const Color(0xFFFFFFFF).withValues(alpha: 0.10)
         : const Color(0xFF141420).withValues(alpha: 0.09),

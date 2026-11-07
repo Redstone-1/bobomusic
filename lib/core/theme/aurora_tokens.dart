@@ -30,6 +30,9 @@ class AuroraTokens extends ThemeExtension<AuroraTokens> {
   /// 暗色沿用 surface 同值，亮色玻璃拟态的半透明白叠白面板会隐形）
   final Color tileBg;
 
+  /// 进度条拖点（原型白色，明暗同值；亮色下靠投影可辨）
+  final Color thumbColor;
+
   /// 发丝描边（--line，1px）
   final Color hairline;
 
@@ -117,6 +120,7 @@ class AuroraTokens extends ThemeExtension<AuroraTokens> {
     required this.surface,
     required this.surface2,
     required this.tileBg,
+    required this.thumbColor,
     required this.hairline,
     required this.hairlineStrong,
     required this.primary,
@@ -158,6 +162,7 @@ class AuroraTokens extends ThemeExtension<AuroraTokens> {
     Color? surface,
     Color? surface2,
     Color? tileBg,
+    Color? thumbColor,
     Color? hairline,
     Color? hairlineStrong,
     Color? primary,
@@ -193,6 +198,7 @@ class AuroraTokens extends ThemeExtension<AuroraTokens> {
       surface: surface ?? this.surface,
       surface2: surface2 ?? this.surface2,
       tileBg: tileBg ?? this.tileBg,
+      thumbColor: thumbColor ?? this.thumbColor,
       hairline: hairline ?? this.hairline,
       hairlineStrong: hairlineStrong ?? this.hairlineStrong,
       primary: primary ?? this.primary,
@@ -235,6 +241,7 @@ class AuroraTokens extends ThemeExtension<AuroraTokens> {
       surface: Color.lerp(surface, other.surface, t)!,
       surface2: Color.lerp(surface2, other.surface2, t)!,
       tileBg: Color.lerp(tileBg, other.tileBg, t)!,
+      thumbColor: Color.lerp(thumbColor, other.thumbColor, t)!,
       hairline: Color.lerp(hairline, other.hairline, t)!,
       hairlineStrong: Color.lerp(hairlineStrong, other.hairlineStrong, t)!,
       primary: Color.lerp(primary, other.primary, t)!,
