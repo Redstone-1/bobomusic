@@ -77,6 +77,11 @@ AuroraTokens buildAuroraTokens(AppThemeColor seed, Brightness brightness) {
     surface2: dark
         ? const Color(0xFFFFFFFF).withValues(alpha: 0.09)
         : const Color(0xFFFFFFFF).withValues(alpha: 0.72),
+    // 弹层瓦片填充：亮色用实感浅灰（半透明白叠纯白面板 bg2 会隐形），
+    // 暗色与 surface 同值不变（所有者 2026-11-07 钦定新增 token 方案）
+    tileBg: dark
+        ? const Color(0xFFFFFFFF).withValues(alpha: 0.055)
+        : const Color(0xFF141420).withValues(alpha: 0.05),
     hairline: dark
         ? const Color(0xFFFFFFFF).withValues(alpha: 0.10)
         : const Color(0xFF141420).withValues(alpha: 0.09),

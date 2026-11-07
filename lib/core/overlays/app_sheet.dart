@@ -27,7 +27,7 @@ class AppSheet {
   AppSheet._();
 
   /// 操作项两列瓦片网格（以「歌词设置」_LyricToolTile 为标准逐项对齐）：
-  /// surface 填充无边框、图标 20、文字 12.5/w600、垂直 padding 12、行/列距 10；
+  /// tileBg 填充无边框、图标 20、文字 12.5/w600、padding 水平 10 垂直 12、行/列距 10；
   /// 奇数项最后一行通栏。手机弹层与桌面面板共用，全仓唯一瓦片实现。
   static Widget _actionsGrid(
     BuildContext context,
@@ -47,11 +47,12 @@ class AppSheet {
         borderRadius: BorderRadius.circular(t.radiusMd),
         splashColor: t.surface2,
         highlightColor: t.surface,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Container(
+          // 水平留白 10 与行列距同值：长文案不顶瓦片边缘
+          padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
           decoration: BoxDecoration(
             color:
-                action.selected ? t.primary.withValues(alpha: 0.12) : t.surface,
+                action.selected ? t.primary.withValues(alpha: 0.12) : t.tileBg,
             borderRadius: BorderRadius.circular(t.radiusMd),
           ),
           child: Column(

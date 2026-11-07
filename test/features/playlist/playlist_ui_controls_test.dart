@@ -208,7 +208,7 @@ void main() {
             .child,
         isA<Container>().having((c) => c.decoration, "decoration",
             isA<BoxDecoration>().having(
-                (d) => d.color, "color", tokens.surface)));
+                (d) => d.color, "color", tokens.tileBg)));
     final lastTile = tester.getRect(
         find.byKey(const ValueKey("sheet_action_删除指定字符")));
     // 面板 1px 描边 + 网格 22 内边距

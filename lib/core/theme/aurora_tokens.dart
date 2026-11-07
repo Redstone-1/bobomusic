@@ -26,6 +26,10 @@ class AuroraTokens extends ThemeExtension<AuroraTokens> {
   /// 玻璃表面二层（--surface-2）
   final Color surface2;
 
+  /// 弹层操作瓦片填充（亮色需在纯白面板 bg2 上可见，故用实感浅灰；
+  /// 暗色沿用 surface 同值，亮色玻璃拟态的半透明白叠白面板会隐形）
+  final Color tileBg;
+
   /// 发丝描边（--line，1px）
   final Color hairline;
 
@@ -112,6 +116,7 @@ class AuroraTokens extends ThemeExtension<AuroraTokens> {
     required this.fgMute,
     required this.surface,
     required this.surface2,
+    required this.tileBg,
     required this.hairline,
     required this.hairlineStrong,
     required this.primary,
@@ -152,6 +157,7 @@ class AuroraTokens extends ThemeExtension<AuroraTokens> {
     Color? fgMute,
     Color? surface,
     Color? surface2,
+    Color? tileBg,
     Color? hairline,
     Color? hairlineStrong,
     Color? primary,
@@ -186,6 +192,7 @@ class AuroraTokens extends ThemeExtension<AuroraTokens> {
       fgMute: fgMute ?? this.fgMute,
       surface: surface ?? this.surface,
       surface2: surface2 ?? this.surface2,
+      tileBg: tileBg ?? this.tileBg,
       hairline: hairline ?? this.hairline,
       hairlineStrong: hairlineStrong ?? this.hairlineStrong,
       primary: primary ?? this.primary,
@@ -227,6 +234,7 @@ class AuroraTokens extends ThemeExtension<AuroraTokens> {
       fgMute: Color.lerp(fgMute, other.fgMute, t)!,
       surface: Color.lerp(surface, other.surface, t)!,
       surface2: Color.lerp(surface2, other.surface2, t)!,
+      tileBg: Color.lerp(tileBg, other.tileBg, t)!,
       hairline: Color.lerp(hairline, other.hairline, t)!,
       hairlineStrong: Color.lerp(hairlineStrong, other.hairlineStrong, t)!,
       primary: Color.lerp(primary, other.primary, t)!,
