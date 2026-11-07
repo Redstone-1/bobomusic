@@ -344,7 +344,6 @@ class _SearchEntry extends StatelessWidget {
                 style: TextStyle(fontSize: 14, color: t.fgDim),
               ),
             ),
-            Icon(Icons.tune, size: 18, color: t.fgMute),
           ],
         ),
       ),
