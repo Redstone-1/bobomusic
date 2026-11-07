@@ -6,6 +6,7 @@ import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/aurora_background.dart";
 import "../../core/widgets/back_link.dart";
 import "../../core/widgets/glass_card.dart";
+import "../../core/widgets/icon_box.dart";
 import "../../core/widgets/page_header.dart";
 import "../../core/widgets/scale_tap.dart";
 
@@ -239,7 +240,7 @@ class _InfoSection extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _IconBox(icon: icon),
+          IconBox(icon: icon),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -296,7 +297,7 @@ class _LinkCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              _IconBox(icon: icon),
+              IconBox(icon: icon),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -328,26 +329,6 @@ class _LinkCard extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _IconBox extends StatelessWidget {
-  final IconData icon;
-
-  const _IconBox({required this.icon});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AuroraTokens.of(context);
-    return Container(
-      width: 38,
-      height: 38,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(11),
-        color: t.surface2,
-      ),
-      child: Icon(icon, size: 19, color: t.primary),
     );
   }
 }

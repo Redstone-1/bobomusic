@@ -11,6 +11,7 @@ import "../../core/theme/theme_mode_provider.dart";
 import "../../core/theme/theme_providers.dart";
 import "../../core/widgets/app_buttons.dart";
 import "../../core/widgets/glass_card.dart";
+import "../../core/widgets/icon_box.dart";
 import "../../core/widgets/page_header.dart";
 import "../../core/widgets/desktop_content.dart";
 import "../../core/widgets/theme_swatch.dart";
@@ -257,15 +258,7 @@ class _SettingRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         child: Row(
           children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(11),
-                color: t.surface2,
-              ),
-              child: Icon(icon, size: 18, color: t.primary),
-            ),
+            IconBox(icon: icon),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
