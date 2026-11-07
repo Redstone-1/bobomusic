@@ -1,10 +1,9 @@
-import "dart:ui" as ui;
-
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/cover_placeholder.dart";
+import "../../core/widgets/glass_card.dart";
 import "../../core/widgets/scale_tap.dart";
 import "../../core/widgets/desktop_content.dart";
 import "../../data/models/track.dart";
@@ -52,6 +51,9 @@ class MiniPlayerBar extends ConsumerWidget {
     final track = ref.watch(playbackProvider.select((s) => s.track));
     final playing = ref.watch(playbackProvider.select((s) => s.playing));
     if (track == null) return const SizedBox.shrink();
+    // 去渐变改均匀填充、单纯加透明（所有者 2026-11-07 定）：亮色白 15%，
+    // 暗色沿用 surface（白 5.5%）；配合 frosted 管线的 blur 14 + saturate(1.6)
+    final dark = t.bg.computeLuminance() < 0.5;
 
     return ScaleTap(
       key: const Key("mini_player"),
@@ -69,29 +71,26 @@ class MiniPlayerBar extends ConsumerWidget {
             ),
           ],
         ),
-        // 玻璃本体：surface 只有 5.5% 透明度，必须配背景模糊才可读（原型 backdrop-filter）
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-            child: Container(
-              height: 68,
+        // 玻璃本体走统一 frosted 管线：blur 14 + saturate(1.6)（原型
+        // backdrop-filter），替代手写无饱和度增益的弱化版
+        child: GlassCard(
+          frosted: true,
+          radius: 20,
+          color: dark ? null : t.surface.withValues(alpha: 0.15),
+          child: SizedBox(
+            height: 68,
+            child: Padding(
               padding: const EdgeInsets.fromLTRB(10, 0, 8, 0),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                color: t.surface,
-                border: Border.all(color: t.hairline, width: 1),
-              ),
-                child: Row(
-                  children: [
-                    CoverPlaceholder(
-                      key: playerCoverAnchor,
-                      cover: track.effectiveCover,
-                      text: track.effectiveName,
-                      size: 44,
-                      radius: 13,
-                    ),
-                    const SizedBox(width: 12),
+              child: Row(
+                children: [
+                  CoverPlaceholder(
+                    key: playerCoverAnchor,
+                    cover: track.effectiveCover,
+                    text: track.effectiveName,
+                    size: 44,
+                    radius: 13,
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: _MiniCenter(track: track, playing: playing),
                   ),
@@ -390,7 +389,6 @@ class _MiniControls extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final t = AuroraTokens.of(context);
     final notifier = ref.read(playbackProvider.notifier);
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -399,7 +397,6 @@ class _MiniControls extends ConsumerWidget {
           key: const Key("mini_prev"),
           tooltip: "上一曲",
           icon: Icons.skip_previous,
-          color: t.fgMute,
           onTap: notifier.previous,
         ),
         const SizedBox(width: 10),
@@ -409,7 +406,6 @@ class _MiniControls extends ConsumerWidget {
           key: const Key("mini_next"),
           tooltip: "下一曲",
           icon: Icons.skip_next,
-          color: t.fgMute,
           onTap: notifier.next,
         ),
       ],
@@ -419,34 +415,30 @@ class _MiniControls extends ConsumerWidget {
 
 class _MiniIconButton extends StatelessWidget {
   final IconData icon;
-  final Color color;
   final VoidCallback onTap;
   final String tooltip;
 
   const _MiniIconButton({
     super.key,
     required this.icon,
-    required this.color,
     required this.onTap,
     required this.tooltip,
   });
 
   @override
   Widget build(BuildContext context) {
-    // 迷你条常驻按钮补语义：Tooltip + Semantics 让读屏可朗读（一致性检查 P3）
+    final t = AuroraTokens.of(context);
+    // 主题色 + IconButton 自带圆形水波反馈（点下有圆形背景色）；
+    // Tooltip 保读屏语义（一致性检查 P3）。触控盒沿用 32 规格
     return Tooltip(
       message: tooltip,
-      child: Semantics(
-        button: true,
-        label: tooltip,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(5),
-            child: Icon(icon, size: 22, color: color),
-          ),
-        ),
+      child: IconButton(
+        onPressed: onTap,
+        icon: Icon(icon, size: 22),
+        color: t.primary,
+        visualDensity: VisualDensity.compact,
+        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        padding: EdgeInsets.zero,
       ),
     );
   }
