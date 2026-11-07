@@ -39,6 +39,7 @@ class PlaylistPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = AuroraTokens.of(context);
     final playlistsAsync = ref.watch(playlistsProvider);
+    final pinnedIds = ref.watch(pinnedPlaylistsProvider);
     final likedCount = ref.watch(likedCountProvider);
     final localCount = ref.watch(localCountProvider);
     final recentAsync = ref.watch(recentTracksProvider);
@@ -132,30 +133,37 @@ class PlaylistPage extends ConsumerWidget {
               onTap: () => ref.invalidate(playlistsProvider),
             ),
           ),
-          data: (playlists) => playlists.isEmpty
-              ? const EmptyState(
-                  compact: true,
-                  asset: "assets/illustrations/empty_collection.svg",
-                  title: "还没有歌单",
-                  subtitle: "点右上角 + 创建第一个歌单",
-                )
-              : DesktopContent.of(context)
-                ? LayoutBuilder(builder: (context, constraints) => Wrap(spacing: 18, runSpacing: 20, children: [
-                  for (final pl in playlists.take(3)) SizedBox(width: (constraints.maxWidth - 18 * 2) / 3, child: PlaylistTile(name: pl.name, count: pl.count, cover: pl.cover, onTap: () => commands.openPlaylist(context, ref, pl), onMorePressed: () => commands.showPlaylistActions(context, ref, pl))),
-                ]))
-                : Column(
-                  children: [
-                    for (final pl in playlists.take(3))
-                      PlaylistTile(
-                        name: pl.name,
-                        count: pl.count,
-                        cover: pl.cover,
-                        onTap: () => commands.openPlaylist(context, ref, pl),
-                        onMorePressed: () =>
-                            commands.showPlaylistActions(context, ref, pl),
-                      ),
-                  ],
-                ),
+          data: (playlists) {
+            // 置顶排最前（按置顶先后），未置顶按原顺序补位；区块仍取前 3 个
+            final ordered = orderPlaylistsByPin(playlists, pinnedIds);
+            return playlists.isEmpty
+                ? const EmptyState(
+                    compact: true,
+                    asset: "assets/illustrations/empty_collection.svg",
+                    title: "还没有歌单",
+                    subtitle: "点右上角 + 创建第一个歌单",
+                  )
+                : DesktopContent.of(context)
+                  ? LayoutBuilder(builder: (context, constraints) => Wrap(spacing: 18, runSpacing: 20, children: [
+                    for (final pl in ordered.take(3)) SizedBox(width: (constraints.maxWidth - 18 * 2) / 3, child: PlaylistTile(name: pl.name, count: pl.count, cover: pl.cover, pinned: pinnedIds.contains(pl.id), onPinToggle: () => commands.togglePlaylistPin(context, ref, pl.id), onTap: () => commands.openPlaylist(context, ref, pl), onMorePressed: () => commands.showPlaylistActions(context, ref, pl))),
+                  ]))
+                  : Column(
+                    children: [
+                      for (final pl in ordered.take(3))
+                        PlaylistTile(
+                          name: pl.name,
+                          count: pl.count,
+                          cover: pl.cover,
+                          pinned: pinnedIds.contains(pl.id),
+                          onPinToggle: () =>
+                              commands.togglePlaylistPin(context, ref, pl.id),
+                          onTap: () => commands.openPlaylist(context, ref, pl),
+                          onMorePressed: () =>
+                              commands.showPlaylistActions(context, ref, pl),
+                        ),
+                    ],
+                  );
+          },
         ),
         SectionHeader(
           title: "最近播放",

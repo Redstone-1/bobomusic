@@ -35,6 +35,7 @@ class _AllPlaylistsPageState extends ConsumerState<AllPlaylistsPage> {
   @override
   Widget build(BuildContext context) {
     final data = ref.watch(playlistsProvider);
+    final pinnedIds = ref.watch(pinnedPlaylistsProvider);
     final desktop = DesktopContent.of(context);
     final all = data.value;
     final query = _query.trim().toLowerCase();
@@ -93,20 +94,25 @@ class _AllPlaylistsPageState extends ConsumerState<AllPlaylistsPage> {
                             crossAxisSpacing: 18,
                             mainAxisSpacing: 20),
                     itemCount: visible.length,
-                    itemBuilder: (context, index) => _tile(visible[index]))
+                    itemBuilder: (context, index) =>
+                        _tile(visible[index], pinnedIds))
                 : SliverList.builder(
                     itemCount: visible.length,
-                    itemBuilder: (context, index) => _tile(visible[index])),
+                    itemBuilder: (context, index) =>
+                        _tile(visible[index], pinnedIds)),
           ),
         SliverToBoxAdapter(child: SizedBox(height: desktop ? 30 : 140)),
       ]),
     ))));
   }
 
-  Widget _tile(Playlist playlist) => PlaylistTile(
+  Widget _tile(Playlist playlist, List<String> pinnedIds) => PlaylistTile(
       name: playlist.name,
       count: playlist.count,
       cover: playlist.cover,
+      pinned: pinnedIds.contains(playlist.id),
+      onPinToggle: () =>
+          commands.togglePlaylistPin(context, ref, playlist.id),
       onTap: () => commands.openPlaylist(context, ref, playlist),
       onMorePressed: () =>
           commands.showPlaylistActions(context, ref, playlist));

@@ -4,13 +4,16 @@ import "../../core/theme/aurora_tokens.dart";
 import "../../core/widgets/cover_placeholder.dart";
 import "../../core/widgets/desktop_content.dart";
 
-/// 歌单行（原型 .plid：字首封面 + 名称/计数 + 更多）
+/// 歌单行（原型 .plid：字首封面 + 名称/计数 + 置顶 + 更多）
+/// [pinned] 置顶态（实心 pin 染主题色），[onPinToggle] 为空则不显示置顶按钮
 class PlaylistTile extends StatelessWidget {
   final String name;
   final int count;
   final String? cover;
   final VoidCallback onTap;
   final VoidCallback onMorePressed;
+  final bool pinned;
+  final VoidCallback? onPinToggle;
 
   const PlaylistTile({
     super.key,
@@ -19,6 +22,8 @@ class PlaylistTile extends StatelessWidget {
     this.cover,
     required this.onTap,
     required this.onMorePressed,
+    this.pinned = false,
+    this.onPinToggle,
   });
 
   @override
@@ -47,6 +52,21 @@ class PlaylistTile extends StatelessWidget {
                                   color: t.fg,
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600))),
+                      if (onPinToggle != null)
+                        SizedBox(
+                            width: 26,
+                            height: 26,
+                            child: IconButton(
+                                padding: EdgeInsets.zero,
+                                tooltip: pinned ? "取消置顶" : "置顶显示",
+                                iconSize: 16,
+                                onPressed: onPinToggle,
+                                icon: Icon(
+                                  pinned
+                                      ? Icons.push_pin
+                                      : Icons.push_pin_outlined,
+                                  color: pinned ? t.primary : null,
+                                ))),
                       SizedBox(
                           width: 26,
                           height: 26,
@@ -94,6 +114,14 @@ class PlaylistTile extends StatelessWidget {
                 ],
               ),
             ),
+            if (onPinToggle != null)
+              IconButton(
+                onPressed: onPinToggle,
+                icon: Icon(pinned ? Icons.push_pin : Icons.push_pin_outlined),
+                iconSize: 18,
+                color: pinned ? t.primary : t.fgMute,
+                visualDensity: VisualDensity.compact,
+              ),
             IconButton(
               onPressed: onMorePressed,
               icon: const Icon(Icons.more_vert),

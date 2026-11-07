@@ -46,6 +46,13 @@ void openPlaylist(BuildContext context, WidgetRef ref, Playlist playlist) {
   }
 }
 
+/// 置顶/取消置顶；达到 3 个上限再置顶时 toast 拒绝。
+/// 首页区块与全部歌单页的置顶按钮共用。
+void togglePlaylistPin(BuildContext context, WidgetRef ref, String playlistId) {
+  final ok = ref.read(pinnedPlaylistsProvider.notifier).toggle(playlistId);
+  if (!ok) AppToast.show(context, "最多置顶 3 个歌单");
+}
+
 /// 首页和全部歌单页共用菜单，编辑与删除的行为始终一致。
 void showPlaylistActions(BuildContext context, WidgetRef ref, Playlist playlist) {
   AppSheet.show(context, actions: [

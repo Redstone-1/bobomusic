@@ -254,6 +254,65 @@ final class QueueEntriesProvider extends $FunctionalProvider<
 
 String _$queueEntriesHash() => r'5b03102ac1ac676dcf36772c16f867fb574e23e1';
 
+/// 置顶歌单 id（歌单首页常驻，最多 3 个）。
+/// SharedPreferences 持久化；列表顺序 = 置顶先后，已删歌单的残留 id 由展示处过滤。
+
+@ProviderFor(PinnedPlaylists)
+final pinnedPlaylistsProvider = PinnedPlaylistsProvider._();
+
+/// 置顶歌单 id（歌单首页常驻，最多 3 个）。
+/// SharedPreferences 持久化；列表顺序 = 置顶先后，已删歌单的残留 id 由展示处过滤。
+final class PinnedPlaylistsProvider
+    extends $NotifierProvider<PinnedPlaylists, List<String>> {
+  /// 置顶歌单 id（歌单首页常驻，最多 3 个）。
+  /// SharedPreferences 持久化；列表顺序 = 置顶先后，已删歌单的残留 id 由展示处过滤。
+  PinnedPlaylistsProvider._()
+      : super(
+          from: null,
+          argument: null,
+          retry: null,
+          name: r'pinnedPlaylistsProvider',
+          isAutoDispose: true,
+          dependencies: null,
+          $allTransitiveDependencies: null,
+        );
+
+  @override
+  String debugGetCreateSourceHash() => _$pinnedPlaylistsHash();
+
+  @$internal
+  @override
+  PinnedPlaylists create() => PinnedPlaylists();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(List<String> value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<List<String>>(value),
+    );
+  }
+}
+
+String _$pinnedPlaylistsHash() => r'18d64dcfc8b6ff575f5dd3dc51431b57996ded3c';
+
+/// 置顶歌单 id（歌单首页常驻，最多 3 个）。
+/// SharedPreferences 持久化；列表顺序 = 置顶先后，已删歌单的残留 id 由展示处过滤。
+
+abstract class _$PinnedPlaylists extends $Notifier<List<String>> {
+  List<String> build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref = this.ref as $Ref<List<String>, List<String>>;
+    final element = ref.element as $ClassProviderElement<
+        AnyNotifier<List<String>, List<String>>,
+        List<String>,
+        Object?,
+        Object?>;
+    return element.handleCreate(ref, build);
+  }
+}
+
 /// 最近播放（歌单页；切歌后由页面 invalidate）
 
 @ProviderFor(recentTracks)

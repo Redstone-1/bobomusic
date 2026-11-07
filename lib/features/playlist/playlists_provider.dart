@@ -1,5 +1,6 @@
 import "package:riverpod_annotation/riverpod_annotation.dart";
 
+import "../../core/prefs/app_prefs.dart";
 import "../../data/models/playlist.dart";
 import "../../data/models/track.dart";
 import "../../data/models/queue_entry.dart";
@@ -76,6 +77,44 @@ Future<int> localCount(Ref ref) async => TrackRepository().localCount();
 @riverpod
 Future<List<QueueEntry>> queueEntries(Ref ref) async =>
     QueueRepository().entries();
+
+/// 置顶歌单 id（歌单首页常驻，最多 3 个）。
+/// SharedPreferences 持久化；列表顺序 = 置顶先后，已删歌单的残留 id 由展示处过滤。
+@riverpod
+class PinnedPlaylists extends _$PinnedPlaylists {
+  static const _prefKey = "pinned_playlists";
+
+  @override
+  List<String> build() => appPrefs.getStringList(_prefKey) ?? const [];
+
+  /// 置顶/取消置顶；返回 false 表示已达上限未置顶（UI 据此提示）
+  bool toggle(String playlistId) {
+    final next = [...state];
+    if (next.contains(playlistId)) {
+      next.remove(playlistId);
+    } else {
+      if (next.length >= 3) return false;
+      next.add(playlistId);
+    }
+    appPrefs.setStringList(_prefKey, next);
+    state = next;
+    return true;
+  }
+}
+
+/// 歌单页展示排序：置顶按置顶先后排最前（顺带过滤已删歌单的残留 id），
+/// 其余按目录原顺序跟随；首页固定取前 3 个（置顶不足时未置顶补位）
+List<Playlist> orderPlaylistsByPin(
+  List<Playlist> playlists,
+  List<String> pinnedIds,
+) {
+  return [
+    for (final id in pinnedIds)
+      if (playlists.any((p) => p.id == id))
+        playlists.firstWhere((p) => p.id == id),
+    ...playlists.where((p) => !pinnedIds.contains(p.id)),
+  ];
+}
 
 /// 最近播放（歌单页；切歌后由页面 invalidate）
 @riverpod
