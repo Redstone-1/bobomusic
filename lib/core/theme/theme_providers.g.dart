@@ -8,15 +8,15 @@ part of 'theme_providers.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// 当前主题色（默认 = 青绿色，所有者 2026-10-27 修订；真实持久化）
+/// 当前主题色（默认 = 橙色，所有者 2026-11-04 修订；真实持久化）
 
 @ProviderFor(AppThemeSeed)
 final appThemeSeedProvider = AppThemeSeedProvider._();
 
-/// 当前主题色（默认 = 青绿色，所有者 2026-10-27 修订；真实持久化）
+/// 当前主题色（默认 = 橙色，所有者 2026-11-04 修订；真实持久化）
 final class AppThemeSeedProvider
     extends $NotifierProvider<AppThemeSeed, AppThemeColor> {
-  /// 当前主题色（默认 = 青绿色，所有者 2026-10-27 修订；真实持久化）
+  /// 当前主题色（默认 = 橙色，所有者 2026-11-04 修订；真实持久化）
   AppThemeSeedProvider._()
       : super(
           from: null,
@@ -44,9 +44,9 @@ final class AppThemeSeedProvider
   }
 }
 
-String _$appThemeSeedHash() => r'f701456071844b59076bac83ce4c39042ee3961a';
+String _$appThemeSeedHash() => r'43e36723d89c26f1ae4e8f1ec7e4dc6f4a7ef47d';
 
-/// 当前主题色（默认 = 青绿色，所有者 2026-10-27 修订；真实持久化）
+/// 当前主题色（默认 = 橙色，所有者 2026-11-04 修订；真实持久化）
 
 abstract class _$AppThemeSeed extends $Notifier<AppThemeColor> {
   AppThemeColor build();
