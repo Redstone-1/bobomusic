@@ -23,6 +23,7 @@ import "../../origin_sdk/lyric/lrc.dart";
 import "../../origin_sdk/lyric/lyric_types.dart";
 import "../download/download_actions.dart";
 import "../playlist/add_to_playlist_sheet.dart";
+import "../playlist/playlist_commands.dart";
 import "../playlist/playlists_provider.dart"
     show likedCountProvider, playlistDetailTracksProvider, queueEntriesProvider;
 import "../playlist/track_edit_dialog.dart";
@@ -400,8 +401,14 @@ class _TopBar extends ConsumerWidget {
         ],
         AppSheetAction(
           icon: Icons.timer_outlined,
-          label: "定时关闭（${sleepTimerLabel(state)}）",
+          label: sleepTimerMenuLabel(state),
           onTap: () => showSleepTimerSheet(context, ref),
+        ),
+        // 不用退出播放页再回歌单页新建，就地建单
+        AppSheetAction(
+          icon: Icons.create_new_folder_outlined,
+          label: "新建歌单",
+          onTap: () => createPlaylist(context, ref),
         ),
       ],
     );
