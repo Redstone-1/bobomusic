@@ -6,6 +6,7 @@ import "../../core/navigation/desktop_navigation.dart";
 import "../../core/overlays/app_toast.dart";
 import "../../core/theme/aurora_tokens.dart";
 import "../../core/theme/theme_mode_provider.dart";
+import "../../core/widgets/app_search_field.dart";
 import "../../core/widgets/aurora_background.dart";
 import "../../core/widgets/desktop_content.dart";
 import "../../core/widgets/empty_state.dart";
@@ -269,7 +270,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
                     height: 38,
                     decoration: BoxDecoration(
                         color: t.primary,
-                        borderRadius: BorderRadius.circular(13)),
+                        borderRadius: BorderRadius.circular(t.radiusSm)),
                     child: Icon(Icons.headphones, color: t.primaryInk)),
                 if (!compact) ...[
                   const SizedBox(width: 10),
@@ -363,10 +364,10 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
                 color: active
                     ? t.primary.withValues(alpha: .12)
                     : t.bg.withValues(alpha: 0),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(t.radiusSm),
                 child: InkWell(
                   key: ValueKey("desktop_nav_${destination.key}"),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(t.radiusSm),
                   onTap: () => _open(destination),
                   child: SizedBox(
                       height: 43,
@@ -410,37 +411,24 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
             onPressed: _observer.canPop || selected.canGoBack ? _back : null,
             icon: const Icon(Icons.chevron_left)),
         const SizedBox(width: 12),
+        // 顶栏搜索走统一 AppSearchField 桌面紧凑变体（玻璃底 + 清除钮）
         Expanded(
             child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 400),
-                child: TextField(
-                    key: const Key("desktop_search"),
-                    controller: _search,
-                    focusNode: _searchFocus,
-                    textInputAction: TextInputAction.search,
-                    onSubmitted: _submit,
-                    onChanged: (value) {
-                      if (value.trim().isEmpty) {
-                        ref.read(desktopSearchProvider.notifier).submit("");
-                      }
-                    },
-                    style: TextStyle(color: t.fg, fontSize: 12),
-                    decoration: InputDecoration(
-                      hintText: "搜索歌曲 / 歌手 / 合集",
-                      hintStyle: TextStyle(color: t.fgMute),
-                      prefixIcon: Icon(Icons.search, color: t.fgMute, size: 18),
-                      isDense: true,
-                      filled: true,
-                      fillColor: t.surface,
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 12),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: t.hairline)),
-                      enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: t.hairline)),
-                    )))),
+                child: AppSearchField(
+                  fieldKey: const Key("desktop_search"),
+                  controller: _search,
+                  focusNode: _searchFocus,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: _submit,
+                  onChanged: (value) {
+                    if (value.trim().isEmpty) {
+                      ref.read(desktopSearchProvider.notifier).submit("");
+                    }
+                  },
+                  hintText: "搜索歌曲 / 歌手 / 合集",
+                  dense: true,
+                ))),
         const SizedBox(width: 16),
         IconButton(
             tooltip: "切换明暗主题",
