@@ -27,6 +27,7 @@ import "../../data/models/playlist.dart";
 import "../download/download_actions.dart";
 import "../download/download_tasks.dart";
 import "../playlist/add_to_playlist_sheet.dart";
+import "../player/cover_fly_animation.dart";
 import "../player/mini_player_bar.dart";
 import "../player/playback_provider.dart";
 import "../player/player_card_page.dart";
@@ -796,6 +797,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                                           playing:
                                               track.id == currentTrackId,
                                           paused: !playingNow,
+                                          onCoverTap: (coverRect) =>
+                                              addTrackToQueueWithFly(
+                                                  context, ref, track,
+                                                  from: coverRect),
                                           // 波浪左侧快速收藏心形（真机反馈要求）：
                                           // 初始态取库内喜欢集合，点击后本地覆盖即时变化
                                           likedHeart:

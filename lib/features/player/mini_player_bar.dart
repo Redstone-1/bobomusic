@@ -10,6 +10,7 @@ import "../../core/widgets/desktop_content.dart";
 import "../../data/models/track.dart";
 import "../../origin_sdk/lyric/lrc.dart";
 import "lyric_provider.dart";
+import "cover_fly_animation.dart" show playerCoverAnchor;
 import "playback_provider.dart";
 import "player_card_page.dart";
 
@@ -81,15 +82,16 @@ class MiniPlayerBar extends ConsumerWidget {
                 color: t.surface,
                 border: Border.all(color: t.hairline, width: 1),
               ),
-              child: Row(
-                children: [
-                  CoverPlaceholder(
-                    cover: track.effectiveCover,
-                    text: track.effectiveName,
-                    size: 44,
-                    radius: 13,
-                  ),
-                  const SizedBox(width: 12),
+                child: Row(
+                  children: [
+                    CoverPlaceholder(
+                      key: playerCoverAnchor,
+                      cover: track.effectiveCover,
+                      text: track.effectiveName,
+                      size: 44,
+                      radius: 13,
+                    ),
+                    const SizedBox(width: 12),
                   Expanded(
                     child: _MiniCenter(track: track, playing: playing),
                   ),

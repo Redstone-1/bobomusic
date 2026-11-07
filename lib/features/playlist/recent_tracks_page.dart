@@ -6,6 +6,7 @@ import "../../core/widgets/empty_state.dart";
 import "../../core/widgets/page_header.dart";
 import "../../core/widgets/song_list_tile.dart";
 import "../../data/repositories/history_repository.dart";
+import "../player/cover_fly_animation.dart";
 import "../player/playback_provider.dart";
 import "playlists_provider.dart";
 import "track_edit_dialog.dart";
@@ -55,6 +56,9 @@ class RecentTracksPage extends ConsumerWidget {
                         track: track,
                         playing: track.id == currentId,
                         paused: !playingNow,
+                        onCoverTap: (coverRect) =>
+                            addTrackToQueueWithFly(context, ref, track,
+                                from: coverRect),
                         onTap: () => ref.read(playbackProvider.notifier).play(track, queue: tracks),
                         onMorePressed: () =>
                             showTrackEditDialog(context, ref, track)),

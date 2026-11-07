@@ -15,6 +15,7 @@ import "../playlist/add_to_playlist_sheet.dart";
 import "../playlist/playlists_provider.dart";
 import "../playlist/track_edit_dialog.dart";
 import "comment_page.dart";
+import "cover_fly_animation.dart" show playerCoverAnchor;
 import "play_mode.dart";
 import "playback_provider.dart";
 import "playback_speed.dart";
@@ -130,6 +131,7 @@ class DesktopPlayerBar extends ConsumerWidget {
                                     ? null
                                     : () => _openPlayer(ref),
                                 child: CoverPlaceholder(
+                                    key: playerCoverAnchor,
                                     cover: track?.effectiveCover,
                                     text: track?.effectiveName,
                                     size: 46,

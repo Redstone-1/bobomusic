@@ -20,6 +20,7 @@ import "../../data/repositories/queue_repository.dart";
 import "../../data/repositories/track_repository.dart";
 import "../download/download_actions.dart";
 import "../download/downloads_page.dart";
+import "../player/cover_fly_animation.dart";
 import "../player/playback_provider.dart";
 import "../player/player_card_page.dart";
 import "add_to_playlist_sheet.dart";
@@ -187,6 +188,9 @@ class PlaylistPage extends ConsumerWidget {
                         track: track,
                         playing: track.id == currentTrackId,
                         paused: !playingNow,
+                        onCoverTap: (coverRect) =>
+                            addTrackToQueueWithFly(context, ref, track,
+                                from: coverRect),
                         onTap: () => PlayerCardPage.start(
                           context,
                           ref,

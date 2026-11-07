@@ -27,6 +27,7 @@ import "../../data/repositories/queue_repository.dart";
 import "../../data/repositories/track_repository.dart";
 import "../download/download_actions.dart";
 import "../playlist/add_to_playlist_sheet.dart";
+import "../player/cover_fly_animation.dart";
 import "../player/mini_player_bar.dart";
 import "../player/playback_provider.dart";
 import "../player/player_card_page.dart";
@@ -577,6 +578,9 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                   track: track,
                                   playing: track.id == currentTrackId,
                                   paused: !playingNow,
+                                  onCoverTap: (coverRect) =>
+                                      addTrackToQueueWithFly(context, ref,
+                                          track, from: coverRect),
                                   coverOverride: widget.trackCover,
                                   // 行内心形统一展示喜欢状态（本地/自建可快速收藏，
                                   // 我喜欢快速取消），写库但不刷新列表

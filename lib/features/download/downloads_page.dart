@@ -20,6 +20,7 @@ import "../../core/widgets/skeleton.dart";
 import "../../core/widgets/song_list_tile.dart";
 import "../../data/models/track.dart";
 import "../../data/repositories/track_repository.dart";
+import "../player/cover_fly_animation.dart";
 import "../player/mini_player_bar.dart";
 import "../player/playback_provider.dart";
 import "../player/player_card_page.dart";
@@ -170,6 +171,9 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
                     track: track,
                     playing: track.id == currentTrackId,
                     paused: !playing,
+                    onCoverTap: (coverRect) =>
+                        addTrackToQueueWithFly(context, ref, track,
+                            from: coverRect),
                     onTap: () => PlayerCardPage.start(
                       context,
                       ref,

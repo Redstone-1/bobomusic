@@ -13,6 +13,8 @@ import "desktop_content.dart";
 /// [coverOverride] 统一封面（歌手歌单等场景整列表共用一张封面），空则用曲目自身封面
 /// [likedHeart] 非空时行尾（更多菜单左侧）显示喜欢心形（我喜欢列表快速取消收藏），
 /// 点击回调新状态，视觉由调用方状态驱动（不强制刷新列表）
+/// [onCoverTap] 封面独立手势（回调带封面全局 rect，供飞入动画取起点）；
+/// 为空时封面无独立点击，落回整行行为
 class SongListTile extends StatelessWidget {
   final Track track;
   final bool playing;
@@ -25,6 +27,7 @@ class SongListTile extends StatelessWidget {
   final String? coverOverride;
   final bool? likedHeart;
   final ValueChanged<bool>? onHeartTap;
+  final ValueChanged<Rect>? onCoverTap;
 
   const SongListTile({
     super.key,
@@ -37,7 +40,17 @@ class SongListTile extends StatelessWidget {
     this.coverOverride,
     this.likedHeart,
     this.onHeartTap,
+    this.onCoverTap,
   });
+
+  /// 封面 rect（全局坐标）；取不到时回退零矩形（动画端自行放弃）
+  static Rect? coverRect(BuildContext context) {
+    final box = context.findRenderObject();
+    if (box is RenderBox && box.hasSize) {
+      return box.localToGlobal(Offset.zero) & box.size;
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +64,15 @@ class SongListTile extends StatelessWidget {
           child: InkWell(onTap: onTap, borderRadius: BorderRadius.circular(t.radiusMd), child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
             child: Row(children: [
-              CoverPlaceholder(cover: coverOverride ?? track.effectiveCover, text: track.effectiveName, size: 40, radius: t.radiusSm),
+              if (onCoverTap != null)
+                Builder(builder: (coverContext) => GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => onCoverTap!(
+                      coverRect(coverContext) ?? Rect.zero),
+                  child: CoverPlaceholder(cover: coverOverride ?? track.effectiveCover, text: track.effectiveName, size: 40, radius: t.radiusSm),
+                ))
+              else
+                CoverPlaceholder(cover: coverOverride ?? track.effectiveCover, text: track.effectiveName, size: 40, radius: t.radiusSm),
               const SizedBox(width: 12),
               Expanded(flex: 3, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(track.effectiveName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: playing ? t.primary : t.fg)),
@@ -81,12 +102,27 @@ class SongListTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 9),
         child: Row(
           children: [
-            CoverPlaceholder(
-              cover: coverOverride ?? track.effectiveCover,
-              text: track.effectiveName,
-              size: 48,
-              radius: t.radiusSm,
-            ),
+            if (onCoverTap != null)
+              Builder(
+                builder: (coverContext) => GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () =>
+                      onCoverTap!(coverRect(coverContext) ?? Rect.zero),
+                  child: CoverPlaceholder(
+                    cover: coverOverride ?? track.effectiveCover,
+                    text: track.effectiveName,
+                    size: 48,
+                    radius: t.radiusSm,
+                  ),
+                ),
+              )
+            else
+              CoverPlaceholder(
+                cover: coverOverride ?? track.effectiveCover,
+                text: track.effectiveName,
+                size: 48,
+                radius: t.radiusSm,
+              ),
             const SizedBox(width: 13),
             Expanded(
               child: Column(
