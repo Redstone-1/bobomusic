@@ -397,6 +397,7 @@ class _MiniControls extends ConsumerWidget {
       children: [
         _MiniIconButton(
           key: const Key("mini_prev"),
+          tooltip: "上一曲",
           icon: Icons.skip_previous,
           color: t.fgMute,
           onTap: notifier.previous,
@@ -406,6 +407,7 @@ class _MiniControls extends ConsumerWidget {
         const SizedBox(width: 10),
         _MiniIconButton(
           key: const Key("mini_next"),
+          tooltip: "下一曲",
           icon: Icons.skip_next,
           color: t.fgMute,
           onTap: notifier.next,
@@ -419,22 +421,32 @@ class _MiniIconButton extends StatelessWidget {
   final IconData icon;
   final Color color;
   final VoidCallback onTap;
+  final String tooltip;
 
   const _MiniIconButton({
     super.key,
     required this.icon,
     required this.color,
     required this.onTap,
+    required this.tooltip,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.all(5),
-        child: Icon(icon, size: 22, color: color),
+    // 迷你条常驻按钮补语义：Tooltip + Semantics 让读屏可朗读（一致性检查 P3）
+    return Tooltip(
+      message: tooltip,
+      child: Semantics(
+        button: true,
+        label: tooltip,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(5),
+            child: Icon(icon, size: 22, color: color),
+          ),
+        ),
       ),
     );
   }

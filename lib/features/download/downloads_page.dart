@@ -304,9 +304,10 @@ class _TaskTile extends ConsumerWidget {
                       task.track.effectiveName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      // 封面+标题+歌手行与 SongListTile 同规格（一致性检查定）
                       style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
                         color: t.fg,
                       ),
                     ),
@@ -315,7 +316,7 @@ class _TaskTile extends ConsumerWidget {
                       task.track.effectiveAuthor,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11.5, color: t.fgDim),
+                      style: TextStyle(fontSize: 12, color: t.fgDim),
                     ),
                     const SizedBox(height: 3),
                     Text(

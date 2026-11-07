@@ -26,7 +26,7 @@ class AppLoading {
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(t.radiusLg),
                 color: t.toastBg,
                 border: Border.all(color: t.toastBorder, width: 1),
               ),

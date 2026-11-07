@@ -290,7 +290,8 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
             "清除",
             style: TextStyle(
               color: Theme.of(context).colorScheme.error,
-              fontWeight: FontWeight.w600,
+              // 危险确认钮与 AppDialog 体系同字重（w700）
+              fontWeight: FontWeight.w700,
             ),
           ),
         ),
