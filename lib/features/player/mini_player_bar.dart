@@ -51,9 +51,6 @@ class MiniPlayerBar extends ConsumerWidget {
     final track = ref.watch(playbackProvider.select((s) => s.track));
     final playing = ref.watch(playbackProvider.select((s) => s.playing));
     if (track == null) return const SizedBox.shrink();
-    // 去渐变改均匀填充、单纯加透明（所有者 2026-11-07 定）：亮色白 15%，
-    // 暗色沿用 surface（白 5.5%）；配合 frosted 管线的 blur 14 + saturate(1.6)
-    final dark = t.bg.computeLuminance() < 0.5;
 
     return ScaleTap(
       key: const Key("mini_player"),
@@ -72,11 +69,11 @@ class MiniPlayerBar extends ConsumerWidget {
           ],
         ),
         // 玻璃本体走统一 frosted 管线：blur 14 + saturate(1.6)（原型
-        // backdrop-filter），替代手写无饱和度增益的弱化版
+        // backdrop-filter），替代手写无饱和度增益的弱化版；
+        // 填充恢复 surface 原值（所有者 2026-11-07 定）
         child: GlassCard(
           frosted: true,
           radius: 20,
-          color: dark ? null : t.surface.withValues(alpha: 0.15),
           child: SizedBox(
             height: 68,
             child: Padding(
