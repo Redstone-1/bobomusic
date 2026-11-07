@@ -5,6 +5,7 @@ import "../../core/navigation/desktop_navigation.dart";
 import "../../core/overlays/app_sheet.dart";
 import "../../core/overlays/app_toast.dart";
 import "../../core/theme/aurora_tokens.dart";
+import "../../core/widgets/app_buttons.dart";
 import "../../core/widgets/cover_placeholder.dart";
 import "../../core/widgets/desktop_content.dart";
 import "../../core/widgets/empty_state.dart";
@@ -190,30 +191,27 @@ class DesktopPlayerBar extends ConsumerWidget {
                                           : commands.previous,
                                       icon: const Icon(Icons.skip_previous)),
                                   const SizedBox(width: 8),
-                                  SizedBox(
-                                      width: 36,
-                                      height: 36,
-                                      child: FilledButton(
-                                          key: const Key("desktop_toggle_play"),
-                                          style: FilledButton.styleFrom(
-                                              padding: EdgeInsets.zero,
-                                              shape: const CircleBorder()),
-                                          onPressed: track == null
-                                              ? null
-                                              : commands.toggle,
-                                          child: data.buffering
-                                              ? SizedBox(
-                                                  width: 16,
-                                                  height: 16,
-                                                  child:
-                                                      CircularProgressIndicator(
-                                                          strokeWidth: 2,
-                                                          color: t.primaryInk))
-                                              : Icon(
-                                                  data.playing
-                                                      ? Icons.pause
-                                                      : Icons.play_arrow,
-                                                  size: 22))),
+                                  // 主操作圆钮统一走 PrimaryIconButton：
+                                  // 辉光投影 + ScaleTap 反馈与播放卡一致
+                                  PrimaryIconButton(
+                                      key: const Key("desktop_toggle_play"),
+                                      size: 36,
+                                      iconScale: 0.61,
+                                      onTap: track == null
+                                          ? null
+                                          : commands.toggle,
+                                      icon: data.buffering
+                                          ? SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color: t.primaryInk))
+                                          : Icon(
+                                              data.playing
+                                                  ? Icons.pause
+                                                  : Icons.play_arrow,
+                                              size: 22)),
                                   const SizedBox(width: 8),
                                   IconButton(
                                       key: const Key("desktop_next"),
