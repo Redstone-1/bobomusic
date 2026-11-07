@@ -1,3 +1,4 @@
+import "package:bobomusic/core/widgets/song_list_tile.dart";
 import "package:bobomusic/data/repositories/playlist_repository.dart";
 import "package:bobomusic/data/repositories/track_repository.dart";
 import "package:flutter/material.dart";
@@ -26,8 +27,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text("晴天"), findsOneWidget);
 
-    // 行内更多 → 移出歌单
-    await tester.tap(find.byIcon(Icons.more_vert));
+    // 行内更多 → 移出歌单（页头也有同字形「更多」，限定歌曲行内）
+    await tester.tap(find.descendant(
+        of: find.byType(SongListTile), matching: find.byIcon(Icons.more_horiz)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.text("移出歌单"));

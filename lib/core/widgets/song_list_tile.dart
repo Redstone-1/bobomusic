@@ -195,7 +195,8 @@ class SongListTile extends StatelessWidget {
                     ),
                   IconButton(
                     onPressed: onMorePressed,
-                    icon: const Icon(Icons.more_vert),
+                    // 「更多」字形全仓统一 more_horiz（页头/桌面行尾同款）
+                    icon: const Icon(Icons.more_horiz),
                     iconSize: 18,
                     color: t.fgMute,
                     visualDensity: VisualDensity.compact,

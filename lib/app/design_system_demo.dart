@@ -122,7 +122,7 @@ class _DesignSystemDemoState extends ConsumerState<DesignSystemDemo> {
                   ),
                   const SizedBox(width: 12),
                   GlassIconButton(
-                    icon: const Icon(Icons.more_vert),
+                    icon: const Icon(Icons.more_horiz),
                     onTap: () {},
                   ),
                 ],

@@ -190,7 +190,7 @@ void main() {
     await PlaylistRepository().create("我的歌单");
 
     // 更多菜单先详情分流：合集 → 整包操作
-    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.tap(find.byIcon(Icons.more_horiz));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
     // 等弹层进场动画完成再点动作，避免命中偏移

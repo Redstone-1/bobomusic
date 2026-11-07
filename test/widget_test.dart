@@ -210,7 +210,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
 
     // 删除：kebab → sheet → 危险确认
-    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.tap(find.byIcon(Icons.more_horiz));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.text("删除歌单"));

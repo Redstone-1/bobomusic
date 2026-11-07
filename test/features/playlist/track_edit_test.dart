@@ -26,7 +26,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
 
     // 行内更多菜单 → 编辑信息（弹层进场动画需先落一帧再点）
-    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.tap(find.byIcon(Icons.more_horiz));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.text("编辑信息"));

@@ -45,7 +45,7 @@ void main() {
 
     final heartX = tester.getCenter(find.byIcon(Icons.favorite)).dx;
     final waveX = tester.getCenter(find.byType(EqBars)).dx;
-    final moreX = tester.getCenter(find.byIcon(Icons.more_vert)).dx;
+    final moreX = tester.getCenter(find.byIcon(Icons.more_horiz)).dx;
 
     expect(waveX, lessThan(heartX));
     expect(heartX, lessThan(moreX));
