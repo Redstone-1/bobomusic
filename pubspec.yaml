@@ -5,7 +5,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # 重写版版本号（D5 修订 2026-10-25）：App 已发布至 2.7.0，本次重写为第三代 → 3.0.0 起；
 # versionCode 账本（发布时必须延续递增）：3.0.0=300（本地打包）；3.0.1=301（CI 打包）；
 # 3.0.2=302（CI 打包）
-version: 3.0.4+304
+version: 3.0.5+305
 
 environment:
   sdk: '>=3.3.1 <4.0.0'
