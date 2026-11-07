@@ -118,13 +118,15 @@ class LyricController extends _$LyricController {
   }
 
   Future<String?> _autoMatch(Track track) async {
+    // 搜索与比对都用显示名（编辑后的名，未编辑回退原名）：
+    // 原始名可能带「001. 晴天-周杰伦」前缀，直接搜匹配不到歌词
     final candidates = await lyricService.search(
-      "${track.name} ${track.author}".trim(),
+      "${track.effectiveName} ${track.author}".trim(),
     );
     if (!ref.mounted) return null;
     final best = pickBestLyricCandidate(
       candidates,
-      title: track.name,
+      title: track.effectiveName,
       artist: track.author,
       durationSec: track.duration,
     );

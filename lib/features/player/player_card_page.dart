@@ -1028,7 +1028,9 @@ class _PlayerLyricToolsState extends ConsumerState<PlayerLyricTools> {
       context,
       title: "搜索歌词",
       hint: "歌名 / 歌手",
-      initial: "${track.name} ${track.author}".trim(),
+      // 默认填显示名（编辑后的名），未编辑回退原名：原始名可能带
+      // 「001. 晴天-周杰伦」这类前缀，直接搜会搜不到歌词
+      initial: "${track.effectiveName} ${track.author}".trim(),
     );
     if (keyword == null || keyword.trim().isEmpty || !mounted) return;
     AppLoading.show(msg: "搜索歌词…");
