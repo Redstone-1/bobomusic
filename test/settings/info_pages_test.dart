@@ -28,8 +28,9 @@ void main() {
 
     expect(find.text("鸣谢"), findsOneWidget);
     expect(find.text("特别感谢"), findsOneWidget);
+    // FlutterUnit 已从鸣谢移除（2026-11-07）：特别感谢区只剩 bbmusic
     expect(find.text("bbmusic"), findsOneWidget);
-    expect(find.text("FlutterUnit"), findsOneWidget);
+    expect(find.text("FlutterUnit"), findsNothing);
     expect(find.text("开源组件"), findsOneWidget);
     expect(find.byIcon(Icons.open_in_new), findsWidgets);
   });

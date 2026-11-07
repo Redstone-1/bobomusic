@@ -89,13 +89,6 @@ class ThanksPage extends StatelessWidget {
           subtitle: "阿炸克斯 / lvyueyang · 播放器与互联网搜索基础",
           url: "https://github.com/bb-music/flutter-app",
         ),
-        SizedBox(height: 12),
-        _LinkCard(
-          icon: Icons.auto_awesome_mosaic_outlined,
-          title: "FlutterUnit",
-          subtitle: "张风捷特烈 · 早期 Tab 指示器参考",
-          url: "https://github.com/toly1994328/FlutterUnit",
-        ),
         SizedBox(height: 6),
         SectionHeader(title: "开源组件"),
         _LinkCard(
