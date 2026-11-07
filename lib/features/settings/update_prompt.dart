@@ -4,6 +4,7 @@ import "package:url_launcher/url_launcher.dart";
 
 import "../../core/overlays/app_dialog.dart";
 import "../../core/overlays/app_toast.dart";
+import "../../core/theme/aurora_tokens.dart";
 import "settings_info.dart";
 import "update_checker.dart";
 
@@ -56,14 +57,24 @@ Future<void> showUpdateFoundDialog(
         ),
       ),
     ),
+    // 按钮遵循全仓对话框约定：取消 fgDim / 确认 primary + w700（AppDialog 同款）
     actions: [
       TextButton(
         onPressed: () => Navigator.of(context).pop(false),
-        child: const Text("稍后"),
+        child: Text(
+          "稍后",
+          style: TextStyle(color: AuroraTokens.of(context).fgDim),
+        ),
       ),
       TextButton(
         onPressed: () => Navigator.of(context).pop(true),
-        child: const Text("去下载"),
+        child: Text(
+          "去下载",
+          style: TextStyle(
+            color: AuroraTokens.of(context).primary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     ],
   );

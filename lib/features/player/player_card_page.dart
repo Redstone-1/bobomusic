@@ -944,6 +944,8 @@ class PlayerLyricsViewState extends ConsumerState<PlayerLyricsView> {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         stops: [0, 0.22, 0.78, 1],
+                        // BlendMode.dstIn 只取 alpha 通道：白/透明是遮罩技术用色，
+                        // 非主题显示色，不走 token（2026-11-07 一致性检查豁免）
                         colors: [
                           Colors.transparent,
                           Colors.white,
@@ -1093,14 +1095,24 @@ class _PlayerLyricToolsState extends ConsumerState<PlayerLyricTools> {
                 ),
               ),
       ),
+      // 按钮遵循全仓对话框约定：取消 fgDim / 确认 primary + w700（AppDialog 同款）
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text("取消"),
+          child: Text(
+            "取消",
+            style: TextStyle(color: AuroraTokens.of(context).fgDim),
+          ),
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text("应用"),
+          child: Text(
+            "应用",
+            style: TextStyle(
+              color: AuroraTokens.of(context).primary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ),
       ],
     );
