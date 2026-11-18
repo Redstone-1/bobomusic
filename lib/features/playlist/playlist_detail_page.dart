@@ -459,13 +459,17 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     _batchEditButton(tracks),
-                                    if (DesktopContent.of(context))
+                                    // 头部圆钮统一每对之间 8（与歌单页头部基线一致）
+                                    const SizedBox(width: 8),
+                                    if (DesktopContent.of(context)) ...[
                                       GlassIconButton(
                                           icon: const Icon(
                                               Icons.folder_open_outlined),
                                           onTap: _scanning
                                               ? null
                                               : _manageDirectories),
+                                      const SizedBox(width: 8),
+                                    ],
                                     GlassIconButton(
                                       key: const Key("local_import"),
                                       icon:
@@ -488,6 +492,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         _batchEditButton(tracks),
+                                        const SizedBox(width: 8),
                                         GlassIconButton(
                                           // 清除全部：二次确认后清空喜欢标记
                                           icon: const Icon(
