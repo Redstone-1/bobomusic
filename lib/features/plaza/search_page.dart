@@ -982,7 +982,7 @@ class _OrderResultTile extends StatelessWidget {
             ),
             IconButton(
               onPressed: onMorePressed,
-              icon: const Icon(Icons.more_horiz),
+              icon: const Icon(Icons.more_vert),
               iconSize: 18,
               color: t.fgMute,
               tooltip: "更多",

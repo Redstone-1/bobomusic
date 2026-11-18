@@ -368,11 +368,11 @@ class _TopBar extends ConsumerWidget {
               ],
             ),
           ),
-          Tooltip(
-            message: "更多",
-            child: GlassIconButton(
-              key: const Key("player_more"),
-              icon: const Icon(Icons.more_horiz),
+            Tooltip(
+              message: "更多",
+              child: GlassIconButton(
+                key: const Key("player_more"),
+                icon: const Icon(Icons.more_vert),
               onTap: () => _openMore(context, ref),
             ),
           ),

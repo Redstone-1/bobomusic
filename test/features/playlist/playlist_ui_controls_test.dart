@@ -83,10 +83,10 @@ void main() {
     testWidgets("$mode 歌单、建议和规则沿用既有输入样式，封面复选框可独立点击并校验", (tester) async {
       final playlistId = await _openPlaylist(tester, mode: mode);
       // 首段 baseline 取自歌曲编辑对话框（歌曲行内更多；页头歌单更多是
-      // 同字形 more_horiz，须限定歌曲行内定位）
+      // 同字形 more_vert，须限定歌曲行内定位）
       await tester.tap(find.descendant(
           of: find.byType(SongListTile),
-          matching: find.byIcon(Icons.more_horiz)).first);
+          matching: find.byIcon(Icons.more_vert)).first);
       await _frames(tester);
       await tester.tap(find.text("编辑信息"));
       await _frames(tester);

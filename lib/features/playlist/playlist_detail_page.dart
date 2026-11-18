@@ -519,7 +519,7 @@ class _PlaylistDetailPageState extends ConsumerState<PlaylistDetailPage>
                                       ],
                                     )
                                   : custom ? GlassIconButton(key: const Key("custom_playlist_more"),
-                                      icon: const Icon(Icons.more_horiz),
+                                      icon: const Icon(Icons.more_vert),
                                       onTap: () => AppSheet.show(context, actions: [
                                         AppSheetAction(icon: Icons.edit_outlined, label: "编辑信息",
                                             onTap: () => showPlaylistEditDialog(context, ref, playlist)),

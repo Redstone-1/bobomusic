@@ -75,7 +75,7 @@ class PlaylistTile extends StatelessWidget {
                               tooltip: "歌单操作",
                               iconSize: 16,
                               onPressed: onMorePressed,
-                              icon: const Icon(Icons.more_horiz)))
+                              icon: const Icon(Icons.more_vert)))
                     ]),
                     Text("$count 首",
                         style: TextStyle(color: t.fgMute, fontSize: 10)),
@@ -124,8 +124,7 @@ class PlaylistTile extends StatelessWidget {
               ),
             IconButton(
               onPressed: onMorePressed,
-              // 「更多」字形全仓统一 more_horiz（页头/桌面行尾同款）
-              icon: const Icon(Icons.more_horiz),
+              icon: const Icon(Icons.more_vert),
               iconSize: 18,
               color: t.fgMute,
               visualDensity: VisualDensity.compact,

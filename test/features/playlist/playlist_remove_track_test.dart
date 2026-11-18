@@ -29,7 +29,7 @@ void main() {
 
     // 行内更多 → 移出歌单（页头也有同字形「更多」，限定歌曲行内）
     await tester.tap(find.descendant(
-        of: find.byType(SongListTile), matching: find.byIcon(Icons.more_horiz)));
+        of: find.byType(SongListTile), matching: find.byIcon(Icons.more_vert)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.text("移出歌单"));

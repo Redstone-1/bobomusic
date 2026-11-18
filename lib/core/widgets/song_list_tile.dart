@@ -86,7 +86,7 @@ class SongListTile extends StatelessWidget {
               ],
               if (playing) Padding(padding: const EdgeInsets.only(right: 10), child: EqBars(paused: paused)),
               if (likedHeart != null) IconButton(tooltip: likedHeart! ? "取消喜欢" : "喜欢", visualDensity: VisualDensity.compact, iconSize: 18, onPressed: onHeartTap == null ? null : () => onHeartTap!(!likedHeart!), icon: Icon(likedHeart! ? Icons.favorite : Icons.favorite_border, color: likedHeart! ? t.primary : t.fgMute)),
-              IconButton(tooltip: "更多操作", visualDensity: VisualDensity.compact, iconSize: 18, onPressed: onMorePressed, icon: Icon(Icons.more_horiz, color: t.fgMute)),
+              IconButton(tooltip: "更多操作", visualDensity: VisualDensity.compact, iconSize: 18, onPressed: onMorePressed, icon: Icon(Icons.more_vert, color: t.fgMute)),
             ]),
           )),
         ));
@@ -195,8 +195,7 @@ class SongListTile extends StatelessWidget {
                     ),
                   IconButton(
                     onPressed: onMorePressed,
-                    // 「更多」字形全仓统一 more_horiz（页头/桌面行尾同款）
-                    icon: const Icon(Icons.more_horiz),
+                    icon: const Icon(Icons.more_vert),
                     iconSize: 18,
                     color: t.fgMute,
                     visualDensity: VisualDensity.compact,
