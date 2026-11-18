@@ -20,13 +20,13 @@ class DeclarationPage extends StatelessWidget {
       title: "声明与限制",
       subtitle: "使用前请了解以下事项",
       children: [
-        _IntroCard(
+        _InfoSection(
           icon: Icons.verified_user_outlined,
           title: "请合理使用",
           body: "啵啵音乐是一款免费的音乐播放工具，仅供交流学习使用。"
               "请遵守当地法律法规，尊重音乐创作者与版权方的权益。",
         ),
-        SizedBox(height: 14),
+        SizedBox(height: 12),
         _InfoSection(
           icon: Icons.person_outline,
           title: "使用范围",
@@ -77,7 +77,7 @@ class ThanksPage extends StatelessWidget {
       title: "鸣谢",
       subtitle: "感谢这些项目与作者",
       children: [
-        _IntroCard(
+        _InfoSection(
           icon: Icons.favorite_border,
           title: "站在开源社区的肩膀上",
           body: "啵啵音乐离不开开源项目与贡献者的帮助。感谢每一位让音乐播放变得更简单的人。",
@@ -156,66 +156,6 @@ class _InfoScaffold extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _IntroCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String body;
-
-  const _IntroCard({
-    required this.icon,
-    required this.title,
-    required this.body,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AuroraTokens.of(context);
-    return GlassCard(
-      frosted: true,
-      padding: const EdgeInsets.all(20),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: t.primary.withValues(alpha: 0.14),
-            ),
-            child: Icon(icon, size: 23, color: t.primary),
-          ),
-          const SizedBox(width: 15),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: t.fg,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  body,
-                  style: TextStyle(
-                    fontSize: 13,
-                    height: 1.65,
-                    color: t.fgDim,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
